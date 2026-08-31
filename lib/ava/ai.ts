@@ -3,8 +3,8 @@ import type { MemoryLog } from '@/types';
 import { formatMemoryForAI } from './db';
 
 // URLs built lazily at call time so env vars are always available
-const FLASH = 'gemini-1.5-flash';
-const PRO = 'gemini-1.5-pro';
+const FLASH = 'gemini-3.1-flash-lite';
+const PRO = 'gemini-3-flash-preview';
 
 function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
