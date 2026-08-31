@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     // Still in onboarding
     if (!user.onboarding_complete) {
-      const { handleOnboardingStep, handleLateOnboarding } = await import('@/lib/ava/onboarding-raw');
+      const { handleOnboardingStep } = await import('@/lib/ava/onboarding-raw');
       await handleOnboardingStep(chatId, telegramId, user, text, sendMessage);
       return NextResponse.json({ ok: true });
     }
