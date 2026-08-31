@@ -2,27 +2,41 @@ import type { MessageCategory, AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
 import { formatMemoryForAI } from './db';
 
-const GEMINI_FLASH_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-const GEMINI_PRO_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+// URLs built lazily at call time so env vars are always available
+const FLASH = 'gemini-1.5-flash';
+const PRO = 'gemini-1.5-pro';
 
-async function callGemini(url: string, prompt: string, systemPrompt?: string): Promise<string> {
-  const contents = systemPrompt
-    ? [
-        { role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] },
-      ]
-    : [{ role: 'user', parts: [{ text: prompt }] }];
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 800 } }),
-  });
-
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+function geminiUrl(model: string) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 }
 
-// ─── Step 1: Classify incoming message ───────────────────────────────────────
+async function callGemini(model: string, prompt: string, systemPrompt?: string): Promise<string> {
+  const contents = systemPrompt
+    ? [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] }]
+    : [{ role: 'user', parts: [{ text: prompt }] }];
+
+  try {
+    const res = await fetch(geminiUrl(model), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 800 } }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error('Gemini API error:', JSON.stringify(data));
+      return '';
+    }
+
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+  } catch (err) {
+    console.error('Gemini fetch error:', err);
+    return '';
+  }
+}
+
+// ─── Classify incoming message ────────────────────────────────────────────────
 
 export async function classifyMessage(message: string): Promise<MessageCategory> {
   const prompt = `Classify this message from a period/wellness tracking app user into exactly one category:
@@ -35,28 +49,23 @@ Message: "${message}"
 
 Reply with ONLY one word: LOG, RETRIEVAL, or CONVERSATION`;
 
-  const result = await callGemini(GEMINI_FLASH_URL, prompt);
+  const result = await callGemini(FLASH, prompt);
   const clean = result.trim().toUpperCase();
-  if (['LOG', 'RETRIEVAL', 'CONVERSATION'].includes(clean)) {
-    return clean as MessageCategory;
-  }
-  return 'CONVERSATION'; // default
+  if (['LOG', 'RETRIEVAL', 'CONVERSATION'].includes(clean)) return clean as MessageCategory;
+  return 'CONVERSATION';
 }
 
-// ─── Step 2: Extract summary for memory log ───────────────────────────────────
+// ─── Extract log summary for memory ──────────────────────────────────────────
 
 export async function extractLogSummary(message: string): Promise<{ category: string; summary: string }> {
   const prompt = `Extract a short memory log entry from this message for a period tracking app.
 
 Message: "${message}"
 
-Reply in this exact JSON format (no markdown):
-{
-  "category": "symptom|mood|sexual|cycle|test|bbt|mucus",
-  "summary": "10 words max describing what was logged"
-}`;
+Reply in this exact JSON format (no markdown, no backticks):
+{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"10 words max describing what was logged"}`;
 
-  const result = await callGemini(GEMINI_FLASH_URL, prompt);
+  const result = await callGemini(FLASH, prompt);
   try {
     const parsed = JSON.parse(result.trim());
     return { category: parsed.category || 'symptom', summary: parsed.summary || message.slice(0, 60) };
@@ -65,7 +74,7 @@ Reply in this exact JSON format (no markdown):
   }
 }
 
-// ─── Step 3: Handle RETRIEVAL with memory context ─────────────────────────────
+// ─── Handle RETRIEVAL with memory context ─────────────────────────────────────
 
 export async function handleRetrieval(
   user: AvaUser,
@@ -84,10 +93,11 @@ User question: "${message}"
 
 Answer warmly and specifically using their data. If you spot a pattern, mention it. Keep it under 150 words.`;
 
-  return callGemini(GEMINI_FLASH_URL, prompt);
+  const result = await callGemini(FLASH, prompt);
+  return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
 }
 
-// ─── Step 4: Handle CONVERSATION with Pro model ───────────────────────────────
+// ─── Handle CONVERSATION with Pro model ───────────────────────────────────────
 
 export async function handleConversation(
   user: AvaUser,
@@ -96,7 +106,7 @@ export async function handleConversation(
 ): Promise<string> {
   const context = formatMemoryForAI(memoryLogs);
 
-  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app. 
+  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app.
 
 About this user:
 - Name: ${user.name}
@@ -113,33 +123,35 @@ Rules:
 - Use their name occasionally
 - Reference their personal data when relevant
 - NEVER diagnose or prescribe
-- For serious symptoms, always say "it's worth checking with your doctor"
+- For serious symptoms, always say "worth checking with your doctor"
 - Keep responses under 200 words unless they ask for detail
 - Use emojis sparingly (1-2 max)`;
 
-  return callGemini(GEMINI_PRO_URL, message, systemPrompt);
+  const result = await callGemini(PRO, message, systemPrompt);
+  return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;
 }
 
-// ─── Step 5: Generate daily tip ──────────────────────────────────────────────
+// ─── Generate daily tip ───────────────────────────────────────────────────────
 
 export async function generateDailyTip(
   user: AvaUser,
   phase: string,
   memoryLogs: MemoryLog[]
 ): Promise<string> {
-  const recentSymptoms = memoryLogs.slice(0, 10).map((l) => l.summary).join(', ');
+  const recentSymptoms = memoryLogs.slice(0, 10).map(l => l.summary).join(', ');
   const prompt = `Generate a short, friendly daily wellness tip for a woman in her ${phase} phase.
 
 Her name: ${user.name}
 Recent logs: ${recentSymptoms || 'nothing yet'}
 Goal: ${user.reproductive_goal}
 
-Write 2 sentences max. Warm, specific, actionable. No fluff.`;
+Write 1-2 sentences max. Warm, specific, actionable. No fluff. No preamble.`;
 
-  return callGemini(GEMINI_FLASH_URL, prompt);
+  const result = await callGemini(FLASH, prompt);
+  return result || 'Stay hydrated and be gentle with yourself today 🌸';
 }
 
-// ─── Step 6: Summarize chat insight for memory ────────────────────────────────
+// ─── Summarize chat insight for memory ────────────────────────────────────────
 
 export async function summarizeChatInsight(
   userMessage: string,
@@ -150,8 +162,8 @@ export async function summarizeChatInsight(
 User: "${userMessage}"
 Ava: "${aiResponse}"
 
-Reply with only the summary, no punctuation at the end.`;
+Reply with only the summary. No punctuation at the end.`;
 
-  const result = await callGemini(GEMINI_FLASH_URL, prompt);
-  return result.trim().slice(0, 80);
+  const result = await callGemini(FLASH, prompt);
+  return result.slice(0, 80) || userMessage.slice(0, 60);
 }
