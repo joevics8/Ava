@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import bot from '@/lib/bot';
-import { webhookCallback } from 'grammy';
-
-const handleUpdate = webhookCallback(bot, 'std/http');
 
 export async function POST(req: NextRequest) {
   // Verify secret token from Telegram
@@ -12,14 +10,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    return await handleUpdate(req);
+    const update = await req.json();
+
+    // ✅ Respond to Telegram immediately — prevents timeout
+    // Process the update in the background
+    waitUntil(bot.handleUpdate(update));
+
+    return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('Webhook error:', err);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
 
-// Telegram only sends POST
 export async function GET() {
   return NextResponse.json({ status: 'Ava webhook is live 🌸' });
 }
