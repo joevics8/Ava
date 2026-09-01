@@ -124,8 +124,8 @@ Rules:
 - Reference their personal data when relevant
 - NEVER diagnose or prescribe
 - For serious symptoms, always say "worth checking with your doctor"
-- Keep responses under 200 words unless they ask for detail
-- Use emojis sparingly (1-2 max)`;
+- Keep responses to 2-4 sentences MAX unless they ask for detail
+- One emoji max`;
 
   const result = await callGemini(PRO, message, systemPrompt);
   return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;

@@ -18,6 +18,14 @@ async function sendMessage(chatId: number, text: string) {
   });
 }
 
+async function sendTyping(chatId: number) {
+  await fetch(`${TELEGRAM_API}/sendChatAction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const secret = req.headers.get('x-telegram-bot-api-secret-token');
@@ -33,12 +41,15 @@ export async function POST(req: NextRequest) {
     const telegramId: number = message.from.id;
     const text: string = message.text || '';
 
+    // Show typing immediately
+    await sendTyping(chatId);
+
     // ── Get or create user ───────────────────────────────────────────────────
     let user = await getUser(telegramId);
     if (!user) {
       user = await createUser(telegramId);
       await sendMessage(chatId,
-        `Hi, I'm *Ava* 🌸\n\nI'm your personal cycle and wellness companion. I learn your body, remember your patterns, and talk to you like a friend who actually gets it.\n\nLet's get started — what's your name?`
+        `Hi, I'm *Ava* 🌸 Your personal cycle companion.\n\nLet's get you set up — what's your name?`
       );
       return NextResponse.json({ ok: true });
     }
@@ -47,17 +58,16 @@ export async function POST(req: NextRequest) {
     if (text === '/start') {
       if (user.onboarding_complete) {
         await sendMessage(chatId,
-          `Welcome back, ${user.name} 🌸\n\n• /today — your daily summary\n• /log — track symptoms\n• /premium — upgrade for more memory\n\nOr just talk to me anytime.`
+          `Hey ${user.name} 🌸\n\n/today — daily summary\n/log — track something\n/premium — upgrade\n\nOr just talk to me.`
         );
       } else {
-        await sendMessage(chatId,
-          `Hi, I'm *Ava* 🌸\n\nLet's get you set up — what's your name?`
-        );
+        await sendMessage(chatId, `Hi, I'm *Ava* 🌸 What's your name?`);
       }
       return NextResponse.json({ ok: true });
     }
 
     if (text === '/today') {
+      await sendTyping(chatId);
       const { buildTodaySummary } = await import('@/lib/ava/today');
       const summary = await buildTodaySummary(user);
       await sendMessage(chatId, summary);
@@ -66,21 +76,21 @@ export async function POST(req: NextRequest) {
 
     if (text === '/log') {
       await sendMessage(chatId,
-        `What would you like to log today? 📝\n\nJust tell me naturally — for example:\n• "I have cramps"\n• "Feeling tired and bloated"\n• "Had unprotected sex"\n• "Light flow today"\n• "Mood: anxious"\n\nOr type anything and I'll figure it out 🌸`
+        `What's going on today? 📝\n\nJust tell me naturally — "I have cramps", "feeling tired", "light flow", "had sex". I'll take it from there 🌸`
       );
       return NextResponse.json({ ok: true });
     }
 
     if (text === '/premium') {
       await sendMessage(chatId,
-        `✨ *Ava Premium — ₦2,000/month*\n\n• 5 months of memory (vs 2 weeks free)\n• Morning daily digest at 8am\n• Ovulation test strip reading\n• Monthly cycle PDF report\n\nPremium coming soon! We'll notify you when it launches. 🌸`
+        `✨ *Ava Premium — ₦2,000/month*\n\n• 5 months memory (vs 2 weeks free)\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n\nLaunching soon — we'll notify you 🌸`
       );
       return NextResponse.json({ ok: true });
     }
 
     if (text === '/help') {
       await sendMessage(chatId,
-        `Here's what I can do:\n\n• /today — your daily cycle summary\n• /log — track symptoms, mood, flow\n• /premium — see premium features\n\nOr just talk to me naturally anytime — "I have cramps", "when is my next period?", "is spotting normal?" 🌸`
+        `/today — cycle summary\n/log — track symptoms\n/premium — upgrade\n\nOr just message me anything 🌸`
       );
       return NextResponse.json({ ok: true });
     }
@@ -93,40 +103,33 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Main AI router ────────────────────────────────────────────────────────
+    await sendTyping(chatId);
     const memoryLogs = await getMemoryContext(user.id, user.plan);
     const category = await classifyMessage(text);
 
     if (category === 'LOG') {
-      // Save the log
       const { category: logCat, summary } = await extractLogSummary(text);
       await addMemoryLog(user.id, logCat as any, summary);
 
-      // Always respond warmly + ask a follow-up — Ava is a friend, not a logger
-      const followUpPrompt = `The user just logged: "${text}"
-      
-You are Ava, a warm cycle and wellness companion. 
-1. Acknowledge what they logged with empathy
-2. Give a brief, helpful insight based on their cycle phase or history if relevant
-3. Ask ONE caring follow-up question to learn more
+      const followUpPrompt = `User logged: "${text}"
 
-User memory context:
-${memoryLogs.slice(0, 15).map(l => `[${l.category}] ${l.summary}`).join('\n') || 'No history yet'}
+Acknowledge warmly (1 sentence), give a brief insight if relevant to their cycle, then ask ONE caring follow-up question. Max 3 sentences total. No lists.
 
-Keep it under 100 words. Warm, friendly, never clinical.`;
+Recent logs: ${memoryLogs.slice(0, 10).map(l => l.summary).join(', ') || 'none yet'}`;
 
+      await sendTyping(chatId);
       const response = await handleConversation(user, followUpPrompt, memoryLogs);
-      await sendMessage(chatId, response || `Got it, I've logged that 🌸 How are you feeling overall right now?`);
+      await sendMessage(chatId, response || `Logged 🌸 How are you feeling overall?`);
       const insight = await summarizeChatInsight(text, response);
       await addMemoryLog(user.id, 'chat', insight);
 
     } else if (category === 'RETRIEVAL') {
       const response = await handleRetrieval(user, text, memoryLogs);
-      await sendMessage(chatId, response || `I don't have enough logged data yet to answer that, ${user.name}. Keep logging and I'll spot the patterns! 🌸`);
+      await sendMessage(chatId, response || `I need more data to spot patterns — keep logging and I'll connect the dots 🌸`);
 
     } else {
-      // CONVERSATION
       const response = await handleConversation(user, text, memoryLogs);
-      await sendMessage(chatId, response || `I'm here, ${user.name}. Tell me more so I can help 🌸`);
+      await sendMessage(chatId, response || `I'm here — tell me more 🌸`);
       const insight = await summarizeChatInsight(text, response);
       await addMemoryLog(user.id, 'chat', insight);
     }
