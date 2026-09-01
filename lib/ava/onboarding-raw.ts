@@ -49,11 +49,13 @@ export async function handleOnboardingStep(
 
   // Step 3: period dates
   if (step === 3) {
-    const parts = message.split(',').map(s => s.trim());
+    const parts = message.split(/[,;\n]/).map((s: string) => s.trim()).filter(Boolean);
     const parsed: Date[] = [];
     for (const p of parts) {
-      const d = new Date(p);
-      if (!isNaN(d.getTime())) parsed.push(d);
+      const cleaned = p.replace(/(\d+)(st|nd|rd|th)/gi, "$1").replace(/,/g, "").trim();
+      const d = new Date(cleaned);
+      const now = new Date();
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1990 && d <= now) parsed.push(d);
     }
     if (parsed.length === 0) {
       await send(chatId, `I couldn't read those dates 😅\n\nTry: *14 Jan 2025*`);
