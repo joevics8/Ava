@@ -124,7 +124,7 @@ Rules:
 - Reference their personal data when relevant
 - NEVER diagnose or prescribe
 - For serious symptoms, always say "worth checking with your doctor"
-- Keep responses to 2-4 sentences MAX unless they ask for detail
+- Keep responses to 2-3 sentences MAX. Never more. If they ask for detail, still max 4 sentences.
 - One emoji max`;
 
   const result = await callGemini(PRO, message, systemPrompt);
