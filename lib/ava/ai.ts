@@ -44,15 +44,66 @@ export async function classifyMessage(message: string): Promise<MessageCategory>
 LOG - user reporting a symptom, feeling, activity, or observation (e.g. "I have cramps", "had sex today", "feeling tired")
 RETRIEVAL - user asking about their own history or patterns (e.g. "when was my last period", "do I usually get headaches before my period")
 CONVERSATION - question, concern, medical query, or anything else (e.g. "is this normal", "why am I so bloated", "when should I test for pregnancy")
+IMAGE - user sent a photo or mentions a test strip photo
 
 Message: "${message}"
 
-Reply with ONLY one word: LOG, RETRIEVAL, or CONVERSATION`;
+Reply with ONLY one word: LOG, RETRIEVAL, CONVERSATION, or IMAGE`;
 
   const result = await callGemini(FLASH, prompt);
   const clean = result.trim().toUpperCase();
-  if (['LOG', 'RETRIEVAL', 'CONVERSATION'].includes(clean)) return clean as MessageCategory;
+  if (['LOG', 'RETRIEVAL', 'CONVERSATION', 'IMAGE'].includes(clean)) return clean as MessageCategory;
   return 'CONVERSATION';
+}
+
+// ─── Detect if premium upsell is appropriate ──────────────────────────────────
+
+export async function shouldSuggestPremium(
+  message: string,
+  plan: 'free' | 'premium'
+): Promise<boolean> {
+  if (plan === 'premium') return false;
+
+  const prompt = `A free user of a period tracking app sent this message. Should the app suggest upgrading to premium?
+
+Suggest premium if:
+- They ask about history or patterns from more than 2 weeks ago
+- They express frustration that the app doesn't remember something
+- They ask for a report, detailed history, or PDF
+- They mention wanting more personalised insights over time
+- They ask about features that need memory (patterns, trends, month comparisons)
+
+Do NOT suggest premium for:
+- Logging symptoms
+- Asking about their cycle today
+- General health questions
+- First-time users
+
+Message: "${message}"
+
+Reply with only YES or NO.`;
+
+  const result = await callGemini(FLASH, prompt);
+  return result.trim().toUpperCase() === 'YES';
+}
+
+// ─── Generate contextual premium pitch ───────────────────────────────────────
+
+export async function generatePremiumPitch(
+  userName: string,
+  message: string
+): Promise<string> {
+  const prompt = `A free user of Ava (AI period tracking app) asked: "${message}"
+
+Write a 2-sentence response that:
+1. Briefly acknowledges what they asked
+2. Naturally explains that Premium unlocks this (5 months memory, patterns, daily digest, PDF reports — ₦2,000/month)
+3. Ends with something like "Want me to send you the upgrade link?"
+
+Warm, friendly tone. Not pushy. Max 3 sentences.`;
+
+  const result = await callGemini(FLASH, prompt);
+  return result || `That's something I can do better with Premium — it gives me 5 months of memory so I can spot your patterns properly. Want me to send you the upgrade link, ${userName}? 🌸`;
 }
 
 // ─── Extract log summary for memory ──────────────────────────────────────────

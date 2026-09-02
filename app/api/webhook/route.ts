@@ -6,6 +6,8 @@ import {
   handleRetrieval,
   handleConversation,
   summarizeChatInsight,
+  shouldSuggestPremium,
+  generatePremiumPitch,
 } from '@/lib/ava/ai';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
@@ -150,7 +152,31 @@ export async function POST(req: NextRequest) {
     // ── Main AI router ────────────────────────────────────────────────────────
     await sendTyping(chatId);
     const memoryLogs = await getMemoryContext(user.id, user.plan);
-    const category = await classifyMessage(text);
+
+    // Check if this is a natural moment to suggest premium (free users only)
+    if (user.plan === 'free') {
+      const [category, upgradeSuggested] = await Promise.all([
+        classifyMessage(text),
+        shouldSuggestPremium(text, user.plan),
+      ]);
+
+      if (upgradeSuggested) {
+        const { createPaymentLink } = await import('@/lib/ava/paystack');
+        const [pitch, link] = await Promise.all([
+          generatePremiumPitch(user.name || 'there', text),
+          createPaymentLink(user.telegram_id, user.name || 'friend'),
+        ]);
+        const linkText = link ? `\n\n[Upgrade to Premium](${link.url}) ✨` : '';
+        await sendMessage(chatId, pitch + linkText);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Route normally
+      await routeMessage(category, text, chatId, user, memoryLogs);
+    } else {
+      const category = await classifyMessage(text);
+      await routeMessage(category, text, chatId, user, memoryLogs);
+    }
 
     if (category === 'LOG') {
       const { category: logCat, summary } = await extractLogSummary(text);
@@ -183,6 +209,44 @@ Recent logs: ${memoryLogs.slice(0, 10).map(l => l.summary).join(', ') || 'none y
   } catch (err) {
     console.error('Webhook error:', err);
     return NextResponse.json({ ok: true });
+  }
+}
+
+async function routeMessage(
+  category: string,
+  text: string,
+  chatId: number,
+  user: any,
+  memoryLogs: any[]
+) {
+  if (category === 'LOG') {
+    const { category: logCat, summary } = await extractLogSummary(text);
+    await addMemoryLog(user.id, logCat as any, summary);
+
+    const followUpPrompt = `The user just said: "${text}"
+
+Respond warmly in 2-3 sentences:
+1. Acknowledge with empathy
+2. Give a brief relevant insight if you have enough context
+3. Ask ONE caring follow-up question
+
+Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(', ') || 'none yet'}`;
+
+    await sendTyping(chatId);
+    const response = await handleConversation(user, followUpPrompt, memoryLogs);
+    await sendMessage(chatId, response || `Aww — how are you feeling overall? 🌸`);
+    const insight = await summarizeChatInsight(text, response);
+    await addMemoryLog(user.id, 'chat', insight);
+
+  } else if (category === 'RETRIEVAL') {
+    const response = await handleRetrieval(user, text, memoryLogs);
+    await sendMessage(chatId, response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`);
+
+  } else {
+    const response = await handleConversation(user, text, memoryLogs);
+    await sendMessage(chatId, response || `I'm here — tell me more 🌸`);
+    const insight = await summarizeChatInsight(text, response);
+    await addMemoryLog(user.id, 'chat', insight);
   }
 }
 
