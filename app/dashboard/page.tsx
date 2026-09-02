@@ -78,7 +78,7 @@ export default function DashboardPage() {
           <span className={`text-xs px-3 py-1 rounded-full font-semibold ${isPremium ? 'bg-yellow-400 text-yellow-900' : 'bg-white/20 text-white'}`}>
             {isPremium ? '✨ Premium' : 'Free'}
           </span>
-          <a href="https://t.me/AvaByVerm_bot" target="_blank"
+          <a href="https://t.me/Ava_care_bot" target="_blank"
             className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30">
             Open Bot
           </a>
@@ -118,7 +118,7 @@ export default function DashboardPage() {
               <li>• Monthly cycle PDF report</li>
               <li>• Ovulation test strip reading</li>
             </ul>
-            <a href="https://t.me/AvaByVerm_bot" target="_blank"
+            <a href="https://t.me/Ava_care_bot" target="_blank"
               className="inline-block bg-[#E91E63] text-white px-5 py-2 rounded-xl text-sm font-semibold hover:bg-[#C2185B] transition-colors">
               Upgrade via Telegram
             </a>

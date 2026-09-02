@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Login — Ava' };
 
-const BOT_NAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'AvaByVerm_bot';
+const BOT_NAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://avacare-alpha.vercel.app';
 
 export default function LoginPage({

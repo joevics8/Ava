@@ -21,7 +21,7 @@ export default function HomePage() {
         </p>
 
         <a
-          href="https://t.me/AvaByVerm_bot"
+          href="https://t.me/Ava_care_bot"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-3 bg-[#E91E63] text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:bg-[#C2185B] transition-colors shadow-lg"
@@ -58,7 +58,7 @@ export default function HomePage() {
             <li>✓ Symptom & mood logging</li>
             <li>✓ 2 weeks of memory</li>
           </ul>
-          <a href="https://t.me/AvaByVerm_bot" target="_blank"
+          <a href="https://t.me/Ava_care_bot" target="_blank"
             className="block text-center bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors">
             Start Free
           </a>
@@ -77,7 +77,7 @@ export default function HomePage() {
             <li>✓ Ovulation test strip reading</li>
             <li>✓ Monthly cycle PDF report</li>
           </ul>
-          <a href="https://t.me/AvaByVerm_bot" target="_blank"
+          <a href="https://t.me/Ava_care_bot" target="_blank"
             className="block text-center bg-[#E91E63] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#C2185B] transition-colors">
             Get Premium
           </a>

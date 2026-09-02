@@ -12,7 +12,7 @@ export default function PremiumSuccessPage() {
         Your payment was successful. Head back to Telegram — Ava has already sent you a confirmation with everything that's unlocked.
       </p>
       <a
-        href="https://t.me/AvaByVerm_bot"
+        href="https://t.me/Ava_care_bot"
         className="bg-[#E91E63] text-white px-8 py-4 rounded-2xl font-semibold hover:bg-[#C2185B] transition-colors"
       >
         Back to Ava
