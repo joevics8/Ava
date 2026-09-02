@@ -19,7 +19,7 @@ async function callGemini(model: string, prompt: string, systemPrompt?: string):
     const res = await fetch(geminiUrl(model), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 800 } }),
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 300, stopSequences: ['\n\n\n'] } }),
     });
 
     const data = await res.json();
