@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     if (!user) {
       user = await createUser(telegramId);
       await sendMessage(chatId,
-        `Hi, I'm *Ava* 🌸 Your personal cycle companion.\n\nLet's get you set up — what's your name?`
+        `Hi, I'm *Ava* 🌸\n\nI'm your personal cycle & wellness companion. I can help you understand your cycle, track symptoms, and answer questions about your body.\n\nLet's get you set up — it only takes a minute.\n\nWhat's your name?`
       );
       return NextResponse.json({ ok: true });
     }
@@ -119,7 +119,7 @@ Recent logs: ${memoryLogs.slice(0, 10).map(l => l.summary).join(', ') || 'none y
 
       await sendTyping(chatId);
       const response = await handleConversation(user, followUpPrompt, memoryLogs);
-      await sendMessage(chatId, response || `Logged 🌸 How are you feeling overall?`);
+      await sendMessage(chatId, response || `Aww, that sounds tough — how are you feeling overall? 🌸`);
       const insight = await summarizeChatInsight(text, response);
       await addMemoryLog(user.id, 'chat', insight);
 
