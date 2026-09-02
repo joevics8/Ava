@@ -43,6 +43,55 @@ export async function POST(req: NextRequest) {
     const telegramId: number = message.from.id;
     const text: string = message.text || '';
 
+    // ── Photo messages ────────────────────────────────────────────────────────
+    if (message.photo?.length) {
+      await sendTyping(chatId);
+      let user = await getUser(telegramId);
+      if (!user) { user = await createUser(telegramId); }
+
+      const {
+        getTelegramPhotoBase64,
+        detectImageType,
+        analyseOvulationStrip,
+        analysePregnancyTest,
+        analyseGenericImage,
+      } = await import('@/lib/ava/vision');
+
+      // Get largest photo size
+      const photo = message.photo[message.photo.length - 1];
+      const caption = message.caption || '';
+
+      const photoData = await getTelegramPhotoBase64(photo.file_id);
+      if (!photoData) {
+        await sendMessage(chatId, `I couldn't read that photo — could you try sending it again? 🌸`);
+        return NextResponse.json({ ok: true });
+      }
+
+      const imageType = await detectImageType(photoData.base64, photoData.mimeType, caption);
+
+      if (imageType === 'ovulation_strip') {
+        const { result, isPositive, summary } = await analyseOvulationStrip(photoData.base64, photoData.mimeType);
+        await sendMessage(chatId, result);
+        if (user) await addMemoryLog(user.id, 'test', summary);
+        if (isPositive && user) {
+          await addMemoryLog(user.id, 'cycle', 'LH surge detected — ovulation likely within 12-36 hours');
+        }
+      } else if (imageType === 'pregnancy_test') {
+        const { result, isPositive, summary } = await analysePregnancyTest(photoData.base64, photoData.mimeType);
+        await sendMessage(chatId, result);
+        if (user) await addMemoryLog(user.id, 'test', summary);
+        if (isPositive && user) {
+          await sendMessage(chatId, `If this is a positive result, I want you to know I'm here for you whatever you're feeling 🌸 Would you like to switch to pregnancy mode?`);
+          await addMemoryLog(user.id, 'insight', 'Positive pregnancy test logged');
+        }
+      } else {
+        const response = await analyseGenericImage(photoData.base64, photoData.mimeType, caption);
+        await sendMessage(chatId, response);
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     // Show typing immediately
     await sendTyping(chatId);
 
