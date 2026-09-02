@@ -19,7 +19,7 @@ async function callGemini(model: string, prompt: string, systemPrompt?: string):
     const res = await fetch(geminiUrl(model), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 300, stopSequences: ['\n\n\n'] } }),
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 1000 } }),
     });
 
     const data = await res.json();
@@ -142,7 +142,7 @@ ${context}
 
 User question: "${message}"
 
-Answer warmly and specifically using their data. If you spot a pattern, mention it. Keep it under 150 words.`;
+Answer warmly and specifically using their data. If you spot a pattern, mention it. Maximum 3 sentences. Stop at 3.`;
 
   const result = await callGemini(FLASH, prompt);
   return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
@@ -175,7 +175,7 @@ Rules:
 - Reference their personal data when relevant
 - NEVER diagnose or prescribe
 - For serious symptoms, always say "worth checking with your doctor"
-- Keep responses to 2-3 sentences MAX. Never more. If they ask for detail, still max 4 sentences.
+- LENGTH RULE (non-negotiable): Maximum 3 sentences per response. Count them. Stop at 3. If the user asks for detail, maximum 4 sentences. Never write a paragraph.
 - One emoji max`;
 
   const result = await callGemini(PRO, message, systemPrompt);
@@ -196,7 +196,7 @@ Her name: ${user.name}
 Recent logs: ${recentSymptoms || 'nothing yet'}
 Goal: ${user.reproductive_goal}
 
-Write 1-2 sentences max. Warm, specific, actionable. No fluff. No preamble.`;
+Write exactly 1-2 sentences. No intro, no preamble, just the tip itself.`;
 
   const result = await callGemini(FLASH, prompt);
   return result || 'Stay hydrated and be gentle with yourself today 🌸';
@@ -213,7 +213,7 @@ export async function summarizeChatInsight(
 User: "${userMessage}"
 Ava: "${aiResponse}"
 
-Reply with only the summary. No punctuation at the end.`;
+Reply with only the summary in 10 words or less. No punctuation at the end. No preamble.`;
 
   const result = await callGemini(FLASH, prompt);
   return result.slice(0, 80) || userMessage.slice(0, 60);

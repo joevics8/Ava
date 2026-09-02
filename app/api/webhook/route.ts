@@ -225,10 +225,12 @@ async function routeMessage(
 
     const followUpPrompt = `The user just said: "${text}"
 
-Respond warmly in 2-3 sentences:
-1. Acknowledge with empathy
-2. Give a brief relevant insight if you have enough context
-3. Ask ONE caring follow-up question
+Write exactly 3 sentences:
+Sentence 1: Acknowledge with warmth and empathy.
+Sentence 2: Give one relevant insight based on their context if available.
+Sentence 3: Ask ONE caring follow-up question.
+
+Do not write more than 3 sentences. Count them before sending.
 
 Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(', ') || 'none yet'}`;
 
