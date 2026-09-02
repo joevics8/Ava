@@ -35,6 +35,7 @@ export async function GET() {
         { command: 'today', description: 'Your daily cycle summary' },
         { command: 'log', description: 'Track symptoms, mood or flow' },
         { command: 'premium', description: 'Upgrade for 5 months memory' },
+        { command: 'settings', description: 'Update your name, dates, or cycle info' },
         { command: 'report', description: 'Get your monthly cycle PDF (Premium)' },
         { command: 'help', description: 'What can Ava do?' },
       ],

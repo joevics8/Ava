@@ -137,8 +137,24 @@ export async function POST(req: NextRequest) {
 
     if (text === '/help') {
       await sendMessage(chatId,
-        `/today — cycle summary\n/log — track symptoms\n/premium — upgrade\n\nOr just message me anything 🌸`
+        `/today — cycle summary\n/log — track symptoms\n/settings — update your info\n/premium — upgrade\n/report — monthly PDF (Premium)\n\nOr just talk to me naturally 🌸`
       );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/settings') {
+      await sendMessage(chatId,
+        `What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Delete my data\n\nJust send the number.`
+      );
+      await updateUser(telegramId, { onboarding_step: 90 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === 'delete my data' || text === '/deletedata') {
+      await sendMessage(chatId,
+        `Are you sure you want to delete all your data? This cannot be undone.\n\nSend *YES DELETE* to confirm.`
+      );
+      await updateUser(telegramId, { onboarding_step: 99 });
       return NextResponse.json({ ok: true });
     }
 
@@ -146,6 +162,13 @@ export async function POST(req: NextRequest) {
     if (!user.onboarding_complete) {
       const { handleOnboardingStep } = await import('@/lib/ava/onboarding-raw');
       await handleOnboardingStep(chatId, telegramId, user, text, sendMessage);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Settings flow ─────────────────────────────────────────────────────────
+    if (user.onboarding_step >= 90) {
+      const { handleSettingsStep } = await import('@/lib/ava/settings');
+      await handleSettingsStep(chatId, telegramId, user, text, sendMessage);
       return NextResponse.json({ ok: true });
     }
 
