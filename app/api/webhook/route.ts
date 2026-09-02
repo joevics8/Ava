@@ -165,6 +165,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── Period confirmation reply ─────────────────────────────────────────────
+    const lowerText = text.toLowerCase().trim();
+    if (['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(lowerText)) {
+      const today = new Date().toISOString().split('T')[0];
+      const { getCycleData, upsertCycleData } = await import('@/lib/ava/db');
+      const { predictNextPeriod, predictOvulationWindow } = await import('@/lib/ava/cycle');
+      const existing = await getCycleData(user.id);
+      const avg = Number(existing?.avg_cycle_length) || 28;
+      const todayDate = new Date();
+      const { start: ns, end: ne } = predictNextPeriod(todayDate, avg);
+      const { start: os, end: oe } = predictOvulationWindow(ns, avg);
+      const existingDates = existing?.period_start_dates || [];
+      await upsertCycleData(user.id, {
+        period_start_dates: [...existingDates, today],
+        next_period_start: ns.toISOString().split('T')[0],
+        next_period_end: ne.toISOString().split('T')[0],
+        next_ovulation_start: os.toISOString().split('T')[0],
+        next_ovulation_end: oe.toISOString().split('T')[0],
+      });
+      const nextStr = ns.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+      await sendMessage(chatId,
+        `Got it, ${user.name} 🩸 I've noted today as your period start.
+
+Your next period is estimated around *${nextStr}*. How are you feeling?`
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(lowerText)) {
+      await sendMessage(chatId,
+        `No worries — cycles can vary a few days 🌸 I'll keep an eye on it. Let me know when it starts.`
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Settings flow ─────────────────────────────────────────────────────────
     if (user.onboarding_step >= 90) {
       const { handleSettingsStep } = await import('@/lib/ava/settings');
