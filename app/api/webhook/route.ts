@@ -82,9 +82,54 @@ export async function POST(req: NextRequest) {
     }
 
     if (text === '/premium') {
-      await sendMessage(chatId,
-        `✨ *Ava Premium — ₦2,000/month*\n\n• 5 months memory (vs 2 weeks free)\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n\nLaunching soon — we'll notify you 🌸`
-      );
+      if (user.plan === 'premium') {
+        const expires = (user as any).premium_expires_at
+          ? new Date((user as any).premium_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })
+          : 'active';
+        await sendMessage(chatId, `✨ You're already on *Ava Premium* — active until ${expires} 🌸`);
+      } else {
+        const { createPaymentLink } = await import('@/lib/ava/paystack');
+        const link = await createPaymentLink(telegramId, user.name || 'friend');
+        if (link) {
+          await sendMessage(chatId,
+            `✨ *Ava Premium — ₦2,000/month*\n\n• 5 months of memory\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n\n[Tap here to upgrade](${link.url}) 🌸`
+          );
+        } else {
+          await sendMessage(chatId, `Something went wrong generating your payment link — please try again in a moment 🌸`);
+        }
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/report') {
+      if (user.plan !== 'premium') {
+        await sendMessage(chatId, `Monthly cycle reports are a Premium feature ✨\n\nUpgrade with /premium to unlock this and more 🌸`);
+        return NextResponse.json({ ok: true });
+      }
+      await sendTyping(chatId);
+      try {
+        const { generateCycleReport } = await import('@/lib/ava/pdf');
+        const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
+        const [cycleData, memoryLogs] = await Promise.all([
+          getCycleData(user.id),
+          getMemoryContext(user.id, 'premium'),
+        ]);
+        const pdfBuffer = await generateCycleReport(user, cycleData, memoryLogs);
+
+        // Send as Telegram document via multipart
+        const formData = new FormData();
+        formData.append('chat_id', String(chatId));
+        formData.append('caption', `Your cycle report — ${new Date().toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })} 🌸`);
+        formData.append('document', new Blob([pdfBuffer], { type: 'application/pdf' }), `ava-report-${Date.now()}.pdf`);
+
+        await fetch(\`https://api.telegram.org/bot\${process.env.TELEGRAM_BOT_TOKEN}/sendDocument\`, {
+          method: 'POST',
+          body: formData,
+        });
+      } catch (err) {
+        console.error('PDF error:', err);
+        await sendMessage(chatId, `Couldn't generate your report right now — please try again in a moment 🌸`);
+      }
       return NextResponse.json({ ok: true });
     }
 
