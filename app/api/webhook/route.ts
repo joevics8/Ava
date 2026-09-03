@@ -173,7 +173,8 @@ export async function POST(req: NextRequest) {
         formData.append('caption', `Your cycle report — ${new Date().toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })} 🌸`);
         formData.append('document', new Blob([pdfBuffer], { type: 'application/pdf' }), `ava-report-${Date.now()}.pdf`);
 
-        await fetch(\`https://api.telegram.org/bot\${process.env.TELEGRAM_BOT_TOKEN}/sendDocument\`, {
+        const tgUrl = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendDocument`;
+        await fetch(tgUrl, {
           method: 'POST',
           body: formData,
         });
