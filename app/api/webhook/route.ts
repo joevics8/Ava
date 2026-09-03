@@ -211,6 +211,79 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
       return NextResponse.json({ ok: true });
     }
 
+    // ── Insights commands ─────────────────────────────────────────────────────
+    if (text === '/insights' || text === 'what have you learned about me' || text === 'what do you know about me') {
+      await sendTyping(chatId);
+      const { generatePersonalInsights } = await import('@/lib/ava/insights');
+      const { getCycleData } = await import('@/lib/ava/db');
+      const [cycleData, logs] = await Promise.all([
+        getCycleData(user.id),
+        getMemoryContext(user.id, user.plan),
+      ]);
+      const response = await generatePersonalInsights(user, logs, cycleData);
+      await sendMessage(chatId, response);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/changes' || text === 'what has changed recently' || text === 'what changed recently') {
+      await sendTyping(chatId);
+      const { generateRecentChanges } = await import('@/lib/ava/insights');
+      const logs = await getMemoryContext(user.id, user.plan);
+      const response = await generateRecentChanges(user, logs);
+      await sendMessage(chatId, response);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/patterns') {
+      await sendTyping(chatId);
+      const { detectPatterns } = await import('@/lib/ava/insights');
+      const { getCycleData } = await import('@/lib/ava/db');
+      const [cycleData, logs] = await Promise.all([
+        getCycleData(user.id),
+        getMemoryContext(user.id, user.plan),
+      ]);
+      const patterns = await detectPatterns(user, logs, cycleData);
+      const patternEntries = Object.entries(patterns).filter(([, v]) => v !== null).map(([, v]) => '• ' + String(v));
+      const found = patternEntries.join('\n');
+      if (!found) {
+        await sendMessage(chatId, `I haven't spotted strong patterns yet, ${user.name} 🌸 Keep sharing and I'll connect the dots over time.`);
+      } else {
+        const patternMsg = "Here's what I've noticed, " + user.name + " 🌸\n\n" + found + "\n\n_These are observations, not diagnoses — always worth discussing with your doctor if anything concerns you._";
+        await sendMessage(chatId, patternMsg);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/docprep' || text === 'doctor visit prep' || text === 'prepare for my doctor') {
+      await sendTyping(chatId);
+      const { generateDoctorPrep } = await import('@/lib/ava/insights');
+      const { getCycleData } = await import('@/lib/ava/db');
+      const [cycleData, logs] = await Promise.all([
+        getCycleData(user.id),
+        getMemoryContext(user.id, user.plan),
+      ]);
+      const response = await generateDoctorPrep(user, logs, cycleData);
+      await sendMessage(chatId, `📋 *Doctor Visit Summary for ${user.name}*
+
+${response}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/weekly' || text === 'weekly briefing' || text === 'weekly update') {
+      await sendTyping(chatId);
+      const { generateWeeklyBriefing } = await import('@/lib/ava/insights');
+      const { getCycleData } = await import('@/lib/ava/db');
+      const [cycleData, logs] = await Promise.all([
+        getCycleData(user.id),
+        getMemoryContext(user.id, user.plan),
+      ]);
+      const response = await generateWeeklyBriefing(user, logs, cycleData);
+      await sendMessage(chatId, `📊 *Your Weekly Briefing*
+
+${response}`);
+      return NextResponse.json({ ok: true });
+    }
+
     if (text === '/cancel') {
       if (user.plan !== 'premium') {
         await sendMessage(chatId, `You're on the free plan — nothing to cancel 🌸`);
@@ -251,7 +324,7 @@ You're now on the free plan. If you change your mind, /premium is always there.`
 
     if (text === '/help') {
       await sendMessage(chatId,
-        `/today — cycle summary\n/log — track symptoms\n/settings — update your info\n/premium — upgrade\n/report — monthly PDF (Premium)\n\nOr just talk to me naturally 🌸`
+        `/today — cycle summary\n/insights — what Ava has learned about you\n/changes — what's changed recently\n/patterns — recurring patterns\n/docprep — doctor visit summary\n/weekly — weekly briefing\n/log — track symptoms\n/settings — update your info\n/premium — upgrade\n/report — monthly PDF\n\nOr just talk to me naturally 🌸`
       );
       return NextResponse.json({ ok: true });
     }
