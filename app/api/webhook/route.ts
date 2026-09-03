@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, createUser, getMemoryContext, addMemoryLog } from '@/lib/ava/db';
+import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog } from '@/lib/ava/db';
 import {
   classifyMessage,
   extractLogSummary,
