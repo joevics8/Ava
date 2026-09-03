@@ -225,10 +225,11 @@ You'll keep Premium until your current period ends, then move to the free plan.`
     }
 
     if (text === 'switch to pregnancy mode' || text === 'pregnancy mode') {
-      const existing = await import('@/lib/ava/db').then(m => m.getCycleData(user.id));
+      if (!user) return NextResponse.json({ ok: true });
+      const existing = await import('@/lib/ava/db').then(m => m.getCycleData(user!.id));
       const lastPeriod = existing?.period_start_dates?.slice(-1)[0] || new Date().toISOString().split('T')[0];
       const { activatePregnancyMode } = await import('@/lib/ava/pregnancy');
-      await activatePregnancyMode(telegramId, lastPeriod, sendMessage, chatId, user.name || 'there');
+      await activatePregnancyMode(telegramId, lastPeriod, sendMessage, chatId, user!.name || 'there');
       return NextResponse.json({ ok: true });
     }
 
@@ -347,33 +348,6 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
     } else {
       const category = await classifyMessage(text);
       await routeMessage(category, text, chatId, user, memoryLogs);
-    }
-
-    if (category === 'LOG') {
-      const { category: logCat, summary } = await extractLogSummary(text);
-      await addMemoryLog(user.id, logCat as any, summary);
-
-      const followUpPrompt = `User logged: "${text}"
-
-Acknowledge warmly (1 sentence), give a brief insight if relevant to their cycle, then ask ONE caring follow-up question. Max 3 sentences total. No lists.
-
-Recent logs: ${memoryLogs.slice(0, 10).map(l => l.summary).join(', ') || 'none yet'}`;
-
-      await sendTyping(chatId);
-      const response = await handleConversation(user, followUpPrompt, memoryLogs);
-      await sendMessage(chatId, response || `Aww, that sounds tough — how are you feeling overall? 🌸`);
-      const insight = await summarizeChatInsight(text, response);
-      await addMemoryLog(user.id, 'chat', insight);
-
-    } else if (category === 'RETRIEVAL') {
-      const response = await handleRetrieval(user, text, memoryLogs);
-      await sendMessage(chatId, response || `I need more data to spot patterns — keep logging and I'll connect the dots 🌸`);
-
-    } else {
-      const response = await handleConversation(user, text, memoryLogs);
-      await sendMessage(chatId, response || `I'm here — tell me more 🌸`);
-      const insight = await summarizeChatInsight(text, response);
-      await addMemoryLog(user.id, 'chat', insight);
     }
 
     return NextResponse.json({ ok: true });

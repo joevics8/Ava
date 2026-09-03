@@ -60,7 +60,7 @@ export async function generateCycleReport(
     doc.fillColor(PINK).fontSize(14).font('Helvetica-Bold').text('Symptom Patterns');
     doc.moveDown(0.5);
 
-    const symptoms = memoryLogs.filter(l => l.category === 'symptom' || l.category === 'mood' || l.category === 'flow');
+    const symptoms = memoryLogs.filter(l => ['symptom', 'mood', 'flow'].includes(l.category));
     if (symptoms.length === 0) {
       doc.fillColor(GREY).fontSize(11).font('Helvetica').text('No symptoms logged yet in this period.');
     } else {

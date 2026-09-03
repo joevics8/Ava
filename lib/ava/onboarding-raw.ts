@@ -152,7 +152,7 @@ export async function handleOnboardingStep(
       '1': 'track', '2': 'conceive', '3': 'prevent', '4': 'understand',
     };
     const nums = message.match(/[1-4]/g) || ['1'];
-    const goals = [...new Set(nums.map(n => goalMap[n]))];
+    const goals = Array.from(new Set(nums.map(n => goalMap[n])));
     // Primary goal is first selection
     const primaryGoal = goals[0] as any;
 
