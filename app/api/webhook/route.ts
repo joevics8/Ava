@@ -81,8 +81,10 @@ export async function POST(req: NextRequest) {
         await sendMessage(chatId, result);
         if (user) await addMemoryLog(user.id, 'test', summary);
         if (isPositive && user) {
-          await sendMessage(chatId, `If this is a positive result, I want you to know I'm here for you whatever you're feeling 🌸 Would you like to switch to pregnancy mode?`);
           await addMemoryLog(user.id, 'insight', 'Positive pregnancy test logged');
+          await sendMessage(chatId,
+            `If this is a positive result, I want you to know I'm here for you whatever you're feeling 🌸\n\nWould you like me to switch to pregnancy mode? I'll track your weeks and due date.\n\nJust reply *switch to pregnancy mode* or *not yet* 🌷`
+          );
         }
       } else {
         const response = await analyseGenericImage(photoData.base64, photoData.mimeType, caption);
@@ -105,6 +107,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── Premium expiry check ─────────────────────────────────────────────────
+    if (user.plan === 'premium' && (user as any).premium_expires_at) {
+      const expires = new Date((user as any).premium_expires_at);
+      const now = new Date();
+      const daysLeft = Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysLeft <= 0) {
+        // Downgrade expired user
+        await updateUser(telegramId, { plan: 'free' } as any);
+        await sendMessage(chatId,
+          `Hey ${user.name} — your Premium subscription has expired 🌸
+
+You're now on the free plan. Send /premium to renew and keep your 5-month memory.`
+        );
+        user = { ...user, plan: 'free' };
+      }
+    }
+
     // ── Commands ─────────────────────────────────────────────────────────────
     if (text === '/start') {
       if (user.onboarding_complete) {
@@ -119,9 +139,15 @@ export async function POST(req: NextRequest) {
 
     if (text === '/today') {
       await sendTyping(chatId);
-      const { buildTodaySummary } = await import('@/lib/ava/today');
-      const summary = await buildTodaySummary(user);
-      await sendMessage(chatId, summary);
+      if ((user as any).mode === 'pregnant') {
+        const { buildPregnancySummary } = await import('@/lib/ava/pregnancy');
+        const summary = await buildPregnancySummary(user);
+        await sendMessage(chatId, summary);
+      } else {
+        const { buildTodaySummary } = await import('@/lib/ava/today');
+        const summary = await buildTodaySummary(user);
+        await sendMessage(chatId, summary);
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -182,6 +208,43 @@ export async function POST(req: NextRequest) {
         console.error('PDF error:', err);
         await sendMessage(chatId, `Couldn't generate your report right now — please try again in a moment 🌸`);
       }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/cancel') {
+      if (user.plan !== 'premium') {
+        await sendMessage(chatId, `You're on the free plan — nothing to cancel 🌸`);
+      } else {
+        await sendMessage(chatId,
+          `To cancel your Premium subscription, send *CANCEL PREMIUM*.
+
+You'll keep Premium until your current period ends, then move to the free plan.`
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === 'switch to pregnancy mode' || text === 'pregnancy mode') {
+      const existing = await import('@/lib/ava/db').then(m => m.getCycleData(user.id));
+      const lastPeriod = existing?.period_start_dates?.slice(-1)[0] || new Date().toISOString().split('T')[0];
+      const { activatePregnancyMode } = await import('@/lib/ava/pregnancy');
+      await activatePregnancyMode(telegramId, lastPeriod, sendMessage, chatId, user.name || 'there');
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === 'switch to cycle mode' || text === 'cycle mode') {
+      await updateUser(telegramId, { mode: 'cycle', pregnancy_start_date: null } as any);
+      await sendMessage(chatId, `Switched back to cycle tracking 🌸 Send /today for your daily summary.`);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === 'CANCEL PREMIUM') {
+      await updateUser(telegramId, { plan: 'free', premium_expires_at: null } as any);
+      await sendMessage(chatId,
+        `Done — your Premium subscription has been cancelled 🌸
+
+You're now on the free plan. If you change your mind, /premium is always there.`
+      );
       return NextResponse.json({ ok: true });
     }
 

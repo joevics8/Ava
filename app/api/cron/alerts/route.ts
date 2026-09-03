@@ -110,5 +110,24 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Premium renewal reminders ────────────────────────────────────────────
+  const { data: premiumUsers } = await supabaseAdmin
+    .from('users')
+    .select('*')
+    .eq('plan', 'premium')
+    .not('premium_expires_at', 'is', null);
+
+  for (const u of premiumUsers || []) {
+    const expires = new Date(u.premium_expires_at);
+    const daysLeft = Math.ceil((expires.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysLeft === 3) {
+      await sendMessage(u.telegram_id,
+        `Hey ${u.name} 🌸 Your Ava Premium expires in *3 days*.
+
+Send /premium to renew and keep your full memory and daily digest.`
+      );
+    }
+  }
+
   return NextResponse.json({ ...results, total_users: users.length });
 }

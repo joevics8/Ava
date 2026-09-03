@@ -49,7 +49,16 @@ export async function handleSettingsStep(
           `What's your main goal?\n\n1. Track my cycle\n2. Plan pregnancy\n3. Avoid pregnancy\n4. Understand my body`
         );
         break;
-      case '6':
+      case '6': {
+        const isPregnant = (user as any).mode === 'pregnant';
+        await updateUser(telegramId, { onboarding_step: 96 });
+        await send(chatId, isPregnant
+          ? `You're currently in *pregnancy mode* 🤰\n\nSend *1* to switch back to cycle tracking.`
+          : `You're currently in *cycle tracking mode* 🌸\n\nSend *1* to switch to pregnancy mode.`
+        );
+        break;
+      }
+      case '7':
         await updateUser(telegramId, { onboarding_step: 99 });
         await send(chatId, `⚠️ Are you sure you want to delete *all* your data? This cannot be undone.\n\nSend *YES DELETE* to confirm or anything else to cancel.`);
         break;
@@ -145,6 +154,28 @@ export async function handleSettingsStep(
     }
     await updateUser(telegramId, { reproductive_goal: goal as any, onboarding_step: 0 });
     await send(chatId, `Goal updated 🌸 I'll tailor everything to that from now on.`);
+    return;
+  }
+
+  // ── Mode switch ───────────────────────────────────────────────────────────
+  if (step === 96) {
+    if (text === '1') {
+      const isPregnant = (user as any).mode === 'pregnant';
+      if (isPregnant) {
+        await updateUser(telegramId, { mode: 'cycle', pregnancy_start_date: null, onboarding_step: 0 } as any);
+        await send(chatId, `Switched back to cycle tracking 🌸 Send /today for your summary.`);
+      } else {
+        const { getCycleData } = await import('./db');
+        const existing = await getCycleData(user.id);
+        const lastPeriod = existing?.period_start_dates?.slice(-1)[0] || new Date().toISOString().split('T')[0];
+        const { activatePregnancyMode } = await import('./pregnancy');
+        await updateUser(telegramId, { onboarding_step: 0 } as any);
+        await activatePregnancyMode(telegramId, lastPeriod, send, chatId, user.name || 'there');
+      }
+    } else {
+      await updateUser(telegramId, { onboarding_step: 0 });
+      await send(chatId, `No changes made 🌸`);
+    }
     return;
   }
 
