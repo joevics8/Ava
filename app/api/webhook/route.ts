@@ -43,6 +43,51 @@ export async function POST(req: NextRequest) {
     const telegramId: number = message.from.id;
     const text: string = message.text || '';
 
+    // ── Callback queries (inline button taps) ────────────────────────────────
+    if (update?.callback_query) {
+      const cb = update.callback_query;
+      const cbChatId = cb.message?.chat?.id;
+      const cbTelegramId = cb.from?.id;
+      const cbData = cb.data;
+
+      if (cbChatId && cbTelegramId && cbData?.startsWith('mood_')) {
+        const moodMap: Record<string, string> = {
+          mood_good: 'good',
+          mood_okay: 'okay',
+          mood_notgreat: 'not great',
+        };
+        const mood = moodMap[cbData] || cbData;
+        const cbUser = await getUser(cbTelegramId);
+
+        if (cbUser) {
+          await addMemoryLog(cbUser.id, 'mood', `Morning mood: ${mood}`);
+
+          const replies: Record<string, string> = {
+            mood_good: `Love that, ${cbUser.name}! Have a wonderful day 🌸`,
+            mood_okay: `Got it — hope your day picks up 🌷 Anything bothering you?`,
+            mood_notgreat: `Sorry to hear that, ${cbUser.name} 🌸 What's going on? I'm here.`,
+          };
+
+          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callback_query_id: cb.id }),
+          });
+
+          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: cbChatId,
+              text: replies[cbData] || `Got it 🌸`,
+              parse_mode: 'Markdown',
+            }),
+          });
+        }
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Photo messages ────────────────────────────────────────────────────────
     if (message.photo?.length) {
       await sendTyping(chatId);
