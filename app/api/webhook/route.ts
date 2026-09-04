@@ -12,11 +12,13 @@ import {
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
-async function sendMessage(chatId: number, text: string) {
+async function sendMessage(chatId: number, text: string, markdown = false) {
+  const body: any = { chat_id: chatId, text };
+  if (markdown) body.parse_mode = 'Markdown';
   await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -36,14 +38,8 @@ export async function POST(req: NextRequest) {
     }
 
     const update = await req.json();
-    const message = update?.message;
-    if (!message) return NextResponse.json({ ok: true });
 
-    const chatId: number = message.chat.id;
-    const telegramId: number = message.from.id;
-    const text: string = message.text || '';
-
-    // ── Callback queries (inline button taps) ────────────────────────────────
+    // ── Callback queries (inline button taps) — must be before message check ─
     if (update?.callback_query) {
       const cb = update.callback_query;
       const cbChatId = cb.message?.chat?.id;
@@ -87,6 +83,14 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ ok: true });
     }
+
+    // ── Message null check ────────────────────────────────────────────────────
+    const message = update?.message;
+    if (!message) return NextResponse.json({ ok: true });
+
+    const chatId: number = message.chat.id;
+    const telegramId: number = message.from.id;
+    const text: string = message.text || '';
 
     // ── Photo messages ────────────────────────────────────────────────────────
     if (message.photo?.length) {
@@ -147,7 +151,7 @@ export async function POST(req: NextRequest) {
     if (!user) {
       user = await createUser(telegramId);
       await sendMessage(chatId,
-        `Hi, I'm *Ava* 🌸\n\nI'm your personal cycle & wellness companion. I can help you understand your cycle, track symptoms, and answer questions about your body.\n\nLet's get you set up — it only takes a minute.\n\nWhat's your name?`
+        `Hi, I'm *Ava* 🌸\n\nI'm your personal cycle & wellness companion. I can help you understand your cycle, track symptoms, and answer questions about your body.\n\nLet's get you set up — it only takes a minute.\n\nWhat's your name?`, true
       );
       return NextResponse.json({ ok: true });
     }
@@ -499,17 +503,17 @@ Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(
 
     await sendTyping(chatId);
     const response = await handleConversation(user, followUpPrompt, memoryLogs);
-    await sendMessage(chatId, response || `Aww — how are you feeling overall? 🌸`);
+    await sendMessage(chatId, response || `Aww — how are you feeling overall? 🌸`, false);
     const insight = await summarizeChatInsight(text, response);
     await addMemoryLog(user.id, 'chat', insight);
 
   } else if (category === 'RETRIEVAL') {
     const response = await handleRetrieval(user, text, memoryLogs);
-    await sendMessage(chatId, response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`);
+    await sendMessage(chatId, response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`, false);
 
   } else {
     const response = await handleConversation(user, text, memoryLogs);
-    await sendMessage(chatId, response || `I'm here — tell me more 🌸`);
+    await sendMessage(chatId, response || `I'm here — tell me more 🌸`, false);
     const insight = await summarizeChatInsight(text, response);
     await addMemoryLog(user.id, 'chat', insight);
   }

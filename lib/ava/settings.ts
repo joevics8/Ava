@@ -3,7 +3,7 @@ import { calcAverageCycleLength, predictNextPeriod, predictOvulationWindow } fro
 import { supabaseAdmin } from '@/lib/supabase';
 import type { AvaUser } from '@/types';
 
-type SendFn = (chatId: number, text: string) => Promise<void>;
+type SendFn = (chatId: number, text: string, markdown?: boolean) => Promise<void>;
 
 function parseDate(input: string): Date | null {
   const cleaned = input.replace(/(\d+)(st|nd|rd|th)/gi, '$1').replace(/,/g, '').trim();
