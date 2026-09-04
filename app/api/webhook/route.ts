@@ -333,6 +333,53 @@ ${response}`);
       return NextResponse.json({ ok: true });
     }
 
+    // ── Remedies ──────────────────────────────────────────────────────────────
+    if (text === '/remedies') {
+      const { getConditionMenu, getActiveRemedies } = await import('@/lib/ava/remedy-engine');
+      const active = await getActiveRemedies(user.id);
+      const activeText = active.length
+        ? '\n\n*Currently tracking:*\n' + active.map((r: any) => '🌿 ' + r.remedy_name).join('\n')
+        : '';
+      const menu = getConditionMenu();
+      await sendMessage(chatId,
+        '*Ava Natural Remedy Guide* 🌿\n\nWhat would you like help with?\n\n' + menu + activeText + "\n\nOr just describe your symptom and I'll suggest something.",
+        true
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === 'my remedies' || text === 'remedies i am trying') {
+      const { getActiveRemedies } = await import('@/lib/ava/remedy-engine');
+      const active = await getActiveRemedies(user.id);
+      if (!active.length) {
+        await sendMessage(chatId, "You're not tracking any remedies yet 🌿\n\nSend /remedies to explore natural options for your symptoms.");
+      } else {
+        const list = active.map((r: any) => {
+          const started = new Date(r.started_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+          return '🌿 *' + r.remedy_name + '* — started ' + started;
+        }).join('\n');
+        await sendMessage(chatId, '*Your active remedies:*\n\n' + list + "\n\nTell me how any of them are going and I'll update your record 🌿", true);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+
+    if (text === 'my remedies' || text === 'remedies i am trying') {
+      const { getActiveRemedies } = await import('@/lib/ava/remedy-engine');
+      const active = await getActiveRemedies(user.id);
+      if (!active.length) {
+        await sendMessage(chatId, `You're not tracking any remedies yet 🌿
+
+Send /remedies to explore natural options for your symptoms.`);
+      } else {
+        const list = active.map((r: any) => {
+          const started = new Date(r.started_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+        }).join('\\n');
+        await sendMessage(chatId, '*Your active remedies:*\\n\\n' + list + "\\n\\nTell me how any of them are going and I'll update your record 🌿", true);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     if (text === '/cancel') {
       if (user.plan !== 'premium') {
         await sendMessage(chatId, `You're on the free plan — nothing to cancel 🌸`);
@@ -429,6 +476,21 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
       return NextResponse.json({ ok: true });
     }
 
+    if (['yes please', 'yes', 'sure', 'yeah', 'show me', 'yes share it', 'share it'].includes(lowerText)) {
+      // User said yes to remedy suggestion — check last detected condition from memory
+      const { getMemoryContext } = await import('@/lib/ava/db');
+      const logs = await getMemoryContext(user.id, user.plan);
+      const lastInsight = logs.find((l: any) => l.category === 'insight' && l.summary.includes('Suggested remedy'));
+      if (lastInsight) {
+        const condMatch = lastInsight.summary.match(/Suggested remedy for (.+)/);
+        if (condMatch) {
+          const { suggestRemedies } = await import('@/lib/ava/remedy-engine');
+          await suggestRemedies(chatId, user, condMatch[1], sendMessage);
+          return NextResponse.json({ ok: true });
+        }
+      }
+    }
+
     if (['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(lowerText)) {
       await sendMessage(chatId,
         `No worries — cycles can vary a few days 🌸 I'll keep an eye on it. Let me know when it starts.`
@@ -486,6 +548,30 @@ async function routeMessage(
   user: any,
   memoryLogs: any[]
 ) {
+  // Check for remedy-related intent first
+  const { detectRemedyIntent, startTracking, updateRemedyOutcome, suggestRemedies, findRemedyByName } = await import('@/lib/ava/remedy-engine');
+  const { detectCondition } = await import('@/lib/ava/remedies');
+
+  // User naming a specific remedy to start
+  const { action, remedyId } = detectRemedyIntent(text);
+  if (action === 'start' && remedyId) {
+    await startTracking(chatId, user, remedyId, sendMessage);
+    return;
+  }
+  if (action === 'update' && remedyId) {
+    await updateRemedyOutcome(chatId, user, remedyId, text, sendMessage);
+    return;
+  }
+
+  // User asking for a specific remedy by name (e.g. "what is spearmint tea")
+  const namedRemedy = findRemedyByName(text);
+  if (namedRemedy && (text.toLowerCase().includes('tell me') || text.toLowerCase().includes('what is') || text.toLowerCase().includes('how do i'))) {
+    const { formatRemedy } = await import('@/lib/ava/remedies');
+    await sendMessage(chatId, formatRemedy(namedRemedy), true);
+    await sendMessage(chatId, `Say "I'll try ${namedRemedy.name}" and I'll track it for you 🌿`);
+    return;
+  }
+
   if (category === 'LOG') {
     const { category: logCat, summary } = await extractLogSummary(text);
     await addMemoryLog(user.id, logCat as any, summary);
@@ -506,6 +592,19 @@ Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(
     await sendMessage(chatId, response || `Aww — how are you feeling overall? 🌸`, false);
     const insight = await summarizeChatInsight(text, response);
     await addMemoryLog(user.id, 'chat', insight);
+
+    // Naturally suggest a remedy if there's one for this symptom
+    const { detectCondition } = await import('@/lib/ava/remedies');
+    const { getActiveRemedies, suggestRemedies } = await import('@/lib/ava/remedy-engine');
+    const detectedCondition = detectCondition(text);
+    if (detectedCondition) {
+      const alreadyTracking = await getActiveRemedies(user.id);
+      const alreadyHasThis = alreadyTracking.some((r: any) => r.condition === detectedCondition);
+      if (!alreadyHasThis) {
+        await sendMessage(chatId, `By the way — I have a natural remedy that might help with this 🌿 Want me to share it?`);
+        await addMemoryLog(user.id, 'insight', `Suggested remedy for ${detectedCondition}`);
+      }
+    }
 
   } else if (category === 'RETRIEVAL') {
     const response = await handleRetrieval(user, text, memoryLogs);

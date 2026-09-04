@@ -35,6 +35,7 @@ export async function GET() {
         { command: 'today', description: 'Your daily cycle summary' },
         { command: 'log', description: 'Track symptoms, mood or flow' },
         { command: 'premium', description: 'Upgrade for 5 months memory' },
+        { command: 'remedies', description: 'Natural remedies for your symptoms' },
         { command: 'insights', description: 'What Ava has learned about you' },
         { command: 'changes', description: 'What has changed in your cycle recently' },
         { command: 'patterns', description: 'Recurring patterns Ava has spotted' },
