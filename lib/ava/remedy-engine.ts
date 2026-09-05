@@ -16,115 +16,143 @@ export interface Remedy {
 }
 
 type SendFn = (chatId: number, text: string, markdown?: boolean) => Promise<void>;
+type SendWithKeyboardFn = (chatId: number, text: string, keyboard: any[][], markdown?: boolean) => Promise<void>;
 
-// ─── Simple in-memory cache (refreshes every 10 minutes) ─────────────────────
+// ─── Cache ────────────────────────────────────────────────────────────────────
 
 let remedyCache: Remedy[] = [];
 let cacheExpiry = 0;
 
-async function getAllRemedies(): Promise<Remedy[]> {
+export async function getAllRemedies(): Promise<Remedy[]> {
   if (Date.now() < cacheExpiry && remedyCache.length > 0) return remedyCache;
-
-  const { data, error } = await supabaseAdmin
+  const { data } = await supabaseAdmin
     .from('remedies')
     .select('*')
     .eq('active', true)
     .order('condition');
-
-  if (error || !data) return remedyCache; // return stale cache on error
-
-  remedyCache = data as Remedy[];
-  cacheExpiry = Date.now() + 10 * 60 * 1000; // 10 min TTL
+  if (data) {
+    remedyCache = data as Remedy[];
+    cacheExpiry = Date.now() + 10 * 60 * 1000;
+  }
   return remedyCache;
 }
 
-// ─── Get remedies for a condition ─────────────────────────────────────────────
+// ─── Step 1: Show condition list ──────────────────────────────────────────────
 
-export async function getRemediesForCondition(
-  condition: string,
-  isPremium: boolean
-): Promise<Remedy[]> {
-  const all = await getAllRemedies();
-  return all.filter(r => r.condition === condition && (isPremium || !r.premium));
-}
-
-// ─── Detect condition from message ────────────────────────────────────────────
-
-export function detectCondition(message: string): string | null {
-  const lower = message.toLowerCase();
-  const map: Record<string, string> = {
-    cramp: 'cramps', 'period pain': 'cramps', dysmenorrhea: 'cramps', 'stomach pain': 'cramps',
-    bloat: 'bloating', 'water retention': 'bloating', swollen: 'bloating',
-    acne: 'acne', breakout: 'acne', pimple: 'acne', spot: 'acne', blemish: 'acne',
-    mood: 'pms_mood', irritable: 'pms_mood', pms: 'pms_mood', 'mood swing': 'pms_mood', anxious: 'pms_mood',
-    'heavy flow': 'heavy_flow', 'heavy period': 'heavy_flow', 'bleeding a lot': 'heavy_flow',
-    'breast tender': 'breast_tenderness', 'sore breast': 'breast_tenderness', 'boob': 'breast_tenderness',
-    tired: 'fatigue', fatigue: 'fatigue', exhausted: 'fatigue', 'no energy': 'fatigue', drained: 'fatigue',
-    irregular: 'irregular_cycles', pcos: 'irregular_cycles', 'missed period': 'irregular_cycles',
-    sleep: 'sleep', insomnia: 'sleep', "can't sleep": 'sleep', 'not sleeping': 'sleep',
-    discharge: 'vaginal_health', vaginal: 'vaginal_health',
-  };
-
-  for (const [keyword, cond] of Object.entries(map)) {
-    if (lower.includes(keyword)) return cond;
-  }
-  return null;
-}
-
-// ─── Format remedy for Telegram ───────────────────────────────────────────────
-
-export function formatRemedy(remedy: Remedy): string {
-  return (
-    '🌿 *' + remedy.name + '* for ' + remedy.condition_label + '\n\n' +
-    remedy.description + '\n\n' +
-    '*How to use:*\n' + remedy.instructions + '\n\n' +
-    '*When:* ' + remedy.timing + '\n\n' +
-    '*What to watch:* ' + remedy.tracking_note +
-    (remedy.caution ? '\n\n⚠️ *Note:* ' + remedy.caution : '')
-  );
-}
-
-// ─── Suggest remedies for a condition ─────────────────────────────────────────
-
-export async function suggestRemedies(
+export async function showConditionMenu(
   chatId: number,
   user: AvaUser,
-  condition: string,
-  send: SendFn
+  sendWithKeyboard: SendWithKeyboardFn
 ): Promise<void> {
+  const all = await getAllRemedies();
   const isPremium = user.plan === 'premium';
-  const remedies = await getRemediesForCondition(condition, isPremium);
 
-  if (!remedies.length) {
-    await send(chatId, 'I don\'t have specific remedies for that yet, but I\'m always learning. Try asking me about cramps, bloating, acne, or PMS 🌸');
-    return;
+  // Get unique conditions the user has access to
+  const available = all.filter(r => isPremium || !r.premium);
+  const conditionMap = new Map<string, string>();
+  available.forEach(r => conditionMap.set(r.condition, r.condition_label));
+
+  const conditions = Array.from(conditionMap.entries());
+
+  // Build keyboard — 2 per row
+  const keyboard: any[][] = [];
+  for (let i = 0; i < conditions.length; i += 2) {
+    const row = [
+      { text: conditions[i][1], callback_data: 'rem_cond_' + conditions[i][0] },
+    ];
+    if (conditions[i + 1]) {
+      row.push({ text: conditions[i + 1][1], callback_data: 'rem_cond_' + conditions[i + 1][0] });
+    }
+    keyboard.push(row);
   }
 
-  const { data: existing } = await supabaseAdmin
-    .from('user_remedies')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('condition', condition)
-    .eq('active', true);
-
-  if (existing?.length) {
-    const names = existing.map((r: any) => r.remedy_name).join(', ');
-    await send(chatId, 'You\'re already trying *' + names + '* for this 🌿\n\nWant to log how it\'s going? Just tell me — "the ginger tea is helping" or "the heat therapy isn\'t working".', true);
-    return;
-  }
-
-  const primary = remedies[0];
-  const others = remedies.slice(1, 4).map(r => '• ' + r.name).join('\n');
-
-  await send(chatId, formatRemedy(primary), true);
-  await send(chatId,
-    'Want to try this? Just say *"I\'ll try ' + primary.name + '"* and I\'ll check in with you in 7 days.' +
-    (others ? '\n\nOther options for ' + primary.condition_label + ':\n' + others : ''),
+  await sendWithKeyboard(
+    chatId,
+    '🌿 *Natural Remedy Guide*\n\nWhat would you like help with? Choose a condition:',
+    keyboard,
     true
   );
 }
 
-// ─── Start tracking a remedy ──────────────────────────────────────────────────
+// ─── Step 2: Show remedy list for a condition ─────────────────────────────────
+
+export async function showRemedyList(
+  chatId: number,
+  user: AvaUser,
+  condition: string,
+  sendWithKeyboard: SendWithKeyboardFn
+): Promise<void> {
+  const all = await getAllRemedies();
+  const isPremium = user.plan === 'premium';
+  const remedies = all.filter(r => r.condition === condition && (isPremium || !r.premium));
+
+  if (!remedies.length) {
+    await sendWithKeyboard(chatId, 'No remedies found for this condition yet 🌸', [], false);
+    return;
+  }
+
+  const conditionLabel = remedies[0].condition_label;
+
+  // Build numbered list text
+  const list = remedies.map((r, i) => (i + 1) + '. *' + r.name + '*\n_' + r.description.slice(0, 80) + '..._').join('\n\n');
+
+  // Build keyboard — one remedy per row
+  const keyboard = remedies.map(r => ([
+    { text: r.name, callback_data: 'rem_view_' + r.id },
+  ]));
+
+  // Add back button
+  keyboard.push([{ text: '← Back to conditions', callback_data: 'rem_menu' }]);
+
+  await sendWithKeyboard(
+    chatId,
+    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:\n\n' + list,
+    keyboard,
+    true
+  );
+}
+
+// ─── Step 3: Show full remedy detail ──────────────────────────────────────────
+
+export async function showRemedyDetail(
+  chatId: number,
+  user: AvaUser,
+  remedyId: string,
+  sendWithKeyboard: SendWithKeyboardFn
+): Promise<void> {
+  const all = await getAllRemedies();
+  const remedy = all.find(r => r.id === remedyId);
+  if (!remedy) return;
+
+  const text =
+    '🌿 *' + remedy.name + '*\n\n' +
+    remedy.description + '\n\n' +
+    '📋 *How to use:*\n' + remedy.instructions + '\n\n' +
+    '⏰ *When:* ' + remedy.timing + '\n\n' +
+    '👀 *What to track:* ' + remedy.tracking_note + '\n\n' +
+    '🔬 *Why it works:* ' + remedy.evidence +
+    (remedy.caution ? '\n\n⚠️ *Caution:* ' + remedy.caution : '');
+
+  // Check if already tracking
+  const { data: existing } = await supabaseAdmin
+    .from('user_remedies')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('remedy_id', remedyId)
+    .eq('active', true)
+    .single();
+
+  const keyboard = [
+    existing
+      ? [{ text: '✅ Already tracking this', callback_data: 'rem_already_' + remedyId }]
+      : [{ text: '🌿 Try this remedy', callback_data: 'rem_start_' + remedyId }],
+    [{ text: '← Back to ' + remedy.condition_label, callback_data: 'rem_cond_' + remedy.condition }],
+  ];
+
+  await sendWithKeyboard(chatId, text, keyboard, true);
+}
+
+// ─── Step 4: Start tracking ───────────────────────────────────────────────────
 
 export async function startTracking(
   chatId: number,
@@ -149,37 +177,93 @@ export async function startTracking(
   });
 
   await send(chatId,
-    'Saved 🌿 I\'ll check in with you in 7 days to see if you\'ve started *' + remedy.name + '* and how it\'s going.\n\nJust tell me anytime — no need to wait.',
+    'Saved 🌿 I\'ll check in with you in 7 days to see how *' + remedy.name + '* is going.\n\nJust tell me anytime if you notice anything.',
     true
   );
 }
 
-// ─── Detect remedy intent ─────────────────────────────────────────────────────
+// ─── Handle all remedy callback queries ───────────────────────────────────────
 
-export async function detectRemedyIntent(message: string): Promise<{ action: 'start' | 'update' | null; remedyId: string | null }> {
+export async function handleRemedyCallback(
+  chatId: number,
+  user: AvaUser,
+  callbackData: string,
+  sendWithKeyboard: SendWithKeyboardFn,
+  send: SendFn
+): Promise<boolean> {
+  if (callbackData === 'rem_menu') {
+    await showConditionMenu(chatId, user, sendWithKeyboard);
+    return true;
+  }
+
+  if (callbackData.startsWith('rem_cond_')) {
+    const condition = callbackData.replace('rem_cond_', '');
+    await showRemedyList(chatId, user, condition, sendWithKeyboard);
+    return true;
+  }
+
+  if (callbackData.startsWith('rem_view_')) {
+    const remedyId = callbackData.replace('rem_view_', '');
+    await showRemedyDetail(chatId, user, remedyId, sendWithKeyboard);
+    return true;
+  }
+
+  if (callbackData.startsWith('rem_start_')) {
+    const remedyId = callbackData.replace('rem_start_', '');
+    await startTracking(chatId, user, remedyId, send);
+    return true;
+  }
+
+  if (callbackData.startsWith('rem_already_')) {
+    await send(chatId, 'You\'re already tracking this one 🌿 Keep going — I\'ll check in with you soon.');
+    return true;
+  }
+
+  return false;
+}
+
+// ─── Auto-suggest from symptom (shows list, not first remedy) ─────────────────
+
+export async function suggestRemediesForCondition(
+  chatId: number,
+  user: AvaUser,
+  condition: string,
+  sendWithKeyboard: SendWithKeyboardFn,
+  send: SendFn
+): Promise<void> {
+  const { data: existing } = await supabaseAdmin
+    .from('user_remedies')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('condition', condition)
+    .eq('active', true);
+
+  if (existing?.length) {
+    await send(chatId, 'You\'re already tracking a remedy for this 🌿 Say *my remedies* to see how it\'s going.', true);
+    return;
+  }
+
+  await send(chatId, 'By the way — I have some natural remedies that might help with this 🌿');
+  await showRemedyList(chatId, user, condition, sendWithKeyboard);
+}
+
+// ─── Detect remedy intent from text ──────────────────────────────────────────
+
+export async function detectRemedyIntent(message: string): Promise<{ action: 'update' | null; remedyId: string | null }> {
   const lower = message.toLowerCase();
   const all = await getAllRemedies();
 
-  const startPhrases = ["i'll try", "i will try", "i'm going to try", "starting", "going to use", "will use", "trying", "let me try"];
-  for (const phrase of startPhrases) {
-    if (lower.includes(phrase)) {
-      const remedy = all.find(r => lower.includes(r.name.toLowerCase()));
-      if (remedy) return { action: 'start', remedyId: remedy.id };
-    }
-  }
-
-  const helpedPhrases = ['is helping', 'it worked', 'it helped', 'feeling better', 'works for me', 'helped a lot'];
+  const helpedPhrases = ['is helping', 'it worked', 'it helped', 'feeling better', 'works for me', 'helped'];
   for (const phrase of helpedPhrases) {
     if (lower.includes(phrase)) {
       const remedy = all.find(r => lower.includes(r.name.toLowerCase()));
       if (remedy) return { action: 'update', remedyId: remedy.id };
     }
   }
-
   return { action: null, remedyId: null };
 }
 
-// ─── Update remedy outcome ────────────────────────────────────────────────────
+// ─── Update outcome ───────────────────────────────────────────────────────────
 
 export async function updateRemedyOutcome(
   chatId: number,
@@ -191,9 +275,9 @@ export async function updateRemedyOutcome(
   const lower = message.toLowerCase();
   let outcome: string;
 
-  if (lower.includes('not') || lower.includes("didn't") || lower.includes("doesn't") || lower.includes('no difference')) {
+  if (lower.includes('not') || lower.includes("didn't") || lower.includes('no difference')) {
     outcome = 'didnt_help';
-  } else if (lower.includes('partial') || lower.includes('little') || lower.includes('bit') || lower.includes('slightly')) {
+  } else if (lower.includes('partial') || lower.includes('little') || lower.includes('slightly')) {
     outcome = 'partially';
   } else {
     outcome = 'helped';
@@ -206,15 +290,15 @@ export async function updateRemedyOutcome(
     .eq('remedy_id', remedyId);
 
   const replies: Record<string, string> = {
-    helped: 'That\'s wonderful — I\'ve noted that it worked for you 🌿 I\'ll remember this for next time.',
+    helped: 'That\'s wonderful — I\'ve noted that it worked for you 🌿',
     partially: 'Good to know it\'s helping a little. Keep going — some remedies need a full cycle or two 🌿',
-    didnt_help: 'Thanks for letting me know — every body is different. Want me to suggest another option? 🌸',
+    didnt_help: 'Thanks for letting me know. Every body is different. Send /remedies to try a different option 🌸',
   };
 
   await send(chatId, replies[outcome] || 'Got it — noted 🌿');
 }
 
-// ─── Get active remedies ──────────────────────────────────────────────────────
+// ─── Active remedies ──────────────────────────────────────────────────────────
 
 export async function getActiveRemedies(userId: string): Promise<any[]> {
   const { data } = await supabaseAdmin
@@ -224,20 +308,4 @@ export async function getActiveRemedies(userId: string): Promise<any[]> {
     .eq('active', true)
     .order('started_at', { ascending: false });
   return data || [];
-}
-
-// ─── Find remedy by name ──────────────────────────────────────────────────────
-
-export async function findRemedyByName(message: string): Promise<Remedy | null> {
-  const lower = message.toLowerCase();
-  const all = await getAllRemedies();
-  return all.find(r => lower.includes(r.name.toLowerCase())) || null;
-}
-
-// ─── Condition menu ───────────────────────────────────────────────────────────
-
-export async function getConditionMenu(isPremium: boolean): Promise<string> {
-  const all = await getAllRemedies();
-  const conditions = Array.from(new Set(all.map(r => r.condition_label)));
-  return conditions.map((c, i) => (i + 1) + '. ' + c).join('\n');
 }
