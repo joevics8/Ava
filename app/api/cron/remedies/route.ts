@@ -35,13 +35,16 @@ export async function GET(req: NextRequest) {
     const name = (item.users as any)?.name || 'there';
     if (!telegramId) continue;
 
-    await sendMessage(telegramId,
-      `Hey ${name} 🌿 A month ago you started trying *${item.remedy_name}*.\n\nHas it been helping with your ${item.condition.replace(/_/g, ' ')}?\n\nJust reply: *it helped*, *it partially helped*, or *it didn't help* and I'll note it down.`
-    );
+    const conditionLabel = item.condition.replace(/_/g, ' ');
+    const followUpMsg = item.outcome === null && item.notes === null
+      ? 'Hey ' + name + ' 🌿 A week ago you saved ' + item.remedy_name + ' to try for your ' + conditionLabel + '.\n\nHave you started trying it yet? Just let me know how it is going.'
+      : 'Hey ' + name + ' 🌿 How is ' + item.remedy_name + ' going for your ' + conditionLabel + '?\n\nReply: it helped, it partially helped, or it did not help and I will note it.';
 
-    // Push follow-up back 30 more days in case they don't respond immediately
+    await sendMessage(telegramId, followUpMsg);
+
+    // Push follow-up 7 more days
     const nextFollowUp = new Date();
-    nextFollowUp.setDate(nextFollowUp.getDate() + 30);
+    nextFollowUp.setDate(nextFollowUp.getDate() + 7);
     await supabaseAdmin
       .from('user_remedies')
       .update({ follow_up_at: nextFollowUp.toISOString() })

@@ -210,7 +210,7 @@ export const REMEDIES: Remedy[] = [
 // ─── Get remedies for a condition ─────────────────────────────────────────────
 
 export function getRemediesForCondition(condition: string): Remedy[] {
-  return REMEDIES.filter(r => r.condition === condition);
+  return getAllRemedies().filter(r => r.condition === condition);
 }
 
 // ─── Detect condition from message ────────────────────────────────────────────
@@ -247,4 +247,302 @@ export function formatRemedy(remedy: Remedy): string {
     `*What to watch:* ${remedy.trackingNote}` +
     (remedy.caution ? `\n\n⚠️ *Note:* ${remedy.caution}` : '')
   );
+}
+
+// ─── Extended remedies (added batch 2) ───────────────────────────────────────
+
+export const EXTENDED_REMEDIES: Remedy[] = [
+  // ── More Cramp Remedies ───────────────────────────────────────────────────
+  {
+    id: 'raspberry_leaf_cramps',
+    name: 'Raspberry Leaf Tea',
+    condition: 'cramps',
+    conditionLabel: 'Period Cramps',
+    description: 'Red raspberry leaf has been used for centuries as a uterine tonic. It contains fragarine, a compound that tones and relaxes uterine muscles, potentially reducing cramping intensity.',
+    instructions: 'Steep 1-2 tsp dried raspberry leaf in hot water for 10-15 minutes. Drink 1-3 cups daily. Best started 1-2 weeks before your period.',
+    timing: 'Start 1-2 weeks before your period, continue through day 3.',
+    trackingNote: 'Note cramp intensity (1-10) each cycle.',
+    evidence: 'Contains fragarine alkaloid that tones smooth muscle. Long traditional use with growing modern evidence.',
+  },
+  {
+    id: 'omega3_cramps',
+    name: 'Omega-3 Rich Foods',
+    condition: 'cramps',
+    conditionLabel: 'Period Cramps',
+    description: 'Omega-3 fatty acids reduce the production of prostaglandins — the inflammatory compounds that cause period pain. Studies show fish oil supplementation significantly reduces menstrual pain.',
+    instructions: 'Eat fatty fish 2-3x per week: salmon, sardines, mackerel, tuna. Or take 1-2g fish oil/krill oil daily. Walnuts, chia seeds, and flaxseed also help.',
+    timing: 'Daily throughout the cycle for best results.',
+    trackingNote: 'Compare cramp severity over 2-3 cycles of consistent use.',
+    evidence: 'RCT shows omega-3 reduces prostaglandin production, directly reducing uterine contractions and pain.',
+  },
+  {
+    id: 'turmeric_cramps',
+    name: 'Turmeric Golden Milk',
+    condition: 'cramps',
+    conditionLabel: 'Period Cramps',
+    description: 'Curcumin in turmeric is a powerful anti-inflammatory that inhibits prostaglandin synthesis, reducing cramping and inflammation.',
+    instructions: 'Mix 1 tsp turmeric, 1/4 tsp black pepper (essential for absorption), 1 tsp honey into warm milk or plant milk. Drink 1-2 cups daily during your period.',
+    timing: 'Start 2 days before your period.',
+    trackingNote: 'Rate pain intensity on days 1-3 of your period.',
+    evidence: 'Curcumin inhibits COX-2 and NF-kB pathways — same targets as ibuprofen. Black pepper increases absorption by 2000%.',
+  },
+  {
+    id: 'castor_oil_cramps',
+    name: 'Castor Oil Pack',
+    condition: 'cramps',
+    conditionLabel: 'Period Cramps',
+    description: 'Castor oil applied externally to the lower abdomen reduces inflammation and improves lymphatic circulation in the pelvic area. Traditional naturopathic remedy with growing evidence.',
+    instructions: 'Soak a cloth in warm castor oil. Place on your lower abdomen. Cover with plastic wrap and apply a heat pad on top for 45-60 minutes. Do this on days 1-2 of your period.',
+    timing: 'Days 1-2 of your period when pain peaks.',
+    trackingNote: 'Rate pain before and after each application.',
+    evidence: 'Ricinoleic acid in castor oil has anti-inflammatory properties and may improve circulation when applied topically.',
+    caution: 'Do not use internally. Avoid if pregnant.',
+  },
+  {
+    id: 'yoga_cramps',
+    name: 'Period Yoga Poses',
+    condition: 'cramps',
+    conditionLabel: 'Period Cramps',
+    description: 'Specific yoga poses relieve uterine tension, improve pelvic blood flow, and activate the parasympathetic nervous system — reducing cramp severity naturally.',
+    instructions: 'Try: Child\'s pose (3 min), supine twist (2 min each side), reclined butterfly (5 min). Do these gently on crampy days. Avoid inversions during heavy flow.',
+    timing: 'Any time during your period when cramps are present.',
+    trackingNote: 'Rate cramp relief 15 minutes after practice.',
+    evidence: 'Studies show yoga reduces menstrual pain severity and duration. Parasympathetic activation reduces smooth muscle spasms.',
+  },
+
+  // ── More PMS & Mood Remedies ──────────────────────────────────────────────
+  {
+    id: 'chasteberry_pms',
+    name: 'Chasteberry (Vitex)',
+    condition: 'pms_mood',
+    conditionLabel: 'PMS & Mood',
+    description: 'Chasteberry (Vitex agnus-castus) is the most researched herbal treatment for PMS. It acts on the pituitary gland to balance progesterone and oestrogen, reducing PMS symptoms over time.',
+    instructions: 'Take 20-40mg standardised chasteberry extract daily. Allow 3 months for full effect — this works on the hormonal cycle. Available as capsules at health stores.',
+    timing: 'Daily, consistently. Takes 2-3 cycles to notice effect.',
+    trackingNote: 'Log PMS severity (mood, breast tenderness, bloating) monthly.',
+    evidence: 'Multiple RCTs show chasteberry reduces PMS by 50% or more, particularly mood, breast tenderness, and irritability.',
+    caution: 'Avoid if on hormonal contraception, dopamine medications, or if trying to conceive.',
+  },
+  {
+    id: 'magnesium_pms_mood',
+    name: 'Magnesium for PMS Mood',
+    condition: 'pms_mood',
+    conditionLabel: 'PMS & Mood',
+    description: 'Low magnesium is directly linked to PMS mood symptoms. Magnesium regulates neurotransmitters and the stress response. Supplementing in the luteal phase specifically targets PMS.',
+    instructions: 'Take 250-400mg magnesium glycinate or magnesium malate daily. Start on day 15 of your cycle and continue until your period arrives.',
+    timing: 'Luteal phase only (day 15 to period start).',
+    trackingNote: 'Rate mood, irritability, and anxiety in the week before each period.',
+    evidence: 'Studies show magnesium supplementation reduces psychological PMS symptoms including anxiety, depression, and irritability.',
+  },
+  {
+    id: 'st_johns_wort_pms',
+    name: "St John's Wort",
+    condition: 'pms_mood',
+    conditionLabel: 'PMS & Mood',
+    description: "St John's Wort has good clinical evidence for mild to moderate depression and mood disturbance. For PMS-related mood symptoms it can be effective taken consistently.",
+    instructions: "Take 300mg standardised extract (0.3% hypericin) three times daily. Available at pharmacies. Takes 4-6 weeks to notice benefit.",
+    timing: 'Daily throughout the month.',
+    trackingNote: 'Keep a daily mood log rating 1-10. Compare weeks 1-2 vs weeks 3-4.',
+    evidence: 'Cochrane review confirms efficacy for mild-moderate depression. Small RCT specifically for PMS shows significant mood improvement.',
+    caution: 'Interacts with many medications including the contraceptive pill, antidepressants, and anticoagulants. Check with a pharmacist.',
+  },
+
+  // ── More Bloating Remedies ────────────────────────────────────────────────
+  {
+    id: 'fennel_tea_bloating',
+    name: 'Fennel Seed Tea',
+    condition: 'bloating',
+    conditionLabel: 'Bloating',
+    description: 'Fennel seeds contain anethole, a compound that relaxes intestinal smooth muscle and reduces gas and bloating. Works within 30-60 minutes.',
+    instructions: 'Crush 1 tsp fennel seeds lightly. Steep in boiling water for 10 minutes. Drink after meals or when bloating is present. Can chew raw seeds directly after meals.',
+    timing: 'After meals and as needed in the days before your period.',
+    trackingNote: 'Rate bloating severity before and 1 hour after taking.',
+    evidence: 'Antispasmodic and carminative (gas-relieving) properties well documented. Anethole relaxes gut smooth muscle.',
+  },
+  {
+    id: 'dandelion_tea_bloating',
+    name: 'Dandelion Leaf Tea',
+    condition: 'bloating',
+    conditionLabel: 'Bloating',
+    description: 'Dandelion leaf is a natural, gentle diuretic that helps eliminate excess water without depleting potassium. Specifically useful for premenstrual water retention.',
+    instructions: 'Steep 1-2 tsp dried dandelion leaf (not root) in hot water for 10 minutes. Drink 1-2 cups in the 3-4 days before your period. Available from health food stores.',
+    timing: '3-5 days before your period when water retention peaks.',
+    trackingNote: 'Note how puffy/swollen you feel in the mornings before vs after.',
+    evidence: 'Clinical study shows dandelion leaf significantly increases urinary frequency without electrolyte imbalance. Replaces pharmaceutical diuretics safely.',
+    caution: 'Avoid if allergic to ragweed family plants.',
+  },
+  {
+    id: 'probiotics_bloating',
+    name: 'Daily Probiotic',
+    condition: 'bloating',
+    conditionLabel: 'Bloating',
+    description: 'Gut microbiome imbalance worsens bloating throughout the cycle. Hormonal changes affect gut motility — a good probiotic stabilises this.',
+    instructions: 'Take a probiotic with at least 10 billion CFU daily containing Lactobacillus acidophilus and Bifidobacterium strains. Take with breakfast. Continue for at least 4 weeks.',
+    timing: 'Daily, ongoing.',
+    trackingNote: 'Rate daily bloating severity 1-10 for 2 months.',
+    evidence: 'Studies show specific Lactobacillus and Bifidobacterium strains reduce bloating and gut discomfort. Gut bacteria directly metabolise oestrogen.',
+  },
+
+  // ── More Acne Remedies ────────────────────────────────────────────────────
+  {
+    id: 'green_tea_acne',
+    name: 'Green Tea (Drink + Topical)',
+    condition: 'acne',
+    conditionLabel: 'Cycle Acne',
+    description: 'Green tea contains EGCG, a powerful antioxidant that reduces sebum production and has anti-bacterial effects against acne-causing bacteria. Both drinking and applying topically work.',
+    instructions: 'Drink 2-3 cups of green tea daily. For topical use: brew strong green tea, let cool, apply to face with cotton pad as a toner after cleansing. Leave on — do not rinse.',
+    timing: 'Daily. Topical use morning and evening.',
+    trackingNote: 'Count active breakouts weekly and photograph.',
+    evidence: 'EGCG inhibits 5-alpha reductase (reduces androgen activity on skin) and has direct antibacterial effect on P. acnes.',
+  },
+  {
+    id: 'avoid_dairy_acne',
+    name: 'Dairy-Free Before Ovulation',
+    condition: 'acne',
+    conditionLabel: 'Cycle Acne',
+    description: 'Dairy raises IGF-1 (insulin-like growth factor) which directly stimulates sebum production and acne. The effect is strongest around ovulation when androgens peak.',
+    instructions: 'Cut out milk, cheese, yogurt, and whey protein for 2 weeks around ovulation (days 10-16 of your cycle). Replace with oat milk, coconut yogurt, and plant-based alternatives.',
+    timing: 'Days 8-18 of your cycle.',
+    trackingNote: 'Track breakout frequency in this window vs when you consume dairy.',
+    evidence: 'Multiple large epidemiological studies link dairy consumption to acne. IGF-1 pathway is well-established in acne pathogenesis.',
+  },
+  {
+    id: 'ice_acne',
+    name: 'Ice Cube Spot Treatment',
+    condition: 'acne',
+    conditionLabel: 'Cycle Acne',
+    description: 'Applying ice directly to a developing spot constricts blood vessels, reduces inflammation and swelling, and can stop a spot before it fully forms.',
+    instructions: 'Wrap an ice cube in a clean cloth. Hold on the spot for 1-2 minutes. Repeat 3-4 times per day on new or developing spots. Never apply ice directly to skin without a cloth.',
+    timing: 'As soon as you notice a spot forming.',
+    trackingNote: 'Notice if spots resolve faster or smaller with consistent icing.',
+    evidence: 'Cold therapy (cryotherapy) constricts blood vessels, reduces inflammatory cytokines locally, and limits spot development.',
+  },
+
+  // ── More Fatigue Remedies ─────────────────────────────────────────────────
+  {
+    id: 'ashwagandha_fatigue',
+    name: 'Ashwagandha',
+    condition: 'fatigue',
+    conditionLabel: 'Period Fatigue',
+    description: 'Ashwagandha is an adaptogen that lowers cortisol, reduces stress-related fatigue, and improves stamina. Particularly helpful for fatigue that comes with PMS or throughout the cycle.',
+    instructions: 'Take 300-600mg KSM-66 or Sensoril ashwagandha extract daily with food. Best taken in the morning. Takes 4-8 weeks of consistent use for full effect.',
+    timing: 'Daily, ongoing.',
+    trackingNote: 'Rate energy levels 1-10 each morning for 2 months.',
+    evidence: 'Multiple RCTs show ashwagandha reduces cortisol by up to 30% and significantly improves energy, endurance, and quality of life.',
+    caution: 'Avoid in thyroid conditions without doctor guidance. Not for use in pregnancy.',
+  },
+  {
+    id: 'b12_fatigue',
+    name: 'Vitamin B12-Rich Foods',
+    condition: 'fatigue',
+    conditionLabel: 'Period Fatigue',
+    description: 'B12 is essential for red blood cell formation and energy metabolism. B12 deficiency is common, especially in vegetarians and vegans, and directly causes fatigue and brain fog.',
+    instructions: 'Eat B12-rich foods daily: eggs, dairy, meat, fish, nutritional yeast (for vegans). If vegetarian or vegan, take a B12 supplement — 1000mcg methylcobalamin sublingually is best absorbed.',
+    timing: 'Daily.',
+    trackingNote: 'Note energy levels and brain fog over 4-6 weeks.',
+    evidence: 'B12 is rate-limiting for red blood cell production. Deficiency causes megaloblastic anaemia and fatigue that can be severe.',
+  },
+
+  // ── More PCOS / Irregular Cycles ──────────────────────────────────────────
+  {
+    id: 'inositol_pcos',
+    name: 'Myo-Inositol',
+    condition: 'irregular_cycles',
+    conditionLabel: 'Irregular Cycles',
+    description: 'Myo-inositol is the most evidence-backed supplement for PCOS. It improves insulin sensitivity, reduces androgens, and restores ovulation. Often called "nature\'s metformin".',
+    instructions: 'Take 2-4g myo-inositol powder daily (mix in water or juice). Best taken with 200mcg folic acid. Available online and at health stores. Takes 3 months minimum.',
+    timing: 'Daily, consistently.',
+    trackingNote: 'Track cycle length monthly. Also note acne, hair, and mood changes.',
+    evidence: 'Multiple RCTs show myo-inositol restores regular ovulation in 70%+ of PCOS patients, reduces testosterone, and improves insulin markers.',
+  },
+  {
+    id: 'low_gi_pcos',
+    name: 'Low-Glycaemic Eating',
+    condition: 'irregular_cycles',
+    conditionLabel: 'Irregular Cycles',
+    description: 'Insulin resistance drives PCOS and irregular cycles. Eating low-GI foods keeps insulin levels stable, directly reducing androgen production and supporting ovulation.',
+    instructions: 'Replace white rice, white bread, and sugary foods with: brown rice, oats, sweet potato, lentils, beans, vegetables. Eat protein with every meal. Avoid skipping meals.',
+    timing: 'Daily lifestyle change.',
+    trackingNote: 'Track cycle length and note any improvements in skin, hair, or energy over 3 months.',
+    evidence: 'Low-GI diet reduces fasting insulin and free testosterone in PCOS. Insulin drives ovarian androgen production — reducing it restores ovulation.',
+  },
+
+  // ── More Sleep Remedies ───────────────────────────────────────────────────
+  {
+    id: 'chamomile_sleep',
+    name: 'Chamomile Tea',
+    condition: 'sleep',
+    conditionLabel: 'Sleep Disruption',
+    description: 'Chamomile contains apigenin, a compound that binds to GABA receptors in the brain — the same receptors targeted by sleep medications, but gently and without dependency.',
+    instructions: 'Brew 1-2 chamomile tea bags in hot water for 5-10 minutes. Drink 30-45 minutes before bed. Add honey if desired. Avoid caffeine after 2pm for best results.',
+    timing: '30-45 minutes before bedtime, especially in the luteal phase.',
+    trackingNote: 'Rate sleep quality each morning and time to fall asleep.',
+    evidence: 'Clinical study shows chamomile extract significantly improves sleep quality. Apigenin is a partial benzodiazepine receptor agonist.',
+  },
+  {
+    id: 'tart_cherry_sleep',
+    name: 'Tart Cherry Juice',
+    condition: 'sleep',
+    conditionLabel: 'Sleep Disruption',
+    description: "Tart cherries are one of the few natural food sources of melatonin. Studies show drinking tart cherry juice increases sleep time and quality, particularly useful when cycles disrupt sleep.",
+    instructions: 'Drink 240ml (1 cup) of tart cherry juice in the morning and another cup 1-2 hours before bed. Use unsweetened pure tart cherry juice, not cordial.',
+    timing: 'Morning and evening, during luteal phase when sleep is most disrupted.',
+    trackingNote: 'Track total sleep time and how refreshed you feel each morning.',
+    evidence: 'RCT shows tart cherry juice increases sleep time by 84 minutes and improves sleep efficiency. Contains melatonin and tryptophan.',
+  },
+
+  // ── More Heavy Flow Remedies ──────────────────────────────────────────────
+  {
+    id: 'vitamin_c_heavy_flow',
+    name: 'Vitamin C',
+    condition: 'heavy_flow',
+    conditionLabel: 'Heavy Flow',
+    description: 'Vitamin C helps strengthen capillary walls and reduces oestrogen levels slightly, which can reduce heavy menstrual bleeding over time. Also aids iron absorption.',
+    instructions: 'Take 1000-2000mg vitamin C daily, split into two doses. Eat vitamin C rich foods: bell peppers, citrus fruit, kiwi, strawberries. Start 5 days before your period.',
+    timing: 'Start 5 days before your period and continue through your period.',
+    trackingNote: 'Count number of pads/tampons used per day across cycles.',
+    evidence: 'Vitamin C reduces capillary fragility and supports collagen in blood vessel walls. Also helps reduce oestrogen dominance which drives heavy flow.',
+    caution: 'High doses may cause loose stools. Reduce dose if this occurs.',
+  },
+  {
+    id: 'yarrow_tea_heavy_flow',
+    name: 'Yarrow Tea',
+    condition: 'heavy_flow',
+    conditionLabel: 'Heavy Flow',
+    description: 'Yarrow (Achillea millefolium) is a traditional astringent herb used to reduce heavy bleeding. It contains flavonoids that promote blood clotting and reduce flow.',
+    instructions: 'Steep 1-2 tsp dried yarrow in hot water for 10-15 minutes. Drink 1-2 cups daily on heavy flow days. Available from herbalists and health stores.',
+    timing: 'Days 1-3 of your period when flow is heaviest.',
+    trackingNote: 'Log number of pads/tampons per day.',
+    evidence: 'Traditional European and Native American medicine for heavy bleeding. Contains achilleine which promotes haemostasis.',
+    caution: 'Avoid in pregnancy. May cause allergic reaction in those sensitive to the Asteraceae family.',
+  },
+
+  // ── More Breast Tenderness Remedies ──────────────────────────────────────
+  {
+    id: 'vitamin_e_breast',
+    name: 'Vitamin E',
+    condition: 'breast_tenderness',
+    conditionLabel: 'Breast Tenderness',
+    description: 'Vitamin E has anti-inflammatory and antioxidant properties that reduce cyclical breast pain. Studies specifically show benefit for premenstrual breast tenderness.',
+    instructions: 'Take 400 IU vitamin E (d-alpha tocopherol, natural form) daily. Food sources: sunflower seeds, almonds, avocado, olive oil. Start supplementing 2 weeks before your period.',
+    timing: 'Daily, increasing to twice daily in luteal phase.',
+    trackingNote: 'Rate breast tenderness on days 22-28 of your cycle.',
+    evidence: 'Controlled study shows 400 IU vitamin E significantly reduces cyclical mastalgia. Antioxidant effect on breast tissue lipids.',
+  },
+  {
+    id: 'cold_cabbage_breast',
+    name: 'Cold Cabbage Leaf Compress',
+    condition: 'breast_tenderness',
+    conditionLabel: 'Breast Tenderness',
+    description: 'Cold cabbage leaves have been used for centuries for breast engorgement and tenderness. Cabbage contains sinigrin and rapine, compounds with natural anti-inflammatory properties absorbed through the skin.',
+    instructions: 'Take a cabbage leaf from the fridge. Remove the thick vein so it lies flat. Place on each breast for 20-30 minutes, 2-3 times a day. Replace when it warms up.',
+    timing: 'In the week before your period when tenderness is worst.',
+    trackingNote: 'Rate breast tenderness before and after each application.',
+    evidence: 'Studies on breastfeeding engorgement show significant pain reduction. Anti-inflammatory glucosinolates absorbed transdermally.',
+  },
+];
+
+// Merge into main REMEDIES array at runtime
+export function getAllRemedies(): Remedy[] {
+  return [...REMEDIES, ...EXTENDED_REMEDIES];
 }

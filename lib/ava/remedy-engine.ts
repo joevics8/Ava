@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import { REMEDIES, getRemediesForCondition, formatRemedy, type Remedy } from './remedies';
+import { REMEDIES, getAllRemedies, getRemediesForCondition, formatRemedy, type Remedy } from './remedies';
 import type { AvaUser } from '@/types';
 
 type SendFn = (chatId: number, text: string, markdown?: boolean) => Promise<void>;
@@ -54,12 +54,12 @@ export async function startTracking(
   remedyId: string,
   send: SendFn
 ): Promise<void> {
-  const remedy = REMEDIES.find(r => r.id === remedyId);
+  const remedy = getAllRemedies().find(r => r.id === remedyId);
   if (!remedy) return;
 
   // Set follow-up for 30 days
   const followUpAt = new Date();
-  followUpAt.setDate(followUpAt.getDate() + 30);
+  followUpAt.setDate(followUpAt.getDate() + 7);
 
   await supabaseAdmin.from('user_remedies').insert({
     user_id: user.id,
@@ -71,7 +71,7 @@ export async function startTracking(
   });
 
   await send(chatId,
-    `Saved to your remedies 🌿 I'll check in with you in 30 days to see if *${remedy.name}* is helping.\n\nIn the meantime, just tell me how you're feeling and I'll keep track.`,
+    'Saved to your remedies 🌿 I will check in with you in 7 days to see if you have started ' + remedy.name + ' and if it is helping. Just tell me how it goes anytime.',
     true
   );
 }
@@ -85,7 +85,7 @@ export function detectRemedyIntent(message: string): { action: 'start' | 'update
   const startPhrases = ["i'll try", "i will try", "i'm going to try", "starting", "going to use", "will use", "trying"];
   for (const phrase of startPhrases) {
     if (lower.includes(phrase)) {
-      const remedy = REMEDIES.find(r => lower.includes(r.name.toLowerCase()));
+      const remedy = getAllRemedies().find(r => lower.includes(r.name.toLowerCase()));
       if (remedy) return { action: 'start', remedyId: remedy.id };
     }
   }
@@ -94,7 +94,7 @@ export function detectRemedyIntent(message: string): { action: 'start' | 'update
   const helpedPhrases = ['is helping', 'it worked', 'it helped', 'feeling better', 'works', 'helped'];
   for (const phrase of helpedPhrases) {
     if (lower.includes(phrase)) {
-      const remedy = REMEDIES.find(r => lower.includes(r.name.toLowerCase()));
+      const remedy = getAllRemedies().find(r => lower.includes(r.name.toLowerCase()));
       if (remedy) return { action: 'update', remedyId: remedy.id };
     }
   }
@@ -153,12 +153,12 @@ export async function getActiveRemedies(userId: string): Promise<any[]> {
 
 export function findRemedyByName(message: string): Remedy | null {
   const lower = message.toLowerCase();
-  return REMEDIES.find(r => lower.includes(r.name.toLowerCase())) || null;
+  return getAllRemedies().find(r => lower.includes(r.name.toLowerCase())) || null;
 }
 
 // ─── Get all conditions for /remedies menu ────────────────────────────────────
 
 export function getConditionMenu(): string {
-  const conditions = Array.from(new Set(REMEDIES.map(r => r.conditionLabel)));
+  const conditions = Array.from(new Set(getAllRemedies().map(r => r.conditionLabel)));
   return conditions.map((c, i) => `${i + 1}. ${c}`).join('\n');
 }

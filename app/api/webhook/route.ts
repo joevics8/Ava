@@ -12,8 +12,34 @@ import {
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
+function getContextualFollowUp(recentLog: string, mood: string): string {
+  const lower = recentLog.toLowerCase();
+  if (mood === 'good') {
+    if (lower.includes('cramp') || lower.includes('pain')) return 'Glad the cramps have eased up!';
+    if (lower.includes('fever') || lower.includes('sick')) return 'Good to hear you are feeling better.';
+    if (lower.includes('tired') || lower.includes('fatigue')) return 'Sounds like your energy is back!';
+    return 'Any symptoms worth noting today?';
+  }
+  if (mood === 'okay') {
+    if (lower.includes('cramp')) return 'Still dealing with cramps?';
+    if (lower.includes('fever')) return 'Has the feverish feeling settled?';
+    if (lower.includes('tired')) return 'Still feeling tired?';
+    return 'Anything on your mind today?';
+  }
+  return '';
+}
+
+function cleanAiText(text: string): string {
+  let t = text;
+  t = t.split('**').join('');
+  t = t.split('*').join('');
+  t = t.split('_').join('');
+  t = t.split('`').join('');
+  return t.trim();
+}
+
 async function sendMessage(chatId: number, text: string, markdown = false) {
-  const body: any = { chat_id: chatId, text };
+  const body: any = { chat_id: chatId, text: markdown ? text : cleanAiText(text) };
   if (markdown) body.parse_mode = 'Markdown';
   await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: 'POST',
@@ -56,12 +82,13 @@ export async function POST(req: NextRequest) {
         const cbUser = await getUser(cbTelegramId);
 
         if (cbUser) {
-          await addMemoryLog(cbUser.id, 'mood', `Morning mood: ${mood}`);
-
+          await addMemoryLog(cbUser.id, 'mood', 'Morning mood: ' + mood);
+          const cbLogs = await getMemoryContext(cbUser.id, cbUser.plan);
+          const recentLog = cbLogs.slice(0, 5).map((l: any) => l.summary).join(', ');
           const replies: Record<string, string> = {
-            mood_good: `Love that, ${cbUser.name}! Have a wonderful day 🌸`,
-            mood_okay: `Got it — hope your day picks up 🌷 Anything bothering you?`,
-            mood_notgreat: `Sorry to hear that, ${cbUser.name} 🌸 What's going on? I'm here.`,
+            mood_good: "That's great to hear 🌸 " + (recentLog ? getContextualFollowUp(recentLog, "good") : "Hope the day stays that way!"),
+            mood_okay: "Got it 🌷 " + (recentLog ? getContextualFollowUp(recentLog, "okay") : "Let me know if anything comes up today."),
+            mood_notgreat: "I'm sorry to hear that 🌸 What's going on?",
           };
 
           await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
