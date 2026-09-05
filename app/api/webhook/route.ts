@@ -367,7 +367,7 @@ ${response}`);
       const activeText = active.length
         ? '\n\n*Currently tracking:*\n' + active.map((r: any) => '🌿 ' + r.remedy_name).join('\n')
         : '';
-      const menu = getConditionMenu();
+      const menu = await getConditionMenu(user.plan === 'premium');
       await sendMessage(chatId,
         '*Ava Natural Remedy Guide* 🌿\n\nWhat would you like help with?\n\n' + menu + activeText + "\n\nOr just describe your symptom and I'll suggest something.",
         true
@@ -580,7 +580,7 @@ async function routeMessage(
   const { detectCondition } = await import('@/lib/ava/remedies');
 
   // User naming a specific remedy to start
-  const { action, remedyId } = detectRemedyIntent(text);
+  const { action, remedyId } = await detectRemedyIntent(text);
   if (action === 'start' && remedyId) {
     await startTracking(chatId, user, remedyId, sendMessage);
     return;
@@ -591,9 +591,9 @@ async function routeMessage(
   }
 
   // User asking for a specific remedy by name (e.g. "what is spearmint tea")
-  const namedRemedy = findRemedyByName(text);
+  const namedRemedy = await findRemedyByName(text);
   if (namedRemedy && (text.toLowerCase().includes('tell me') || text.toLowerCase().includes('what is') || text.toLowerCase().includes('how do i'))) {
-    const { formatRemedy } = await import('@/lib/ava/remedies');
+    const { formatRemedy } = await import('@/lib/ava/remedy-engine');
     await sendMessage(chatId, formatRemedy(namedRemedy), true);
     await sendMessage(chatId, `Say "I'll try ${namedRemedy.name}" and I'll track it for you 🌿`);
     return;
