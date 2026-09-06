@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog } from '@/lib/ava/db';
 import {
   classifyMessage,
@@ -113,6 +114,20 @@ export async function POST(req: NextRequest) {
 
     const update = await req.json();
 
+    // Respond to Telegram immediately — prevents webhook timeout
+    // All processing happens in background via waitUntil
+    waitUntil(processUpdate(update));
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('Webhook outer error:', err);
+    return NextResponse.json({ ok: true });
+  }
+}
+
+// ── All processing logic moved here so we can respond to Telegram instantly ──
+
+async function processUpdate(update: any) {
+  try {
     // ── Callback queries (inline button taps) — must be before message check ─
     if (update?.callback_query) {
       const cb = update.callback_query;
@@ -618,6 +633,7 @@ Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(
     await addMemoryLog(user.id, 'chat', insight);
   }
 }
+
 
 export async function GET() {
   return NextResponse.json({ status: 'Ava webhook live 🌸' });
