@@ -429,12 +429,7 @@ You're now on the free plan. If you change your mind, /premium is always there.`
       return NextResponse.json({ ok: true });
     }
 
-    if (text === '/help') {
-      await sendMessage(chatId,
-        `/today — cycle summary\n/insights — what Ava has learned about you\n/changes — what's changed recently\n/patterns — recurring patterns\n/docprep — doctor visit summary\n/weekly — weekly briefing\n/log — track symptoms\n/settings — update your info\n/premium — upgrade\n/report — monthly PDF\n\nOr just talk to me naturally 🌸`
-      );
-      return NextResponse.json({ ok: true });
-    }
+    // /help handled in handleCommand
 
     if (text === '/settings') {
       await sendMessage(chatId,
@@ -534,6 +529,181 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
   } catch (err) {
     console.error('Webhook error:', err);
     return NextResponse.json({ ok: true });
+  }
+}
+
+async function handleCommand(
+  text: string,
+  chatId: number,
+  telegramId: number,
+  user: any,
+  send: typeof sendMessage,
+  sendKb: typeof sendWithKeyboard
+) {
+  const cmd = text.split(' ')[0].toLowerCase(); // handle /command@botname format
+
+  switch (cmd) {
+    case '/start': {
+      if (!user) {
+        await send(chatId, "Hi, I'm *Ava* 🌸\n\nI'm your personal cycle & wellness companion.\n\nLet's get you set up — what's your name?", true);
+        return;
+      }
+      if (user.onboarding_complete) {
+        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
+      } else {
+        await send(chatId, "Hi, I'm *Ava* 🌸 Let's get you set up — what's your name?", true);
+      }
+      return;
+    }
+
+    case '/today': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      await sendTyping(chatId);
+      if ((user as any).mode === 'pregnant') {
+        const { buildPregnancySummary } = await import('@/lib/ava/pregnancy');
+        await send(chatId, await buildPregnancySummary(user));
+      } else {
+        const { buildTodaySummary } = await import('@/lib/ava/today');
+        await send(chatId, await buildTodaySummary(user));
+      }
+      return;
+    }
+
+    case '/log': {
+      await send(chatId, "What's going on today? 📝\n\nJust tell me naturally — \"I have cramps\", \"feeling tired\", \"light flow\", \"had sex\". I'll take it from there 🌸");
+      return;
+    }
+
+    case '/remedies': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      const { showConditionMenu } = await import('@/lib/ava/remedy-engine');
+      await showConditionMenu(chatId, user, sendKb);
+      return;
+    }
+
+    case '/insights': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      await sendTyping(chatId);
+      const { generatePersonalInsights } = await import('@/lib/ava/insights');
+      const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
+      const [cycleData, logs] = await Promise.all([getCycleData(user.id), getMemoryContext(user.id, user.plan)]);
+      await send(chatId, await generatePersonalInsights(user, logs, cycleData));
+      return;
+    }
+
+    case '/changes': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      await sendTyping(chatId);
+      const { generateRecentChanges } = await import('@/lib/ava/insights');
+      const { getMemoryContext } = await import('@/lib/ava/db');
+      await send(chatId, await generateRecentChanges(user, await getMemoryContext(user.id, user.plan)));
+      return;
+    }
+
+    case '/patterns': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      await sendTyping(chatId);
+      const { detectPatterns } = await import('@/lib/ava/insights');
+      const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
+      const [cd, ml] = await Promise.all([getCycleData(user.id), getMemoryContext(user.id, user.plan)]);
+      const patterns = await detectPatterns(user, ml, cd);
+      const found = Object.entries(patterns).filter(([, v]) => v !== null).map(([, v]) => '• ' + String(v)).join('\n');
+      if (!found) { await send(chatId, "I haven't spotted strong patterns yet — keep logging and I'll connect the dots 🌸"); }
+      else { await send(chatId, "Here's what I've noticed 🌸\n\n" + found + "\n\nThese are observations, not diagnoses."); }
+      return;
+    }
+
+    case '/docprep': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      await sendTyping(chatId);
+      const { generateDoctorPrep } = await import('@/lib/ava/insights');
+      const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
+      const [cd2, ml2] = await Promise.all([getCycleData(user.id), getMemoryContext(user.id, user.plan)]);
+      await send(chatId, await generateDoctorPrep(user, ml2, cd2), true);
+      return;
+    }
+
+    case '/weekly': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      await sendTyping(chatId);
+      const { generateWeeklyBriefing } = await import('@/lib/ava/insights');
+      const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
+      const [cd3, ml3] = await Promise.all([getCycleData(user.id), getMemoryContext(user.id, user.plan)]);
+      await send(chatId, await generateWeeklyBriefing(user, ml3, cd3));
+      return;
+    }
+
+    case '/premium': {
+      if (user?.plan === 'premium') {
+        const exp = (user as any).premium_expires_at
+          ? new Date((user as any).premium_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })
+          : 'active';
+        await send(chatId, "You're already on *Ava Premium* — active until " + exp + " 🌸", true);
+        return;
+      }
+      const { createPaymentLink } = await import('@/lib/ava/paystack');
+      const link = user ? await createPaymentLink(telegramId, user.name || 'friend') : null;
+      const linkText = link ? "\n\n[Upgrade to Premium](" + link.url + ") ✨" : '';
+      await send(chatId, "*Ava Premium — ₦2,000/month*\n\n• 5 months memory\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n• Doctor visit prep" + linkText, true);
+      return;
+    }
+
+    case '/report': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      if (user.plan !== 'premium') { await send(chatId, "Monthly cycle reports are a Premium feature ✨\n\nUpgrade with /premium to unlock 🌸"); return; }
+      await sendTyping(chatId);
+      try {
+        const { generateCycleReport } = await import('@/lib/ava/pdf');
+        const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
+        const [cd4, ml4] = await Promise.all([getCycleData(user.id), getMemoryContext(user.id, 'premium')]);
+        const pdfBuffer = await generateCycleReport(user, cd4, ml4);
+        const formData = new FormData();
+        formData.append('chat_id', String(chatId));
+        formData.append('caption', "Your cycle report 🌸");
+        formData.append('document', new Blob([pdfBuffer], { type: 'application/pdf' }), "ava-report.pdf");
+        const tgUrl = "https://api.telegram.org/bot" + process.env.TELEGRAM_BOT_TOKEN + "/sendDocument";
+        await fetch(tgUrl, { method: 'POST', body: formData });
+      } catch (err) { console.error('PDF error:', err); await send(chatId, "Couldn't generate your report right now — please try again 🌸"); }
+      return;
+    }
+
+    case '/settings': {
+      if (!user) { await send(chatId, "Send /start to begin 🌸"); return; }
+      await send(chatId, "What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Switch mode (cycle/pregnancy)\n7. Delete my data\n\nJust send the number.");
+      const { updateUser } = await import('@/lib/ava/db');
+      await updateUser(telegramId, { onboarding_step: 90 } as any);
+      return;
+    }
+
+    case '/cancel': {
+      if (user?.plan !== 'premium') { await send(chatId, "You're on the free plan — nothing to cancel 🌸"); return; }
+      await send(chatId, "To cancel, send *CANCEL PREMIUM*. You'll keep Premium until your current period ends.", true);
+      return;
+    }
+
+    case '/help': {
+      await send(chatId,
+        "/today — cycle summary\n" +
+        "/remedies — natural remedies\n" +
+        "/insights — what Ava has learned about you\n" +
+        "/changes — what changed recently\n" +
+        "/patterns — recurring patterns\n" +
+        "/docprep — doctor visit summary\n" +
+        "/weekly — weekly briefing\n" +
+        "/log — track symptoms\n" +
+        "/settings — update your info\n" +
+        "/premium — upgrade\n" +
+        "/report — monthly PDF (Premium)\n\n" +
+        "Or just talk to me naturally 🌸"
+      );
+      return;
+    }
+
+    default: {
+      // Unknown command — let the user know
+      await send(chatId, "I don't recognise that command. Send /help to see what I can do 🌸");
+      return;
+    }
   }
 }
 
