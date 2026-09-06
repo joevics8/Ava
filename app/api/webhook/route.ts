@@ -40,47 +40,13 @@ function cleanAiText(text: string): string {
 }
 
 async function sendMessage(chatId: number, text: string, markdown = false) {
-  const cleaned = markdown ? text : cleanAiText(text);
-  // Telegram max message length is 4096 chars — split if needed
-  const chunks = splitMessage(cleaned);
-  for (const chunk of chunks) {
-    const body: any = { chat_id: chatId, text: chunk };
-    if (markdown) body.parse_mode = 'Markdown';
-    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error('Telegram sendMessage error:', err);
-      // Retry without Markdown if it failed
-      if (markdown) {
-        const fallback: any = { chat_id: chatId, text: cleanAiText(chunk) };
-        await fetch(`${TELEGRAM_API}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(fallback),
-        });
-      }
-    }
-  }
-}
-
-function splitMessage(text: string, maxLen = 4000): string[] {
-  if (text.length <= maxLen) return [text];
-  const chunks: string[] = [];
-  let remaining = text;
-  while (remaining.length > maxLen) {
-    // Split at last sentence boundary before maxLen
-    let cut = remaining.lastIndexOf('. ', maxLen);
-    if (cut === -1) cut = maxLen;
-    else cut += 2;
-    chunks.push(remaining.slice(0, cut).trim());
-    remaining = remaining.slice(cut).trim();
-  }
-  if (remaining) chunks.push(remaining);
-  return chunks;
+  const body: any = { chat_id: chatId, text: markdown ? text : cleanAiText(text) };
+  if (markdown) body.parse_mode = 'Markdown';
+  await fetch(`${TELEGRAM_API}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 async function sendTyping(chatId: number) {
