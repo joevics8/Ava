@@ -105,7 +105,7 @@ export async function buildMorningDigest(
   const text =
     getGreeting() + ', ' + user.name + ' 🌸\n' +
     phaseEmoji[phase] + ' *' + phaseLabel[phase] + '* · Day ' + day + ' of ' + avg + '\n\n' +
-    fertEmoji + ' *Fertility:* ' + fertLabel + '\n' +
+    fertEmoji + ' *Fertility:* ' + fertLabel + '\n\n' +
     '🌡️ *Today:* ' + symptoms +
     nextLine + '\n\n' +
     insightLine + '\n\n' +
