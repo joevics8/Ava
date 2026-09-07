@@ -212,6 +212,12 @@ async function processUpdate(update: any) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── STRICT COMMAND GATE — must be before everything else ────────────────
+    if (text.startsWith('/')) {
+      await handleCommand(text.split('@')[0].toLowerCase(), chatId, telegramId, user, sendMessage, sendWithKeyboard);
+      return;
+    }
+
     // ── Premium expiry check ─────────────────────────────────────────────────
     if (user.plan === 'premium' && (user as any).premium_expires_at) {
       const expires = new Date((user as any).premium_expires_at);
