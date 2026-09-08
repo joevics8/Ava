@@ -101,42 +101,51 @@ async function processUpdate(update: any) {
       const cbTelegramId = cb.from?.id;
       const cbData = cb.data;
 
-      if (cbChatId && cbTelegramId && cbData?.startsWith('mood_')) {
+      if (!cbChatId || !cbTelegramId || !cbData) return;
+
+      // Answer Telegram immediately — required within 10s
+      const answerUrl = 'https://api.telegram.org/bot' + process.env.TELEGRAM_BOT_TOKEN + '/answerCallbackQuery';
+      await fetch(answerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: cb.id }),
+      });
+
+      const cbUser = await getUser(cbTelegramId);
+      if (!cbUser) return;
+
+      // ── Remedy button callbacks ──────────────────────────────────────────
+      if (cbData.startsWith('rem_')) {
+        try {
+          const { handleRemedyCallback } = await import('@/lib/ava/remedy-engine');
+          await handleRemedyCallback(cbChatId, cbUser, cbData, sendWithKeyboard, sendMessage);
+        } catch (err) {
+          console.error('Remedy callback error:', err);
+          await sendMessage(cbChatId, 'Something went wrong — please try /remedies again 🌸');
+        }
+        return;
+      }
+
+      // ── Mood button callbacks ────────────────────────────────────────────
+      if (cbData.startsWith('mood_')) {
         const moodMap: Record<string, string> = {
           mood_good: 'good',
           mood_okay: 'okay',
           mood_notgreat: 'not great',
         };
         const mood = moodMap[cbData] || cbData;
-        const cbUser = await getUser(cbTelegramId);
-
-        if (cbUser) {
-          await addMemoryLog(cbUser.id, 'mood', 'Morning mood: ' + mood);
-          const cbLogs = await getMemoryContext(cbUser.id, cbUser.plan);
-          const recentLog = cbLogs.slice(0, 5).map((l: any) => l.summary).join(', ');
-          const replies: Record<string, string> = {
-            mood_good: "That's great to hear 🌸 " + (recentLog ? getContextualFollowUp(recentLog, "good") : "Hope the day stays that way!"),
-            mood_okay: "Got it 🌷 " + (recentLog ? getContextualFollowUp(recentLog, "okay") : "Let me know if anything comes up today."),
-            mood_notgreat: "I'm sorry to hear that 🌸 What's going on?",
-          };
-
-          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callback_query_id: cb.id }),
-          });
-
-          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: cbChatId,
-              text: replies[cbData] || `Got it 🌸`,
-              parse_mode: 'Markdown',
-            }),
-          });
-        }
+        await addMemoryLog(cbUser.id, 'mood', 'Morning mood: ' + mood);
+        const cbLogs = await getMemoryContext(cbUser.id, cbUser.plan);
+        const recentLog = cbLogs.slice(0, 5).map((l: any) => l.summary).join(', ');
+        const replies: Record<string, string> = {
+          mood_good: "That's great to hear 🌸 " + (recentLog ? getContextualFollowUp(recentLog, 'good') : 'Hope the day stays that way!'),
+          mood_okay: 'Got it 🌷 ' + (recentLog ? getContextualFollowUp(recentLog, 'okay') : 'Let me know if anything comes up today.'),
+          mood_notgreat: "I'm sorry to hear that 🌸 What's going on?",
+        };
+        await sendMessage(cbChatId, replies[cbData] || 'Got it 🌸');
+        return;
       }
+
       return NextResponse.json({ ok: true });
     }
 
