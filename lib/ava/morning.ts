@@ -1,7 +1,7 @@
 import type { AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
-import { getCurrentPhase, phaseLabel, phaseEmoji } from './cycle';
-import { getFertilityRate, getFertilityLabel, getDayInsight, getDayOfPhase } from './cycle-data';
+import { getCurrentPhase, phaseEmoji } from './cycle';
+import { getDayData, getConfidenceLevel, personaliseSymptomLine } from './cycle-lookup';
 
 const FLASH = 'gemini-1.5-flash';
 
@@ -16,7 +16,7 @@ async function callGemini(prompt: string): Promise<string> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 120 },
+        generationConfig: { maxOutputTokens: 80 },
       }),
     });
     const data = await res.json();
@@ -24,8 +24,14 @@ async function callGemini(prompt: string): Promise<string> {
   } catch { return ''; }
 }
 
-// ─── Check history for a personal insight ────────────────────────────────────
+function getGreeting(): string {
+  const hour = new Date().getUTCHours() + 1;
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
+// Check memory for a personal pattern relevant to today
 async function getPersonalInsight(
   phase: string,
   day: number,
@@ -35,30 +41,17 @@ async function getPersonalInsight(
 
   const prompt = `A woman is on cycle day ${day} in the ${phase} phase.
 
-Her recent health log:
-${logs.slice(0, 20).map(l => '[' + l.category + '] ' + l.summary).join('\n')}
+Her recent logs:
+${logs.slice(0, 15).map(l => '[' + l.category + '] ' + l.summary).join('\n')}
 
-Is there ONE specific pattern in her history relevant to TODAY in her cycle?
-Examples: "You usually get cramps around now" / "Your energy tends to dip at this point" / "Acne tends to flare for you in this phase"
-
-Only state a pattern if you can clearly see it repeated in the data.
-Reply with ONE short sentence starting with "You usually..." or "You tend to..." or NONE.`;
+Is there a clear recurring pattern in her logs relevant to THIS phase?
+Reply with ONE sentence starting with "You usually..." or "You tend to..." 
+Only if you clearly see a pattern. Otherwise reply: NONE`;
 
   const result = await callGemini(prompt);
   if (!result || result.toUpperCase().includes('NONE')) return null;
   return result.trim();
 }
-
-// ─── Greeting by time ────────────────────────────────────────────────────────
-
-function getGreeting(): string {
-  const hour = new Date().getUTCHours() + 1; // WAT
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
-// ─── Build morning digest ─────────────────────────────────────────────────────
 
 export async function buildMorningDigest(
   user: AvaUser,
@@ -67,7 +60,7 @@ export async function buildMorningDigest(
 ): Promise<{ text: string; showMoodButtons: boolean }> {
   if (!cycleData?.period_start_dates?.length) {
     return {
-      text: `${getGreeting()}, ${user.name} 🌸\n\nI need your period dates to personalise your daily briefing. Send /settings to add them.`,
+      text: `${getGreeting()}, ${user.name} 🌸\n\nI need your period dates to personalise your briefing. Send /settings to add them.`,
       showMoodButtons: false,
     };
   }
@@ -76,23 +69,33 @@ export async function buildMorningDigest(
   const duration = cycleData.period_duration || 5;
   const lastStart = new Date(cycleData.period_start_dates[cycleData.period_start_dates.length - 1]);
   const { phase, day } = getCurrentPhase(lastStart, avg, duration);
-  const dayOfPhase = getDayOfPhase(day, phase, avg, duration);
 
-  // ── Standard lookups — no AI needed ──────────────────────────────────────
-  const fertilityRate = getFertilityRate(day, avg);
-  const { emoji: fertEmoji, label: fertLabel } = getFertilityLabel(
-    fertilityRate,
-    user.reproductive_goal || 'track'
+  // ── Research-based lookup — no AI, no estimation ──────────────────────────
+  const dayData = getDayData(day, avg, duration);
+
+  // ── Personalise symptom line from memory ──────────────────────────────────
+  const symptomLine = personaliseSymptomLine(
+    dayData.phase,
+    dayData.symptomsGeneric,
+    logs,
+    day
   );
-  const { symptoms, tip } = getDayInsight(phase, dayOfPhase);
 
-  // ── Personal insight (AI only if enough history) ──────────────────────────
+  // ── Confidence level ──────────────────────────────────────────────────────
+  const numCycles = cycleData.period_start_dates.length;
+  const recentLogs = logs.slice(0, 30).map(l => l.summary).join(' ').toLowerCase();
+  const hasLH = recentLogs.includes('lh') || recentLogs.includes('ovulation test') || recentLogs.includes('strip');
+  const hasBBT = recentLogs.includes('bbt') || recentLogs.includes('temperature');
+  const hasMucus = recentLogs.includes('mucus') || recentLogs.includes('discharge');
+  const { label: confidence } = getConfidenceLevel(numCycles, hasLH, hasBBT, hasMucus);
+
+  // ── Personal insight — AI only if enough history ──────────────────────────
   const personalInsight = await getPersonalInsight(phase, day, logs);
   const insightLine = personalInsight
-    ? '🧠 Ava noticed: ' + personalInsight
-    : '💡 ' + tip;
+    ? '🧠 ' + personalInsight
+    : '💡 ' + dayData.tipGeneric;
 
-  // ── Next period warning ───────────────────────────────────────────────────
+  // ── Next period line ──────────────────────────────────────────────────────
   let nextLine = '';
   if (cycleData.next_period_start) {
     const next = new Date(cycleData.next_period_start);
@@ -101,20 +104,19 @@ export async function buildMorningDigest(
     else if (daysUntil > 0 && daysUntil <= 5) nextLine = '\n📅 Period in ~' + daysUntil + ' days';
   }
 
-  // ── Assemble — fertility BEFORE today ─────────────────────────────────────
+  // ── Assemble ──────────────────────────────────────────────────────────────
   const text =
     getGreeting() + ', ' + user.name + ' 🌸\n' +
-    phaseEmoji[phase] + ' *' + phaseLabel[phase] + '* · Day ' + day + ' of ' + avg + '\n\n' +
-    fertEmoji + ' *Fertility:* ' + fertLabel + '\n\n' +
-    '🌡️ *Today:* ' + symptoms +
+    phaseEmoji[phase] + ' *' + dayData.phaseLabel + '* · Day ' + day + ' of ' + avg +
+    ' · Confidence: ' + confidence + '\n\n' +
+    dayData.fertilityEmoji + ' *Fertility: ' + dayData.fertilityLabel + '*\n\n' +
+    '🌡️ *Today:* ' + symptomLine +
     nextLine + '\n\n' +
     insightLine + '\n\n' +
     'How are you feeling this morning?';
 
   return { text, showMoodButtons: true };
 }
-
-// ─── Mood keyboard ────────────────────────────────────────────────────────────
 
 export const moodButtons = [
   [
