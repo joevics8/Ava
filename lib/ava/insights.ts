@@ -12,33 +12,49 @@ function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 }
 
-function extractText(data: any): string {
+function extractTextAndFinish(data: any): { text: string; finishReason?: string } {
   const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  return parts
+  const text = parts
     .filter((p: any) => p?.text && !p?.thought)
     .map((p: any) => p.text)
     .join('')
     .trim();
+  return { text, finishReason: data?.candidates?.[0]?.finishReason };
+}
+
+async function callGeminiOnce(model: string, prompt: string, maxOutputTokens: number, thinkingLevel: 'minimal' | 'low'): Promise<{ text: string; hitTokenCap: boolean }> {
+  const res = await fetch(geminiUrl(model), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens, thinkingConfig: { thinkingLevel } },
+    }),
+  });
+  if (!res.ok) {
+    console.error('Gemini API error (insights.ts):', JSON.stringify(await res.json().catch(() => ({}))));
+    return { text: '', hitTokenCap: false };
+  }
+  const data = await res.json();
+  const { text, finishReason } = extractTextAndFinish(data);
+  if (finishReason && finishReason !== 'STOP') {
+    console.error('Gemini non-STOP finish (insights.ts):', { model, finishReason, textLength: text.length, usage: data?.usageMetadata });
+  }
+  return { text, hitTokenCap: finishReason === 'MAX_TOKENS' };
 }
 
 async function callGemini(model: string, prompt: string): Promise<string> {
   try {
-    const res = await fetch(geminiUrl(model), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        // thinkingLevel keeps reasoning tokens from eating the whole
-        // maxOutputTokens budget on these Gemini 3 models (see lib/ava/ai.ts).
-        generationConfig: { maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' } },
-      }),
-    });
-    if (!res.ok) {
-      console.error('Gemini API error (insights.ts):', JSON.stringify(await res.json().catch(() => ({}))));
-      return '';
+    // thinkingLevel keeps reasoning tokens from eating the whole
+    // maxOutputTokens budget on these Gemini 3 models (see lib/ava/ai.ts).
+    let { text, hitTokenCap } = await callGeminiOnce(model, prompt, 1200, 'low');
+    if (hitTokenCap) {
+      // Thinking (or a long answer) ate the budget — retry once with
+      // thinking forced minimal and a much bigger budget rather than
+      // serve a reply that stops mid-sentence.
+      ({ text } = await callGeminiOnce(model, prompt, 2400, 'minimal'));
     }
-    const data = await res.json();
-    return extractText(data);
+    return text;
   } catch (err) {
     console.error('Gemini fetch error (insights.ts):', err);
     return '';

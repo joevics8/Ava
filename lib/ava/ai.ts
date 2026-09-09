@@ -39,14 +39,13 @@ async function callGemini(
     ? [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] }]
     : [{ role: 'user', parts: [{ text: prompt }] }];
 
-  const generationConfig: any = {
-    maxOutputTokens: opts.maxOutputTokens ?? 1000,
+  const buildConfig = (maxOutputTokens: number, thinkingLevel?: ThinkingLevel) => {
+    const generationConfig: any = { maxOutputTokens };
+    if (thinkingLevel) generationConfig.thinkingConfig = { thinkingLevel };
+    return generationConfig;
   };
-  if (opts.thinkingLevel) {
-    generationConfig.thinkingConfig = { thinkingLevel: opts.thinkingLevel };
-  }
 
-  const attempt = async (): Promise<{ ok: boolean; text: string; retryable: boolean }> => {
+  const attempt = async (generationConfig: any): Promise<{ ok: boolean; text: string; retryableStatus: boolean; hitTokenCap: boolean }> => {
     try {
       const res = await fetch(geminiUrl(model), {
         method: 'POST',
@@ -59,25 +58,43 @@ async function callGemini(
       if (!res.ok) {
         console.error('Gemini API error:', JSON.stringify(data));
         const status = data?.error?.status;
-        return { ok: false, text: '', retryable: status === 'UNAVAILABLE' || res.status === 503 };
+        return { ok: false, text: '', retryableStatus: status === 'UNAVAILABLE' || res.status === 503, hitTokenCap: false };
       }
 
       const { text, finishReason } = extractText(data);
-      if (!text && finishReason === 'MAX_TOKENS') {
-        console.error('Gemini returned no visible text — thinking consumed the token budget', { model, finishReason });
+      if (finishReason && finishReason !== 'STOP') {
+        // Visibility into exactly how the token budget was spent — thinking
+        // vs visible answer — so truncation is diagnosable instead of a
+        // silent "the reply just stops".
+        console.error('Gemini non-STOP finish:', {
+          model,
+          finishReason,
+          textLength: text.length,
+          usage: data?.usageMetadata,
+        });
       }
-      return { ok: true, text, retryable: false };
+      return { ok: true, text, retryableStatus: false, hitTokenCap: finishReason === 'MAX_TOKENS' };
     } catch (err) {
       console.error('Gemini fetch error:', err);
-      return { ok: false, text: '', retryable: true };
+      return { ok: false, text: '', retryableStatus: true, hitTokenCap: false };
     }
   };
 
-  let result = await attempt();
-  if (!result.ok && result.retryable) {
+  const baseTokens = opts.maxOutputTokens ?? 1000;
+  let result = await attempt(buildConfig(baseTokens, opts.thinkingLevel));
+
+  if (!result.ok && result.retryableStatus) {
     await new Promise((r) => setTimeout(r, 400));
-    result = await attempt();
+    result = await attempt(buildConfig(baseTokens, opts.thinkingLevel));
   }
+
+  // Hit the token cap (thinking ate the budget, or the answer ran long) —
+  // retry once with thinking forced to minimal and a much bigger budget so
+  // the user gets a complete reply instead of one that stops mid-sentence.
+  if (result.ok && result.hitTokenCap) {
+    result = await attempt(buildConfig(Math.max(baseTokens * 2, 1500), 'minimal'));
+  }
+
   return result.text;
 }
 
@@ -189,7 +206,7 @@ User question: "${message}"
 
 Answer warmly and specifically using their data. If you spot a pattern, mention it. Maximum 3 sentences. Stop at 3.`;
 
-  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 500, thinkingLevel: 'low' });
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 600, thinkingLevel: 'minimal' });
   return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
 }
 
@@ -202,7 +219,7 @@ export async function handleConversation(
 ): Promise<string> {
   const context = formatMemoryForAI(memoryLogs);
 
-  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app.
+  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app. This has to feel like a personal companion who genuinely knows this specific user — never generic.
 
 About this user:
 - Name: ${user.name}
@@ -215,15 +232,16 @@ Their recent health log:
 ${context}
 
 Rules:
-- Speak like a caring, informed friend — warm but not cheesy
-- Use their name occasionally
+- Speak like a caring, informed friend who actually remembers this person — warm but not cheesy
+- PERSONALIZATION (non-negotiable): address them as ${user.name} — never a generic greeting like "hi there" or "hey there". Use their name naturally, especially when greeting them, opening a reply, or checking in.
+- Ground your reply in THEIR specifics whenever it fits — their stated goal, a symptom or mood they logged recently, a pattern in their log — rather than a generic answer that could apply to anyone.
 - Reference their personal data when relevant
 - NEVER diagnose or prescribe
 - For serious symptoms, always say "worth checking with your doctor"
 - LENGTH RULE (non-negotiable): Maximum 3 sentences per response. Count them. Stop at 3. If the user asks for detail, maximum 4 sentences. Never write a paragraph.
 - One emoji max`;
 
-  const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 700, thinkingLevel: 'low' });
+  const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 900, thinkingLevel: 'minimal' });
   return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;
 }
 

@@ -11,13 +11,14 @@ function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 }
 
-function extractText(data: any): string {
+function extractTextAndFinish(data: any): { text: string; finishReason?: string } {
   const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  return parts
+  const text = parts
     .filter((p: any) => p?.text && !p?.thought)
     .map((p: any) => p.text)
     .join('')
     .trim();
+  return { text, finishReason: data?.candidates?.[0]?.finishReason };
 }
 
 async function callGemini(prompt: string): Promise<string> {
@@ -37,7 +38,26 @@ async function callGemini(prompt: string): Promise<string> {
       return '';
     }
     const data = await res.json();
-    return extractText(data);
+    const { text, finishReason } = extractTextAndFinish(data);
+    if (finishReason && finishReason !== 'STOP') {
+      console.error('Gemini non-STOP finish (morning.ts):', { finishReason, textLength: text.length, usage: data?.usageMetadata });
+    }
+    if (finishReason === 'MAX_TOKENS') {
+      // Retry once with a bigger budget so the tip doesn't stop mid-sentence.
+      const retryRes = await fetch(geminiUrl(FLASH), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 500, thinkingConfig: { thinkingLevel: 'minimal' } },
+        }),
+      });
+      if (retryRes.ok) {
+        const retryData = await retryRes.json();
+        return extractTextAndFinish(retryData).text || text;
+      }
+    }
+    return text;
   } catch (err) {
     console.error('Gemini fetch error (morning.ts):', err);
     return '';
