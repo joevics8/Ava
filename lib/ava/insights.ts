@@ -1,11 +1,24 @@
 import type { AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
 
-const FLASH = 'gemini-1.5-flash';
+// NOTE: this used to point at 'gemini-1.5-flash', a model that was shut down
+// months ago — every call here was returning a 404 in production (confirmed
+// via Vercel runtime error logs), which is why /insights, /changes,
+// /patterns, /docprep and /weekly were silently failing.
+const FLASH = 'gemini-3.1-flash-lite';
 const PRO = 'gemini-3-flash-preview';
 
 function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+}
+
+function extractText(data: any): string {
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p: any) => p?.text && !p?.thought)
+    .map((p: any) => p.text)
+    .join('')
+    .trim();
 }
 
 async function callGemini(model: string, prompt: string): Promise<string> {
@@ -15,12 +28,19 @@ async function callGemini(model: string, prompt: string): Promise<string> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1000 },
+        // thinkingLevel keeps reasoning tokens from eating the whole
+        // maxOutputTokens budget on these Gemini 3 models (see lib/ava/ai.ts).
+        generationConfig: { maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' } },
       }),
     });
+    if (!res.ok) {
+      console.error('Gemini API error (insights.ts):', JSON.stringify(await res.json().catch(() => ({}))));
+      return '';
+    }
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-  } catch {
+    return extractText(data);
+  } catch (err) {
+    console.error('Gemini fetch error (insights.ts):', err);
     return '';
   }
 }

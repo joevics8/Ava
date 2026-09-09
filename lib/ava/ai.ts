@@ -10,30 +10,75 @@ function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 }
 
-async function callGemini(model: string, prompt: string, systemPrompt?: string): Promise<string> {
+// Gemini 3 models "think" before answering by default, and thinking tokens are
+// deducted from the same maxOutputTokens budget. With a small budget and no
+// thinkingLevel set, a model can spend its whole budget thinking and return
+// an empty or truncated answer (finishReason: MAX_TOKENS) — this is why
+// replies were coming back cut off or blank. We explicitly cap thinking for
+// these lightweight conversational/classification tasks and give plenty of
+// room left over for the actual text.
+type ThinkingLevel = 'minimal' | 'low' | 'high';
+
+function extractText(data: any): { text: string; finishReason?: string } {
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  const text = parts
+    .filter((p: any) => p?.text && !p?.thought)
+    .map((p: any) => p.text)
+    .join('')
+    .trim();
+  return { text, finishReason: data?.candidates?.[0]?.finishReason };
+}
+
+async function callGemini(
+  model: string,
+  prompt: string,
+  systemPrompt?: string,
+  opts: { maxOutputTokens?: number; thinkingLevel?: ThinkingLevel } = {}
+): Promise<string> {
   const contents = systemPrompt
     ? [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] }]
     : [{ role: 'user', parts: [{ text: prompt }] }];
 
-  try {
-    const res = await fetch(geminiUrl(model), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 1000 } }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error('Gemini API error:', JSON.stringify(data));
-      return '';
-    }
-
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-  } catch (err) {
-    console.error('Gemini fetch error:', err);
-    return '';
+  const generationConfig: any = {
+    maxOutputTokens: opts.maxOutputTokens ?? 1000,
+  };
+  if (opts.thinkingLevel) {
+    generationConfig.thinkingConfig = { thinkingLevel: opts.thinkingLevel };
   }
+
+  const attempt = async (): Promise<{ ok: boolean; text: string; retryable: boolean }> => {
+    try {
+      const res = await fetch(geminiUrl(model), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents, generationConfig }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error('Gemini API error:', JSON.stringify(data));
+        const status = data?.error?.status;
+        return { ok: false, text: '', retryable: status === 'UNAVAILABLE' || res.status === 503 };
+      }
+
+      const { text, finishReason } = extractText(data);
+      if (!text && finishReason === 'MAX_TOKENS') {
+        console.error('Gemini returned no visible text — thinking consumed the token budget', { model, finishReason });
+      }
+      return { ok: true, text, retryable: false };
+    } catch (err) {
+      console.error('Gemini fetch error:', err);
+      return { ok: false, text: '', retryable: true };
+    }
+  };
+
+  let result = await attempt();
+  if (!result.ok && result.retryable) {
+    await new Promise((r) => setTimeout(r, 400));
+    result = await attempt();
+  }
+  return result.text;
 }
 
 // ─── Classify incoming message ────────────────────────────────────────────────
@@ -50,7 +95,7 @@ Message: "${message}"
 
 Reply with ONLY one word: LOG, RETRIEVAL, CONVERSATION, or IMAGE`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 20, thinkingLevel: 'minimal' });
   const clean = result.trim().toUpperCase();
   if (['LOG', 'RETRIEVAL', 'CONVERSATION', 'IMAGE'].includes(clean)) return clean as MessageCategory;
   return 'CONVERSATION';
@@ -83,7 +128,7 @@ Message: "${message}"
 
 Reply with only YES or NO.`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 20, thinkingLevel: 'minimal' });
   return result.trim().toUpperCase() === 'YES';
 }
 
@@ -102,7 +147,7 @@ Write a 2-sentence response that:
 
 Warm, friendly tone. Not pushy. Max 3 sentences.`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 300, thinkingLevel: 'minimal' });
   return result || `That's something I can do better with Premium — it gives me 5 months of memory so I can spot your patterns properly. Want me to send you the upgrade link, ${userName}? 🌸`;
 }
 
@@ -116,7 +161,7 @@ Message: "${message}"
 Reply in this exact JSON format (no markdown, no backticks):
 {"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"10 words max describing what was logged"}`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 150, thinkingLevel: 'minimal' });
   try {
     const parsed = JSON.parse(result.trim());
     return { category: parsed.category || 'symptom', summary: parsed.summary || message.slice(0, 60) };
@@ -144,7 +189,7 @@ User question: "${message}"
 
 Answer warmly and specifically using their data. If you spot a pattern, mention it. Maximum 3 sentences. Stop at 3.`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 500, thinkingLevel: 'low' });
   return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
 }
 
@@ -178,7 +223,7 @@ Rules:
 - LENGTH RULE (non-negotiable): Maximum 3 sentences per response. Count them. Stop at 3. If the user asks for detail, maximum 4 sentences. Never write a paragraph.
 - One emoji max`;
 
-  const result = await callGemini(PRO, message, systemPrompt);
+  const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 700, thinkingLevel: 'low' });
   return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;
 }
 
@@ -198,7 +243,7 @@ Goal: ${user.reproductive_goal}
 
 Write exactly 1-2 sentences. No intro, no preamble, just the tip itself.`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 200, thinkingLevel: 'minimal' });
   return result || 'Stay hydrated and be gentle with yourself today 🌸';
 }
 
@@ -215,6 +260,6 @@ Ava: "${aiResponse}"
 
 Reply with only the summary in 10 words or less. No punctuation at the end. No preamble.`;
 
-  const result = await callGemini(FLASH, prompt);
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 100, thinkingLevel: 'minimal' });
   return result.slice(0, 80) || userMessage.slice(0, 60);
 }

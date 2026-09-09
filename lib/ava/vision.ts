@@ -4,6 +4,20 @@ function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 }
 
+// Same issue as lib/ava/ai.ts: Gemini 3 models think by default and thinking
+// tokens come out of maxOutputTokens. A 20-token budget for image
+// classification left zero room for an actual answer, so every photo was
+// silently falling back to "other". Force minimal thinking for these
+// classification/short-answer tasks and give a realistic budget.
+function extractText(data: any): string {
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p: any) => p?.text && !p?.thought)
+    .map((p: any) => p.text)
+    .join('')
+    .trim();
+}
+
 // ─── Download Telegram photo as base64 ───────────────────────────────────────
 
 export async function getTelegramPhotoBase64(
@@ -56,12 +70,13 @@ export async function detectImageType(
           { text: `${prompt}\n\nReply with ONLY one of: ovulation_strip, pregnancy_test, other` },
         ],
       }],
-      generationConfig: { maxOutputTokens: 20 },
+      generationConfig: { maxOutputTokens: 200, thinkingConfig: { thinkingLevel: 'minimal' } },
     }),
   });
 
-  const data = await res.json();
-  const result = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim().toLowerCase() || 'other';
+  if (!res.ok) console.error('Gemini vision error (detectImageType):', JSON.stringify(await res.json().catch(() => ({}))));
+  const data = res.ok ? await res.json() : null;
+  const result = (data ? extractText(data) : '').toLowerCase() || 'other';
 
   if (result.includes('ovulation')) return 'ovulation_strip';
   if (result.includes('pregnancy')) return 'pregnancy_test';
@@ -99,12 +114,13 @@ Reply in this exact JSON format (no markdown):
           },
         ],
       }],
-      generationConfig: { maxOutputTokens: 300 },
+      generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'minimal' } },
     }),
   });
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{}';
+  if (!res.ok) console.error('Gemini vision error (analyseOvulationStrip):', JSON.stringify(await res.json().catch(() => ({}))));
+  const data = res.ok ? await res.json() : null;
+  const text = (data ? extractText(data) : '') || '{}';
 
   try {
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -151,12 +167,13 @@ Reply in this exact JSON format (no markdown):
           },
         ],
       }],
-      generationConfig: { maxOutputTokens: 300 },
+      generationConfig: { maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'minimal' } },
     }),
   });
 
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{}';
+  if (!res.ok) console.error('Gemini vision error (analysePregnancyTest):', JSON.stringify(await res.json().catch(() => ({}))));
+  const data = res.ok ? await res.json() : null;
+  const text = (data ? extractText(data) : '') || '{}';
 
   try {
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
@@ -195,11 +212,12 @@ Respond helpfully in 2-3 sentences. If it's health-related, give warm, non-diagn
           },
         ],
       }],
-      generationConfig: { maxOutputTokens: 200 },
+      generationConfig: { maxOutputTokens: 400, thinkingConfig: { thinkingLevel: 'minimal' } },
     }),
   });
 
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+  if (!res.ok) console.error('Gemini vision error (analyseGenericImage):', JSON.stringify(await res.json().catch(() => ({}))));
+  const data = res.ok ? await res.json() : null;
+  return (data ? extractText(data) : '')
     || `I can see your photo! Could you tell me a bit more about what you'd like help with? 🌸`;
 }

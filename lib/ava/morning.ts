@@ -3,10 +3,21 @@ import type { MemoryLog } from '@/types';
 import { getCurrentPhase, phaseEmoji } from './cycle';
 import { getDayData, getConfidenceLevel, personaliseSymptomLine } from './cycle-lookup';
 
-const FLASH = 'gemini-1.5-flash';
+// Was 'gemini-1.5-flash' — a shut-down model returning 404s in production
+// (confirmed via Vercel runtime logs), which broke the morning digest tip.
+const FLASH = 'gemini-3.1-flash-lite';
 
 function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+}
+
+function extractText(data: any): string {
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p: any) => p?.text && !p?.thought)
+    .map((p: any) => p.text)
+    .join('')
+    .trim();
 }
 
 async function callGemini(prompt: string): Promise<string> {
@@ -16,12 +27,21 @@ async function callGemini(prompt: string): Promise<string> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 80 },
+        // 80 tokens left zero room once thinking tokens are deducted from
+        // the same budget — bump it and cap thinking for this short task.
+        generationConfig: { maxOutputTokens: 250, thinkingConfig: { thinkingLevel: 'minimal' } },
       }),
     });
+    if (!res.ok) {
+      console.error('Gemini API error (morning.ts):', JSON.stringify(await res.json().catch(() => ({}))));
+      return '';
+    }
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-  } catch { return ''; }
+    return extractText(data);
+  } catch (err) {
+    console.error('Gemini fetch error (morning.ts):', err);
+    return '';
+  }
 }
 
 function getGreeting(): string {

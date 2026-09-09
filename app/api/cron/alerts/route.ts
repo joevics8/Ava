@@ -62,6 +62,10 @@ export async function GET(req: NextRequest) {
         await sendMessage(chatId,
           `Hey ${name} — today is around when your period was expected 🩸\n\nDid it start? Just reply *yes* or *not yet* and I'll update your cycle.`
         );
+        // Flag that we're expecting a yes/no reply specifically about this —
+        // the webhook only treats "yes"/"no" as a period confirmation when
+        // this is set, so it doesn't hijack normal conversation elsewhere.
+        await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
         results.confirm++;
       }
 

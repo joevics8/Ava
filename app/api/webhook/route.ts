@@ -39,14 +39,55 @@ function cleanAiText(text: string): string {
   return t.trim();
 }
 
+// Telegram rejects any message over 4096 chars outright — with no splitting
+// and no error check, a long AI reply would just silently fail to send
+// (this is what "message gets cut off" looked like from the user's side:
+// not truncation, but a dropped send with zero visibility in logs).
+function splitMessage(text: string, maxLen = 4000): string[] {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf('. ', maxLen);
+    if (cut === -1) cut = maxLen;
+    else cut += 2;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 async function sendMessage(chatId: number, text: string, markdown = false) {
-  const body: any = { chat_id: chatId, text: markdown ? text : cleanAiText(text) };
-  if (markdown) body.parse_mode = 'Markdown';
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const cleaned = markdown ? text : cleanAiText(text);
+  const chunks = splitMessage(cleaned);
+  for (const chunk of chunks) {
+    const body: any = { chat_id: chatId, text: chunk };
+    if (markdown) body.parse_mode = 'Markdown';
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('Telegram sendMessage error:', JSON.stringify(err));
+      // Markdown parse failures ("can't parse entities") are common when AI
+      // text has stray * or _ — retry once as plain text so the user isn't
+      // left with nothing.
+      if (markdown) {
+        const fallback: any = { chat_id: chatId, text: cleanAiText(chunk) };
+        const retryRes = await fetch(`${TELEGRAM_API}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fallback),
+        });
+        if (!retryRes.ok) {
+          console.error('Telegram sendMessage retry also failed:', JSON.stringify(await retryRes.json().catch(() => ({}))));
+        }
+      }
+    }
+  }
 }
 
 async function sendTyping(chatId: number) {
@@ -162,6 +203,20 @@ async function processUpdate(update: any) {
       await sendTyping(chatId);
       let user = await getUser(telegramId);
       if (!user) { user = await createUser(telegramId); }
+      if (!user) {
+        await sendMessage(chatId, `Something went wrong on my end — could you try again? 🌸`);
+        return NextResponse.json({ ok: true });
+      }
+
+      // A brand-new or mid-onboarding user sending a photo first would
+      // otherwise skip straight to test-strip analysis before Ava even
+      // knows their name — finish setup first instead.
+      if (!user.onboarding_complete) {
+        await sendMessage(chatId,
+          `I'd love to take a look at that once we're set up 🌸\n\n${user.name ? `Let's finish setting you up — send /start to continue.` : `What's your name?`}`
+        );
+        return NextResponse.json({ ok: true });
+      }
 
       const {
         getTelegramPhotoBase64,
@@ -246,93 +301,13 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
     }
 
     // ── Commands ─────────────────────────────────────────────────────────────
-    if (text === '/start') {
-      if (user.onboarding_complete) {
-        await sendMessage(chatId,
-          `Hey ${user.name} 🌸\n\n/today — daily summary\n/log — track something\n/premium — upgrade\n\nOr just talk to me.`
-        );
-      } else {
-        await sendMessage(chatId, `Hi, I'm *Ava* 🌸 What's your name?`);
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    if (text === '/today') {
-      await sendTyping(chatId);
-      if ((user as any).mode === 'pregnant') {
-        const { buildPregnancySummary } = await import('@/lib/ava/pregnancy');
-        const summary = await buildPregnancySummary(user);
-        await sendMessage(chatId, summary);
-      } else {
-        const { buildTodaySummary } = await import('@/lib/ava/today');
-        const summary = await buildTodaySummary(user);
-        await sendMessage(chatId, summary);
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    if (text === '/log') {
-      await sendMessage(chatId,
-        `What's going on today? 📝\n\nJust tell me naturally — "I have cramps", "feeling tired", "light flow", "had sex". I'll take it from there 🌸`
-      );
-      return NextResponse.json({ ok: true });
-    }
-
-    if (text === '/premium') {
-      if (user.plan === 'premium') {
-        const expires = (user as any).premium_expires_at
-          ? new Date((user as any).premium_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })
-          : 'active';
-        await sendMessage(chatId, `✨ You're already on *Ava Premium* — active until ${expires} 🌸`);
-      } else {
-        const { createPaymentLink } = await import('@/lib/ava/paystack');
-        const link = await createPaymentLink(telegramId, user.name || 'friend');
-        if (link) {
-          await sendMessage(chatId,
-            `✨ *Ava Premium — ₦2,000/month*\n\n• 5 months of memory\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n\n[Tap here to upgrade](${link.url}) 🌸`
-          );
-        } else {
-          await sendMessage(chatId, `Something went wrong generating your payment link — please try again in a moment 🌸`);
-        }
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    if (text === '/report') {
-      if (user.plan !== 'premium') {
-        await sendMessage(chatId, `Monthly cycle reports are a Premium feature ✨\n\nUpgrade with /premium to unlock this and more 🌸`);
-        return NextResponse.json({ ok: true });
-      }
-      await sendTyping(chatId);
-      try {
-        const { generateCycleReport } = await import('@/lib/ava/pdf');
-        const { getCycleData, getMemoryContext } = await import('@/lib/ava/db');
-        const [cycleData, memoryLogs] = await Promise.all([
-          getCycleData(user.id),
-          getMemoryContext(user.id, 'premium'),
-        ]);
-        const pdfBuffer = await generateCycleReport(user, cycleData, memoryLogs);
-
-        // Send as Telegram document via multipart
-        const formData = new FormData();
-        formData.append('chat_id', String(chatId));
-        formData.append('caption', `Your cycle report — ${new Date().toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })} 🌸`);
-        formData.append('document', new Blob([pdfBuffer], { type: 'application/pdf' }), `ava-report-${Date.now()}.pdf`);
-
-        const tgUrl = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendDocument`;
-        await fetch(tgUrl, {
-          method: 'POST',
-          body: formData,
-        });
-      } catch (err) {
-        console.error('PDF error:', err);
-        await sendMessage(chatId, `Couldn't generate your report right now — please try again in a moment 🌸`);
-      }
-      return NextResponse.json({ ok: true });
-    }
+    // NOTE: slash-form commands (/start, /today, /log, /premium, /report,
+    // /patterns, /cancel, /settings) are handled above by the strict command
+    // gate → handleCommand(). Only natural-language equivalents live here, so
+    // the same features stay reachable from free-flowing conversation too.
 
     // ── Insights commands ─────────────────────────────────────────────────────
-    if (text === '/insights' || text === 'what have you learned about me' || text === 'what do you know about me') {
+    if (text === 'what have you learned about me' || text === 'what do you know about me') {
       await sendTyping(chatId);
       const { generatePersonalInsights } = await import('@/lib/ava/insights');
       const { getCycleData } = await import('@/lib/ava/db');
@@ -345,7 +320,7 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
       return NextResponse.json({ ok: true });
     }
 
-    if (text === '/changes' || text === 'what has changed recently' || text === 'what changed recently') {
+    if (text === 'what has changed recently' || text === 'what changed recently') {
       await sendTyping(chatId);
       const { generateRecentChanges } = await import('@/lib/ava/insights');
       const logs = await getMemoryContext(user.id, user.plan);
@@ -354,27 +329,7 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
       return NextResponse.json({ ok: true });
     }
 
-    if (text === '/patterns') {
-      await sendTyping(chatId);
-      const { detectPatterns } = await import('@/lib/ava/insights');
-      const { getCycleData } = await import('@/lib/ava/db');
-      const [cycleData, logs] = await Promise.all([
-        getCycleData(user.id),
-        getMemoryContext(user.id, user.plan),
-      ]);
-      const patterns = await detectPatterns(user, logs, cycleData);
-      const patternEntries = Object.entries(patterns).filter(([, v]) => v !== null).map(([, v]) => '• ' + String(v));
-      const found = patternEntries.join('\n');
-      if (!found) {
-        await sendMessage(chatId, `I haven't spotted strong patterns yet, ${user.name} 🌸 Keep sharing and I'll connect the dots over time.`);
-      } else {
-        const patternMsg = "Here's what I've noticed, " + user.name + " 🌸\n\n" + found + "\n\n_These are observations, not diagnoses — always worth discussing with your doctor if anything concerns you._";
-        await sendMessage(chatId, patternMsg);
-      }
-      return NextResponse.json({ ok: true });
-    }
-
-    if (text === '/docprep' || text === 'doctor visit prep' || text === 'prepare for my doctor') {
+    if (text === 'doctor visit prep' || text === 'prepare for my doctor') {
       await sendTyping(chatId);
       const { generateDoctorPrep } = await import('@/lib/ava/insights');
       const { getCycleData } = await import('@/lib/ava/db');
@@ -389,7 +344,7 @@ ${response}`);
       return NextResponse.json({ ok: true });
     }
 
-    if (text === '/weekly' || text === 'weekly briefing' || text === 'weekly update') {
+    if (text === 'weekly briefing' || text === 'weekly update') {
       await sendTyping(chatId);
       const { generateWeeklyBriefing } = await import('@/lib/ava/insights');
       const { getCycleData } = await import('@/lib/ava/db');
@@ -404,20 +359,6 @@ ${response}`);
       return NextResponse.json({ ok: true });
     }
 
-
-
-    if (text === '/cancel') {
-      if (user.plan !== 'premium') {
-        await sendMessage(chatId, `You're on the free plan — nothing to cancel 🌸`);
-      } else {
-        await sendMessage(chatId,
-          `To cancel your Premium subscription, send *CANCEL PREMIUM*.
-
-You'll keep Premium until your current period ends, then move to the free plan.`
-        );
-      }
-      return NextResponse.json({ ok: true });
-    }
 
     if (text === 'switch to pregnancy mode' || text === 'pregnancy mode') {
       if (!user) return NextResponse.json({ ok: true });
@@ -444,17 +385,9 @@ You're now on the free plan. If you change your mind, /premium is always there.`
       return NextResponse.json({ ok: true });
     }
 
-    // /help handled in handleCommand
+    // /help and /settings handled in handleCommand
 
-    if (text === '/settings') {
-      await sendMessage(chatId,
-        `What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Delete my data\n\nJust send the number.`
-      );
-      await updateUser(telegramId, { onboarding_step: 90 });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (text === 'delete my data' || text === '/deletedata') {
+    if (text === 'delete my data') {
       await sendMessage(chatId,
         `Are you sure you want to delete all your data? This cannot be undone.\n\nSend *YES DELETE* to confirm.`
       );
@@ -470,8 +403,16 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     }
 
     // ── Period confirmation reply ─────────────────────────────────────────────
+    // IMPORTANT: this must only fire when Ava actually asked "did your
+    // period start?" (set by the cron/alerts job via onboarding_step=85).
+    // Previously this matched ANY "yes"/"no" the user ever sent, in any
+    // context — so answering a normal conversational question with "yes"
+    // would silently get hijacked into logging a period start. That was a
+    // major contributor to "doesn't respond well to normal conversation".
     const lowerText = text.toLowerCase().trim();
-    if (['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(lowerText)) {
+    const awaitingPeriodConfirmation = user.onboarding_step === 85;
+
+    if (awaitingPeriodConfirmation && ['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(lowerText)) {
       const today = new Date().toISOString().split('T')[0];
       const { getCycleData, upsertCycleData } = await import('@/lib/ava/db');
       const { predictNextPeriod, predictOvulationWindow } = await import('@/lib/ava/cycle');
@@ -488,6 +429,7 @@ You're now on the free plan. If you change your mind, /premium is always there.`
         next_ovulation_start: os.toISOString().split('T')[0],
         next_ovulation_end: oe.toISOString().split('T')[0],
       });
+      await updateUser(telegramId, { onboarding_step: 0 } as any);
       const nextStr = ns.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
       await sendMessage(chatId,
         `Got it, ${user.name} 🩸 I've noted today as your period start.
@@ -497,7 +439,8 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
       return NextResponse.json({ ok: true });
     }
 
-    if (['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(lowerText)) {
+    if (awaitingPeriodConfirmation && ['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(lowerText)) {
+      await updateUser(telegramId, { onboarding_step: 0 } as any);
       await sendMessage(chatId,
         `No worries — cycles can vary a few days 🌸 I'll keep an eye on it. Let me know when it starts.`
       );
@@ -687,6 +630,14 @@ async function handleCommand(
       await send(chatId, "What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Switch mode (cycle/pregnancy)\n7. Delete my data\n\nJust send the number.");
       const { updateUser } = await import('@/lib/ava/db');
       await updateUser(telegramId, { onboarding_step: 90 } as any);
+      return;
+    }
+
+    case '/deletedata': {
+      if (!user) { await send(chatId, "Send /start to begin 🌸"); return; }
+      await send(chatId, "Are you sure you want to delete all your data? This cannot be undone.\n\nSend *YES DELETE* to confirm.", true);
+      const { updateUser } = await import('@/lib/ava/db');
+      await updateUser(telegramId, { onboarding_step: 99 } as any);
       return;
     }
 
