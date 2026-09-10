@@ -35,6 +35,15 @@ export async function GET(req: NextRequest) {
   const results = { period_soon: 0, fertile: 0, confirm: 0, contraception: 0 };
 
   for (const user of users) {
+    // Pregnant-mode users shouldn't get cycle-based alerts at all — "your
+    // period is late", "did it start? reply yes/not yet", and fertile-window
+    // warnings are all wrong (and confusing, potentially distressing) once
+    // someone is already pregnant. This was previously unchecked, so a
+    // pregnant user with leftover cycle_data would keep getting them — and
+    // replying "yes" to the period-confirmation prompt would even log a
+    // false period start while in pregnancy mode.
+    if ((user as any).mode === 'pregnant') continue;
+
     const cycle = user.cycle_data?.[0];
     if (!cycle) continue;
 

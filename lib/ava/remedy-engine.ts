@@ -84,7 +84,7 @@ export async function showRemedyList(
 ): Promise<void> {
   const all = await getAllRemedies();
   const isPremium = user.plan === 'premium';
-  const remedies = all.filter(r => r.condition === condition && (isPremium || !r.premium));
+  const remedies = all.filter(r => r.condition === condition);
 
   if (!remedies.length) {
     await sendWithKeyboard(chatId, 'No remedies found for this condition yet 🌸', [], false);
@@ -92,21 +92,31 @@ export async function showRemedyList(
   }
 
   const conditionLabel = remedies[0].condition_label;
+  const lockedCount = remedies.filter(r => r.premium && !isPremium).length;
 
-  // Build numbered list text
-  const list = remedies.map((r, i) => (i + 1) + '. *' + r.name + '*\n_' + r.description.slice(0, 80) + '..._').join('\n\n');
+  // Build numbered list text — locked remedies are shown (not hidden) with a
+  // lock icon, so free users know exactly what they're missing rather than
+  // the list quietly looking shorter than it is.
+  const list = remedies.map((r, i) => {
+    const locked = r.premium && !isPremium;
+    const label = locked ? `🔒 *${r.name}* (Premium)` : `*${r.name}*`;
+    return `${i + 1}. ${label}\n_${r.description.slice(0, 80)}..._`;
+  }).join('\n\n');
 
-  // Build keyboard — one remedy per row
+  // Build keyboard — one remedy per row, locked ones show a lock icon too
   const keyboard = remedies.map(r => ([
-    { text: r.name, callback_data: 'rem_view_' + r.id },
+    { text: (r.premium && !isPremium ? '🔒 ' : '') + r.name, callback_data: 'rem_view_' + r.id },
   ]));
 
-  // Add back button
   keyboard.push([{ text: '← Back to conditions', callback_data: 'rem_menu' }]);
+
+  const upsell = lockedCount > 0
+    ? `\n\n✨ ${lockedCount} more remedy${lockedCount > 1 ? 'ies' : ''} for this condition ${lockedCount > 1 ? 'are' : 'is'} available with *Ava Premium* (₦2,000/month) — send /premium to unlock all 160+ remedies across 50 conditions.`
+    : '';
 
   await sendWithKeyboard(
     chatId,
-    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:\n\n' + list,
+    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:\n\n' + list + upsell,
     keyboard,
     true
   );
@@ -123,6 +133,20 @@ export async function showRemedyDetail(
   const all = await getAllRemedies();
   const remedy = all.find(r => r.id === remedyId);
   if (!remedy) return;
+
+  const isPremium = user.plan === 'premium';
+  if (remedy.premium && !isPremium) {
+    await sendWithKeyboard(
+      chatId,
+      `🔒 *${remedy.name}*\n\n${remedy.description}\n\nThis remedy is part of *Ava Premium* — ₦2,000/month unlocks all 160+ remedies across 50 conditions, plus 5 months of memory, morning digest, ovulation strip reading, and monthly cycle PDFs.`,
+      [
+        [{ text: '✨ Upgrade to Premium', callback_data: 'rem_upgrade' }],
+        [{ text: '← Back to ' + remedy.condition_label, callback_data: 'rem_cond_' + remedy.condition }],
+      ],
+      true
+    );
+    return;
+  }
 
   const text =
     '🌿 *' + remedy.name + '*\n\n' +
@@ -216,6 +240,24 @@ export async function handleRemedyCallback(
 
   if (callbackData.startsWith('rem_already_')) {
     await send(chatId, 'You\'re already tracking this one 🌿 Keep going — I\'ll check in with you soon.');
+    return true;
+  }
+
+  if (callbackData === 'rem_upgrade') {
+    if (user.plan === 'premium') {
+      await send(chatId, 'You\'re already on Ava Premium ✨ — head back to /remedies to see everything unlocked.');
+      return true;
+    }
+    const { createPaymentLink } = await import('@/lib/ava/paystack');
+    const link = await createPaymentLink(user.telegram_id, user.name || 'friend');
+    if (link) {
+      await send(chatId,
+        `✨ *Ava Premium — ₦2,000/month*\n\n• All 160+ remedies across 50 conditions\n• 5 months of memory\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n\n[Tap here to upgrade](${link.url}) 🌸`,
+        true
+      );
+    } else {
+      await send(chatId, `Something went wrong generating your payment link — please try again in a moment 🌸`);
+    }
     return true;
   }
 

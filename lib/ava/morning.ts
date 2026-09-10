@@ -98,6 +98,32 @@ export async function buildMorningDigest(
   cycleData: any,
   logs: MemoryLog[]
 ): Promise<{ text: string; showMoodButtons: boolean }> {
+  // Pregnant-mode users should get a pregnancy week update, not cycle/
+  // fertility content — this was previously missing entirely, so pregnant
+  // users got a digest talking about fertile windows and cycle days, which
+  // makes no sense once you're already pregnant.
+  if ((user as any).mode === 'pregnant') {
+    const pregnancyStart = (user as any).pregnancy_start_date;
+    if (!pregnancyStart) {
+      return {
+        text: `${getGreeting()}, ${user.name} 🌸\n\nI need your last period date to track your pregnancy. Send /settings to add it.`,
+        showMoodButtons: false,
+      };
+    }
+    const { getPregnancyWeek, getWeeklyInsight } = await import('./pregnancy');
+    const { week, trimesterName, daysUntilDue, dueDate } = getPregnancyWeek(new Date(pregnancyStart));
+    const insight = getWeeklyInsight(week);
+    const dueDateStr = dueDate.toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' });
+    const text =
+      `${getGreeting()}, ${user.name} 🌸\n` +
+      `🤰 *Week ${week} — ${trimesterName}*\n\n` +
+      `📅 Due date: *${dueDateStr}*\n` +
+      `⏳ ${daysUntilDue > 0 ? `${daysUntilDue} days to go` : 'Any day now!'}\n\n` +
+      `💡 ${insight}\n\n` +
+      `How are you feeling this morning?`;
+    return { text, showMoodButtons: true };
+  }
+
   if (!cycleData?.period_start_dates?.length) {
     return {
       text: `${getGreeting()}, ${user.name} 🌸\n\nI need your period dates to personalise your briefing. Send /settings to add them.`,

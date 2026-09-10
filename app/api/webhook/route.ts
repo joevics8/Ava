@@ -197,6 +197,11 @@ async function processUpdate(update: any) {
     const chatId: number = message.chat.id;
     const telegramId: number = message.from.id;
     const text: string = message.text || '';
+    // Natural-language trigger phrases below were comparing against the raw,
+    // un-lowercased text — meaning any auto-capitalized first letter (the
+    // mobile keyboard default) or stray punctuation silently broke every one
+    // of them, including the pregnancy-mode switch. Use a normalized form.
+    const normalizedText = text.toLowerCase().trim();
 
     // ── Photo messages ────────────────────────────────────────────────────────
     if (message.photo?.length) {
@@ -307,7 +312,7 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
     // the same features stay reachable from free-flowing conversation too.
 
     // ── Insights commands ─────────────────────────────────────────────────────
-    if (text === 'what have you learned about me' || text === 'what do you know about me') {
+    if (normalizedText === 'what have you learned about me' || normalizedText === 'what do you know about me') {
       await sendTyping(chatId);
       const { generatePersonalInsights } = await import('@/lib/ava/insights');
       const { getCycleData } = await import('@/lib/ava/db');
@@ -320,7 +325,7 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
       return NextResponse.json({ ok: true });
     }
 
-    if (text === 'what has changed recently' || text === 'what changed recently') {
+    if (normalizedText === 'what has changed recently' || normalizedText === 'what changed recently') {
       await sendTyping(chatId);
       const { generateRecentChanges } = await import('@/lib/ava/insights');
       const logs = await getMemoryContext(user.id, user.plan);
@@ -329,7 +334,7 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
       return NextResponse.json({ ok: true });
     }
 
-    if (text === 'doctor visit prep' || text === 'prepare for my doctor') {
+    if (normalizedText === 'doctor visit prep' || normalizedText === 'prepare for my doctor') {
       await sendTyping(chatId);
       const { generateDoctorPrep } = await import('@/lib/ava/insights');
       const { getCycleData } = await import('@/lib/ava/db');
@@ -344,7 +349,7 @@ ${response}`);
       return NextResponse.json({ ok: true });
     }
 
-    if (text === 'weekly briefing' || text === 'weekly update') {
+    if (normalizedText === 'weekly briefing' || normalizedText === 'weekly update') {
       await sendTyping(chatId);
       const { generateWeeklyBriefing } = await import('@/lib/ava/insights');
       const { getCycleData } = await import('@/lib/ava/db');
@@ -360,7 +365,7 @@ ${response}`);
     }
 
 
-    if (text === 'switch to pregnancy mode' || text === 'pregnancy mode') {
+    if (normalizedText === 'switch to pregnancy mode' || normalizedText === 'pregnancy mode') {
       if (!user) return NextResponse.json({ ok: true });
       const existing = await import('@/lib/ava/db').then(m => m.getCycleData(user!.id));
       const lastPeriod = existing?.period_start_dates?.slice(-1)[0] || new Date().toISOString().split('T')[0];
@@ -369,13 +374,13 @@ ${response}`);
       return NextResponse.json({ ok: true });
     }
 
-    if (text === 'switch to cycle mode' || text === 'cycle mode') {
+    if (normalizedText === 'switch to cycle mode' || normalizedText === 'cycle mode') {
       await updateUser(telegramId, { mode: 'cycle', pregnancy_start_date: null } as any);
       await sendMessage(chatId, `Switched back to cycle tracking 🌸 Send /today for your daily summary.`);
       return NextResponse.json({ ok: true });
     }
 
-    if (text === 'CANCEL PREMIUM') {
+    if (normalizedText === 'cancel premium') {
       await updateUser(telegramId, { plan: 'free', premium_expires_at: null } as any);
       await sendMessage(chatId,
         `Done — your Premium subscription has been cancelled 🌸
@@ -387,7 +392,7 @@ You're now on the free plan. If you change your mind, /premium is always there.`
 
     // /help and /settings handled in handleCommand
 
-    if (text === 'delete my data') {
+    if (normalizedText === 'delete my data') {
       await sendMessage(chatId,
         `Are you sure you want to delete all your data? This cannot be undone.\n\nSend *YES DELETE* to confirm.`
       );
@@ -409,10 +414,9 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     // context — so answering a normal conversational question with "yes"
     // would silently get hijacked into logging a period start. That was a
     // major contributor to "doesn't respond well to normal conversation".
-    const lowerText = text.toLowerCase().trim();
     const awaitingPeriodConfirmation = user.onboarding_step === 85;
 
-    if (awaitingPeriodConfirmation && ['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(lowerText)) {
+    if (awaitingPeriodConfirmation && ['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(normalizedText)) {
       const today = new Date().toISOString().split('T')[0];
       const { getCycleData, upsertCycleData } = await import('@/lib/ava/db');
       const { predictNextPeriod, predictOvulationWindow } = await import('@/lib/ava/cycle');
@@ -439,7 +443,7 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
       return NextResponse.json({ ok: true });
     }
 
-    if (awaitingPeriodConfirmation && ['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(lowerText)) {
+    if (awaitingPeriodConfirmation && ['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(normalizedText)) {
       await updateUser(telegramId, { onboarding_step: 0 } as any);
       await sendMessage(chatId,
         `No worries — cycles can vary a few days 🌸 I'll keep an eye on it. Let me know when it starts.`
@@ -602,7 +606,7 @@ async function handleCommand(
       const { createPaymentLink } = await import('@/lib/ava/paystack');
       const link = user ? await createPaymentLink(telegramId, user.name || 'friend') : null;
       const linkText = link ? "\n\n[Upgrade to Premium](" + link.url + ") ✨" : '';
-      await send(chatId, "*Ava Premium — ₦2,000/month*\n\n• 5 months memory\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n• Doctor visit prep" + linkText, true);
+      await send(chatId, "*Ava Premium — ₦2,000/month*\n\n• All 160+ remedies across 50 conditions\n• 5 months memory\n• Morning digest at 8am\n• Ovulation strip reading\n• Monthly cycle PDF\n• Doctor visit prep" + linkText, true);
       return;
     }
 
@@ -673,6 +677,22 @@ async function handleCommand(
   }
 }
 
+async function maybeSuggestRemedy(chatId: number, user: any, text: string): Promise<void> {
+  const { getActiveRemedies, showRemedyList } = await import('@/lib/ava/remedy-engine');
+  const { detectCondition } = await import('@/lib/ava/remedies');
+
+  const detectedCondition = detectCondition(text);
+  if (!detectedCondition) return;
+
+  const alreadyTracking = await getActiveRemedies(user.id);
+  const alreadyHasThis = alreadyTracking.some((r: any) => r.condition === detectedCondition);
+  if (alreadyHasThis) return;
+
+  await sendMessage(chatId, 'By the way — I have some natural remedies that might help with this 🌿');
+  await showRemedyList(chatId, user, detectedCondition, sendWithKeyboard);
+  await addMemoryLog(user.id, 'insight', 'Suggested remedies for ' + detectedCondition);
+}
+
 async function routeMessage(
   category: string,
   text: string,
@@ -682,7 +702,6 @@ async function routeMessage(
 ) {
   // Check for remedy outcome update
   const { detectRemedyIntent, updateRemedyOutcome } = await import('@/lib/ava/remedy-engine');
-  const { detectCondition } = await import('@/lib/ava/remedies');
 
   const { action, remedyId } = await detectRemedyIntent(text);
   if (action === 'update' && remedyId) {
@@ -711,18 +730,9 @@ Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(
     const insight = await summarizeChatInsight(text, response);
     await addMemoryLog(user.id, 'chat', insight);
 
-    // Auto-suggest remedy list if symptom detected and not already tracking
-    const detectedCondition = detectCondition(text);
-    if (detectedCondition) {
-      const { getActiveRemedies, showRemedyList } = await import('@/lib/ava/remedy-engine');
-      const alreadyTracking = await getActiveRemedies(user.id);
-      const alreadyHasThis = alreadyTracking.some((r: any) => r.condition === detectedCondition);
-      if (!alreadyHasThis) {
-        await sendMessage(chatId, 'By the way — I have some natural remedies that might help with this 🌿');
-        await showRemedyList(chatId, user, detectedCondition, sendWithKeyboard);
-        await addMemoryLog(user.id, 'insight', 'Suggested remedies for ' + detectedCondition);
-      }
-    }
+    // Auto-suggest remedy list if a symptom keyword is detected and the user
+    // isn't already tracking a remedy for it.
+    await maybeSuggestRemedy(chatId, user, text);
 
   } else if (category === 'RETRIEVAL') {
     const response = await handleRetrieval(user, text, memoryLogs);
@@ -733,6 +743,11 @@ Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(
     await sendMessage(chatId, response || `I'm here — tell me more 🌸`, false);
     const insight = await summarizeChatInsight(text, response);
     await addMemoryLog(user.id, 'chat', insight);
+
+    // Free-flowing conversation can mention a symptom too ("ugh my back is
+    // killing me today") without it being classified as a LOG entry —
+    // remedy suggestions shouldn't only fire for explicit symptom logs.
+    await maybeSuggestRemedy(chatId, user, text);
   }
 }
 
