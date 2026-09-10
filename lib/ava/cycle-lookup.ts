@@ -31,7 +31,7 @@
 // ────
 // Practical, lifestyle-only. No medication. Short.
 
-export type FertilityLabel = 'Low' | 'Possible' | 'Moderate' | 'High' | 'Peak';
+export type FertilityLabel = 'Minimal' | 'Possible' | 'Moderate' | 'High' | 'Peak';
 export type PhaseKey = 'menstrual' | 'follicular' | 'ovulatory' | 'early_luteal' | 'mid_luteal' | 'late_luteal' | 'premenstrual';
 
 export interface CycleDayData {
@@ -57,7 +57,7 @@ const FERTILITY_OFFSET_MAP: Record<number, FertilityLabel> = {
 };
 
 const FERTILITY_EMOJI: Record<FertilityLabel, string> = {
-  Low:      '⚪',
+  Minimal:  '⚪',
   Possible: '🟡',
   Moderate: '🟠',
   High:     '🔴',
@@ -92,32 +92,76 @@ const PHASE_LABELS: Record<PhaseKey, string> = {
   premenstrual:  'Premenstrual Phase',
 };
 
-// ─── Generic symptom fallbacks ────────────────────────────────────────────────
-// Used ONLY when no personal pattern exists in her memory.
-// Phrased as possibilities, never certainties.
+// ─── Generic symptom + tip fallbacks (day-of-phase aware) ─────────────────────
+// Used ONLY when no personal pattern exists in her memory. More granular than
+// a single line per phase — e.g. day 1-2 of a period reads differently from
+// day 4-5 of the same period. Phrased as possibilities, never certainties.
+// No supplement doses, no drug names, no percentages.
 
-const PHASE_SYMPTOMS: Record<PhaseKey, string> = {
-  menstrual:    'Flow and some cramping or fatigue are common right now.',
-  follicular:   'Energy tends to rise as oestrogen increases.',
-  ovulatory:    'You may notice changes in discharge. Energy is usually at its highest.',
-  early_luteal: 'Mild breast tenderness or slight bloating may begin.',
-  mid_luteal:   'Progesterone is at its peak. Energy tends to be steady.',
-  late_luteal:  'Bloating, fatigue or mood shifts may appear for some women.',
-  premenstrual: 'PMS symptoms can peak now — bloating, tiredness, or low mood.',
-};
+function getPhaseContent(
+  phase: PhaseKey,
+  day: number,
+  periodDuration: number,
+  ovulationDay: number
+): { symptoms: string; tip: string } {
+  switch (phase) {
+    case 'menstrual':
+      if (day <= Math.min(2, periodDuration)) {
+        return {
+          symptoms: 'Flow is typically heaviest now. Cramping, fatigue, and lower back pain are common.',
+          tip: 'Rest when you can. Heat on your lower abdomen and iron-rich foods can help restore energy.',
+        };
+      }
+      return {
+        symptoms: 'Flow is easing. You may still feel some fatigue and mild cramping.',
+        tip: 'Iron-rich foods like spinach and lentils help restore energy as your period winds down.',
+      };
 
-// ─── Generic tips ─────────────────────────────────────────────────────────────
-// Practical. No supplement doses. No drug names.
+    case 'follicular': {
+      const daysSincePeriod = day - periodDuration;
+      if (daysSincePeriod <= 3) {
+        return {
+          symptoms: 'Oestrogen is rising. Energy is returning and mood tends to lift.',
+          tip: 'A good time to restart exercise routines — your body is rebuilding.',
+        };
+      }
+      return {
+        symptoms: 'Energy and confidence are typically at their highest this week.',
+        tip: 'Take on demanding tasks and social plans — oestrogen is working in your favour.',
+      };
+    }
 
-const PHASE_TIPS: Record<PhaseKey, string> = {
-  menstrual:    'Heat on your lower abdomen and iron-rich foods can help restore energy.',
-  follicular:   'A good time for exercise and taking on demanding tasks.',
-  ovulatory:    'Your most energetic phase — make the most of it.',
-  early_luteal: 'Steady meals and moderate movement support a smooth transition.',
-  mid_luteal:   'Magnesium-rich foods like dark chocolate, nuts and leafy greens may help.',
-  late_luteal:  'Reducing salt and caffeine can ease bloating. Rest when you need to.',
-  premenstrual: 'Gentle movement often helps more than rest alone. Be kind to yourself.',
-};
+    case 'ovulatory':
+      return {
+        symptoms: 'You may notice egg-white discharge, a slight temperature rise, or mild pelvic twinges.',
+        tip: 'Hydrate well and note any mid-cycle pain — it is usually normal and passes quickly.',
+      };
+
+    case 'early_luteal':
+      return {
+        symptoms: 'Progesterone is rising. Mild breast tenderness or slight bloating may begin.',
+        tip: 'Steady meals and moderate movement support a smooth transition.',
+      };
+
+    case 'mid_luteal':
+      return {
+        symptoms: 'Progesterone is at its peak. Energy tends to be steady.',
+        tip: 'Magnesium-rich foods like dark chocolate, nuts and leafy greens may help.',
+      };
+
+    case 'late_luteal':
+      return {
+        symptoms: 'PMS symptoms often peak now — irritability, bloating, cravings, and fatigue are common.',
+        tip: 'Be gentle with yourself. B6-rich foods like bananas and chickpeas support mood.',
+      };
+
+    case 'premenstrual':
+      return {
+        symptoms: 'Your period is approaching. Cramping, bloating, and low energy are typical.',
+        tip: 'Stock up on period supplies and prepare your heat pack — gentle movement often helps more than rest alone.',
+      };
+  }
+}
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
@@ -136,8 +180,9 @@ export function getCycleLookup(cycleLength: number): CycleDayData[] {
 
   for (let day = 1; day <= clamped; day++) {
     const offset = day - ovulationDay;
-    const fertilityLabel: FertilityLabel = FERTILITY_OFFSET_MAP[offset] ?? 'Low';
+    const fertilityLabel: FertilityLabel = FERTILITY_OFFSET_MAP[offset] ?? 'Minimal';
     const phase = getPhase(day, periodDuration, ovulationDay, clamped);
+    const { symptoms, tip } = getPhaseContent(phase, day, periodDuration, ovulationDay);
 
     days.push({
       day,
@@ -145,8 +190,8 @@ export function getCycleLookup(cycleLength: number): CycleDayData[] {
       phaseLabel: PHASE_LABELS[phase],
       fertilityLabel,
       fertilityEmoji: FERTILITY_EMOJI[fertilityLabel],
-      symptomsGeneric: PHASE_SYMPTOMS[phase],
-      tipGeneric: PHASE_TIPS[phase],
+      symptomsGeneric: symptoms,
+      tipGeneric: tip,
     });
   }
 
@@ -168,16 +213,17 @@ export function getDayData(
     const clamped = Math.max(21, Math.min(36, cycleLength));
     const ovulationDay = clamped - 14;
     const offset = cycleDay - ovulationDay;
-    const fertilityLabel: FertilityLabel = FERTILITY_OFFSET_MAP[offset] ?? 'Low';
+    const fertilityLabel: FertilityLabel = FERTILITY_OFFSET_MAP[offset] ?? 'Minimal';
     const phase = getPhase(cycleDay, periodDuration, ovulationDay, clamped);
+    const { symptoms, tip } = getPhaseContent(phase, cycleDay, periodDuration, ovulationDay);
     return {
       day: cycleDay,
       phase,
       phaseLabel: PHASE_LABELS[phase],
       fertilityLabel,
       fertilityEmoji: FERTILITY_EMOJI[fertilityLabel],
-      symptomsGeneric: PHASE_SYMPTOMS[phase],
-      tipGeneric: PHASE_TIPS[phase],
+      symptomsGeneric: symptoms,
+      tipGeneric: tip,
     };
   }
 

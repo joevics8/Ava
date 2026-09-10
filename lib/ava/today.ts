@@ -100,7 +100,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
     `${getGreeting()}, ${user.name}! 🌸\n\n` +
     `${phaseEmoji[phase]} *${dayData.phaseLabel}* — Day ${day} of ${avg}\n` +
     `Prediction confidence: ${confidence}\n\n` +
-    `${dayData.fertilityEmoji} *Fertility: ${dayData.fertilityLabel}*\n\n` +
+    `${dayData.fertilityEmoji} *Fertility possibility: ${dayData.fertilityLabel}*\n\n` +
     `${periodLine}\n` +
     `${ovLine}\n\n` +
     `🌡️ *Today:* ${symptomLine}\n\n` +

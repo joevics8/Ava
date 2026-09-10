@@ -156,9 +156,14 @@ export async function buildMorningDigest(
   const { label: confidence } = getConfidenceLevel(numCycles, hasLH, hasBBT, hasMucus);
 
   // ── Personal insight — AI only if enough history ──────────────────────────
+  // Previously this REPLACED the generic care tip whenever a personal
+  // insight existed, so established users stopped seeing any "care" content
+  // at all — just two symptom-shaped lines back to back. Now both are shown
+  // together in the same slot, so fertility/symptoms/care all stay covered
+  // without changing the digest's overall layout.
   const personalInsight = await getPersonalInsight(phase, day, logs);
   const insightLine = personalInsight
-    ? '🧠 ' + personalInsight
+    ? '🧠 ' + personalInsight + '\n💡 ' + dayData.tipGeneric
     : '💡 ' + dayData.tipGeneric;
 
   // ── Next period line ──────────────────────────────────────────────────────
@@ -175,7 +180,7 @@ export async function buildMorningDigest(
     getGreeting() + ', ' + user.name + ' 🌸\n' +
     phaseEmoji[phase] + ' *' + dayData.phaseLabel + '* · Day ' + day + ' of ' + avg +
     ' · Confidence: ' + confidence + '\n\n' +
-    dayData.fertilityEmoji + ' *Fertility: ' + dayData.fertilityLabel + '*\n\n' +
+    dayData.fertilityEmoji + ' *Fertility possibility: ' + dayData.fertilityLabel + '*\n\n' +
     '🌡️ *Today:* ' + symptomLine +
     nextLine + '\n\n' +
     insightLine + '\n\n' +
