@@ -20,5 +20,6 @@ CREATE TABLE IF NOT EXISTS user_payments (
 
 CREATE INDEX IF NOT EXISTS idx_user_payments_user ON user_payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_payments_fingerprint ON user_payments(fingerprint);
+ALTER TABLE user_payments ADD CONSTRAINT user_payments_reference_unique UNIQUE (reference);
 
 ALTER TABLE referrals ADD COLUMN IF NOT EXISTS fraud_note text;

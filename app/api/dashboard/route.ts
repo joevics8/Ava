@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { verifySessionCookie } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
-  const session = req.cookies.get('ava_session');
+  const session = verifySessionCookie(req.cookies.get('ava_session')?.value);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { telegram_id } = JSON.parse(session.value);
+  const { telegram_id } = session;
 
   const [userRes, cycleRes, logsRes] = await Promise.all([
     supabaseAdmin.from('users').select('*').eq('telegram_id', telegram_id).single(),

@@ -38,6 +38,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  // Idempotency guard — Paystack redelivers webhooks that don't get a fast
+  // 2xx response (documented retry behavior). Without this, a redelivered
+  // charge.success would re-upgrade the user (resetting premium_expires_at
+  // further out than intended), insert a duplicate payment record, and send
+  // a second "You're now Premium" message.
+  const { data: existingPayment } = await supabaseAdmin
+    .from('user_payments')
+    .select('id')
+    .eq('reference', reference)
+    .single();
+  if (existingPayment) {
+    return NextResponse.json({ received: true });
+  }
+
   // Double-verify with Paystack API
   const valid = await verifyTransaction(reference);
   if (!valid) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase';
+import { createSessionCookie } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   const params = Object.fromEntries(req.nextUrl.searchParams.entries());
@@ -19,8 +20,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.redirect(new URL('/login?error=notfound', req.url));
 
   const res = NextResponse.redirect(new URL('/dashboard', req.url));
-  res.cookies.set('ava_session', JSON.stringify({
-    telegram_id: data.id,
+  res.cookies.set('ava_session', createSessionCookie({
+    telegram_id: Number(data.id),
     name: data.first_name,
     photo: data.photo_url,
   }), { httpOnly: true, secure: true, maxAge: 60 * 60 * 24 * 7, path: '/' });
