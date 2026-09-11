@@ -166,6 +166,25 @@ export async function buildMorningDigest(
     ? '🧠 ' + personalInsight + '\n💡 ' + dayData.tipGeneric
     : '💡 ' + dayData.tipGeneric;
 
+  // ── Extra actionable help for the toughest days ────────────────────────────
+  // Days 1-2 of a period are usually the most acute (heaviest flow, worst
+  // cramps) — the digest was giving the same descriptive-only treatment as
+  // any other day. Surfacing a concrete, free remedy here makes it actually
+  // useful right when it's needed most, not just informative.
+  let remedyLine = '';
+  if (phase === 'menstrual' && day <= 2) {
+    try {
+      const { getAllRemedies } = await import('./remedy-engine');
+      const all = await getAllRemedies();
+      const freeCrampsRemedy = all.find((r: any) => r.condition === 'cramps' && !r.premium);
+      if (freeCrampsRemedy) {
+        remedyLine = `\n\n🌿 *Try today:* ${freeCrampsRemedy.name} — ${freeCrampsRemedy.description.split('.')[0]}. Send /remedies for more.`;
+      }
+    } catch {
+      // Non-critical — digest still works without this line if it fails.
+    }
+  }
+
   // ── Next period line ──────────────────────────────────────────────────────
   let nextLine = '';
   if (cycleData.next_period_start) {
@@ -182,7 +201,7 @@ export async function buildMorningDigest(
     ' · Confidence: ' + confidence + '\n\n' +
     dayData.fertilityEmoji + ' *Fertility possibility: ' + dayData.fertilityLabel + '*\n\n' +
     '🌡️ *Today:* ' + symptomLine +
-    nextLine + '\n\n' +
+    nextLine + remedyLine + '\n\n' +
     insightLine + '\n\n' +
     'How are you feeling this morning?';
 

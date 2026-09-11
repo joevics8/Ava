@@ -259,6 +259,39 @@ export async function upsertCycleData(
     .upsert({ user_id: userId, ...data, updated_at: new Date().toISOString() });
 }
 
+// Records an actual period start and recalculates predictions from it. This
+// used to only happen when the user replied "yes" to the cron's specific
+// confirmation prompt — if someone just said "my period started today" (or
+// "started 2 days ago") in normal conversation, it was saved to memory_log
+// (so the AI could reference it in chat) but cycle_data — the table that
+// actually drives /today and the morning digest's predicted date — was
+// never touched. That's why the digest kept showing the old predicted date
+// after an early/late period was mentioned in free text.
+export async function recordPeriodStart(userId: string, daysAgo: number = 0): Promise<void> {
+  const { predictNextPeriod, predictOvulationWindow } = await import('./cycle');
+
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - daysAgo);
+  const startDateStr = startDate.toISOString().split('T')[0];
+
+  const existing = await getCycleData(userId);
+  const avg = Number(existing?.avg_cycle_length) || 28;
+  const existingDates: string[] = existing?.period_start_dates || [];
+
+  if (existingDates.includes(startDateStr)) return; // already recorded
+
+  const { start: ns, end: ne } = predictNextPeriod(startDate, avg);
+  const { start: os, end: oe } = predictOvulationWindow(ns, avg);
+
+  await upsertCycleData(userId, {
+    period_start_dates: [...existingDates, startDateStr],
+    next_period_start: ns.toISOString().split('T')[0],
+    next_period_end: ne.toISOString().split('T')[0],
+    next_ovulation_start: os.toISOString().split('T')[0],
+    next_ovulation_end: oe.toISOString().split('T')[0],
+  } as any);
+}
+
 // ─── Memory Log ───────────────────────────────────────────────────────────────
 
 export async function addMemoryLog(

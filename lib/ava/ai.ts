@@ -170,20 +170,27 @@ Warm, friendly tone. Not pushy. Max 3 sentences.`;
 
 // ─── Extract log summary for memory ──────────────────────────────────────────
 
-export async function extractLogSummary(message: string): Promise<{ category: string; summary: string }> {
+export async function extractLogSummary(message: string): Promise<{ category: string; summary: string; periodStart: boolean; daysAgo: number }> {
   const prompt = `Extract a short memory log entry from this message for a period tracking app.
 
 Message: "${message}"
 
+Also detect if this message reports that the user's period has just started (e.g. "my period started today", "it came early", "period showed up yesterday", "I'm on my period now") — as opposed to just mentioning a symptom, a past period, or asking a question. If so, figure out how many days ago it started (0 = today, 1 = yesterday, etc — default 0 if unclear).
+
 Reply in this exact JSON format (no markdown, no backticks):
-{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"10 words max describing what was logged"}`;
+{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"10 words max describing what was logged","periodStart":true|false,"daysAgo":0}`;
 
   const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 150, thinkingLevel: 'minimal' });
   try {
     const parsed = JSON.parse(result.trim());
-    return { category: parsed.category || 'symptom', summary: parsed.summary || message.slice(0, 60) };
+    return {
+      category: parsed.category || 'symptom',
+      summary: parsed.summary || message.slice(0, 60),
+      periodStart: Boolean(parsed.periodStart),
+      daysAgo: Number.isFinite(parsed.daysAgo) ? Math.max(0, Math.min(7, parsed.daysAgo)) : 0,
+    };
   } catch {
-    return { category: 'symptom', summary: message.slice(0, 60) };
+    return { category: 'symptom', summary: message.slice(0, 60), periodStart: false, daysAgo: 0 };
   }
 }
 
@@ -210,6 +217,27 @@ Answer warmly and specifically using their data. If you spot a pattern, mention 
   return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
 }
 
+// Only the last few days matter for casual conversation — the full history
+// (up to 150 days for premium) belongs to /insights, /changes, /patterns,
+// which are DESIGNED to synthesize across everything. Feeding that same
+// full dump into every casual reply is what caused "if you log malaria,
+// every response mentions malaria" — a memorable entry sitting in a
+// 120-line list for months looks equally salient every single time,
+// regardless of whether it's actually relevant to what was just said.
+function getRecentConversationContext(logs: MemoryLog[]): string {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 3);
+  const recent = logs.filter(l => new Date(l.logged_at) >= cutoff).slice(0, 6);
+
+  if (recent.length > 0) return formatMemoryForAI(recent);
+
+  if (logs.length === 0) return 'No history yet.';
+
+  const last = logs[0];
+  const daysAgo = Math.round((Date.now() - new Date(last.logged_at).getTime()) / 86400000);
+  return `Nothing logged in the last few days. Most recent entry: [${last.category}] ${last.summary} (${daysAgo}d ago) — don't bring this up unless it's actually relevant to the current message.`;
+}
+
 // ─── Handle CONVERSATION with Pro model ───────────────────────────────────────
 
 export async function handleConversation(
@@ -217,9 +245,9 @@ export async function handleConversation(
   message: string,
   memoryLogs: MemoryLog[]
 ): Promise<string> {
-  const context = formatMemoryForAI(memoryLogs);
+  const context = getRecentConversationContext(memoryLogs);
 
-  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app. This has to feel like a personal companion who genuinely knows this specific user — never generic.
+  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app. This has to feel like talking to a real friend who knows this person — never generic, and never repetitive like a script.
 
 About this user:
 - Name: ${user.name}
@@ -228,18 +256,19 @@ About this user:
 - Known conditions: ${user.conditions?.join(', ') || 'none stated'}
 - Birth control: ${user.birth_control || 'none stated'}
 
-Their recent health log:
+Recent context (last few days only — their full history lives in /insights, not here):
 ${context}
 
 Rules:
-- Speak like a caring, informed friend who actually remembers this person — warm but not cheesy
-- PERSONALIZATION (non-negotiable): address them as ${user.name} — never a generic greeting like "hi there" or "hey there". Use their name naturally, especially when greeting them, opening a reply, or checking in.
-- Ground your reply in THEIR specifics whenever it fits — their stated goal, a symptom or mood they logged recently, a pattern in their log — rather than a generic answer that could apply to anyone.
-- Reference their personal data when relevant
+- Speak like a caring, informed friend — warm but not cheesy, and not repetitive
+- PERSONALIZATION (non-negotiable): address them as ${user.name} — never a generic greeting like "hi there" or "hey there". Use their name naturally, especially when greeting them or opening a reply.
+- ANTI-REPETITION (important): only bring up something from their recent context if it's directly relevant to what they just said right now. A real friend doesn't ask "how's that malaria?" in every single conversation just because you mentioned it once — only when it naturally comes up. If today's message has nothing to do with their recent log, don't force a connection to it.
+- Reference their personal data only when it genuinely improves your answer, not as decoration to prove you remember
 - NEVER diagnose or prescribe
 - For serious symptoms, always say "worth checking with your doctor"
-- LENGTH RULE (non-negotiable): Maximum 3 sentences per response. Count them. Stop at 3. If the user asks for detail, maximum 4 sentences. Never write a paragraph.
-- One emoji max`;
+- LENGTH: match the message, don't default to the same length every time. A quick factual question deserves a quick, direct answer — sometimes one sentence is enough. A more open-ended or emotional message can run 3-4 sentences. Never pad a short answer just to hit a sentence count, and never write a paragraph.
+- VARIETY: don't reuse the same opening words, sentence rhythm, or stock phrases reply after reply — vary how you start and structure each response like a real person would
+- One emoji max, and not on every message`;
 
   const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 900, thinkingLevel: 'minimal' });
   return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;

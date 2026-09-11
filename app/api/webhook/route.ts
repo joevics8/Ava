@@ -426,24 +426,13 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     const awaitingPeriodConfirmation = user.onboarding_step === 85;
 
     if (awaitingPeriodConfirmation && ['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(normalizedText)) {
-      const today = new Date().toISOString().split('T')[0];
-      const { getCycleData, upsertCycleData } = await import('@/lib/ava/db');
-      const { predictNextPeriod, predictOvulationWindow } = await import('@/lib/ava/cycle');
-      const existing = await getCycleData(user.id);
-      const avg = Number(existing?.avg_cycle_length) || 28;
-      const todayDate = new Date();
-      const { start: ns, end: ne } = predictNextPeriod(todayDate, avg);
-      const { start: os, end: oe } = predictOvulationWindow(ns, avg);
-      const existingDates = existing?.period_start_dates || [];
-      await upsertCycleData(user.id, {
-        period_start_dates: [...existingDates, today],
-        next_period_start: ns.toISOString().split('T')[0],
-        next_period_end: ne.toISOString().split('T')[0],
-        next_ovulation_start: os.toISOString().split('T')[0],
-        next_ovulation_end: oe.toISOString().split('T')[0],
-      });
+      const { recordPeriodStart, getCycleData } = await import('@/lib/ava/db');
+      await recordPeriodStart(user.id, 0);
       await updateUser(telegramId, { onboarding_step: 0 } as any);
-      const nextStr = ns.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+      const updated = await getCycleData(user.id);
+      const nextStr = updated?.next_period_start
+        ? new Date(updated.next_period_start).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+        : 'soon';
       await sendMessage(chatId,
         `Got it, ${user.name} 🩸 I've noted today as your period start.
 
@@ -769,23 +758,37 @@ async function routeMessage(
   }
 
   if (category === 'LOG') {
-    const { category: logCat, summary } = await extractLogSummary(text);
+    const { category: logCat, summary, periodStart, daysAgo } = await extractLogSummary(text);
     await addMemoryLog(user.id, logCat as any, summary);
+
+    // If this log is actually reporting a period start ("started today",
+    // "came 2 days early") — not just a symptom mention — update cycle_data
+    // so /today and the morning digest reflect it immediately, instead of
+    // continuing to show the old predicted date while the AI "remembers"
+    // the new one only in chat.
+    let updatedPeriodNote = '';
+    if (periodStart) {
+      const { recordPeriodStart, getCycleData } = await import('@/lib/ava/db');
+      await recordPeriodStart(user.id, daysAgo);
+      const updated = await getCycleData(user.id);
+      if (updated?.next_period_start) {
+        const nextStr = new Date(updated.next_period_start).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+        updatedPeriodNote = ` I've updated your prediction — your next period is now estimated around ${nextStr}.`;
+      }
+    }
 
     const followUpPrompt = `The user just said: "${text}"
 
-Write exactly 3 sentences:
-Sentence 1: Acknowledge with warmth and empathy.
-Sentence 2: Give one relevant insight based on their context if available.
-Sentence 3: Ask ONE caring follow-up question.
+Respond like a caring friend would to this specific message:
+- Acknowledge it warmly — briefly, don't over-explain
+- Only mention something from their recent context if it's genuinely relevant to THIS message — don't force a connection to an old, unrelated log entry just because it's available
+- If it fits naturally, ask one caring follow-up question — but not every single time; sometimes a short acknowledgment is enough on its own
 
-Do not write more than 3 sentences. Count them before sending.
-
-Their recent context: ${memoryLogs.slice(0, 10).map((l: any) => l.summary).join(', ') || 'none yet'}`;
+Keep it short — 1-3 sentences depending on what the message actually needs. Don't pad it out.`;
 
     await sendTyping(chatId);
     const response = await handleConversation(user, followUpPrompt, memoryLogs);
-    await sendMessage(chatId, response || `Aww — how are you feeling overall? 🌸`, false);
+    await sendMessage(chatId, (response || `Aww — how are you feeling overall? 🌸`) + updatedPeriodNote, false);
     const insight = await summarizeChatInsight(text, response);
     await addMemoryLog(user.id, 'chat', insight);
 
