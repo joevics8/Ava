@@ -65,6 +65,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  // Qualify a referral if this user was referred — qualifyReferralIfAny only
+  // transitions a 'pending' row, so renewal payments (this webhook fires
+  // every month) are a no-op after the first qualification, and referrers
+  // are never double-credited for the same person renewing.
+  if (user.referred_by) {
+    const { qualifyReferralIfAny } = await import('@/lib/ava/db');
+    await qualifyReferralIfAny(user.id);
+  }
+
   // Confirm upgrade in Telegram
   await sendMessage(
     telegramId,

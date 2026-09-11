@@ -274,7 +274,11 @@ async function processUpdate(update: any) {
     // ── Get or create user ───────────────────────────────────────────────────
     let user = await getUser(telegramId);
     if (!user) {
-      user = await createUser(telegramId);
+      // Telegram deep links (t.me/Ava_care_bot?start=CODE) arrive as the
+      // literal message text "/start CODE" on first contact — capture the
+      // referral code here, the only point a brand-new user is created.
+      const startPayload = normalizedText.startsWith('/start ') ? text.slice(7).trim() : undefined;
+      user = await createUser(telegramId, startPayload);
       await sendMessage(chatId,
         `Hi, I'm *Ava* 🌸\n\nI'm your personal cycle & wellness companion. I can help you understand your cycle, track symptoms, and answer questions about your body.\n\nLet's get you set up — it only takes a minute.\n\nWhat's your name?`, true
       );
@@ -283,7 +287,12 @@ async function processUpdate(update: any) {
 
     // ── STRICT COMMAND GATE — must be before everything else ────────────────
     if (text.startsWith('/')) {
-      await handleCommand(text.split('@')[0].toLowerCase(), chatId, telegramId, user, sendMessage, sendWithKeyboard);
+      // Strip any payload after the command (e.g. an existing user re-sending
+      // "/start CODE") so switch-case matching in handleCommand isn't broken
+      // by trailing text — previously "/start CODE" fell through to the
+      // "command not recognized" default case for existing users.
+      const command = text.split('@')[0].split(/\s+/)[0].toLowerCase();
+      await handleCommand(command, chatId, telegramId, user, sendMessage, sendWithKeyboard);
       return;
     }
 
@@ -511,7 +520,7 @@ async function handleCommand(
         return;
       }
       if (user.onboarding_complete) {
-        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
+        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
       } else {
         await send(chatId, "Hi, I'm *Ava* 🌸 Let's get you set up — what's your name?", true);
       }
@@ -663,8 +672,27 @@ async function handleCommand(
         "/log — track symptoms\n" +
         "/settings — update your info\n" +
         "/premium — upgrade\n" +
+        "/referral — earn ₦1,000 per friend who goes Premium\n" +
         "/report — monthly PDF (Premium)\n\n" +
         "Or just talk to me naturally 🌸"
+      );
+      return;
+    }
+
+    case '/referral': {
+      if (!user) { await send(chatId, "Send /start to begin 🌸"); return; }
+      const { getReferralStats } = await import('@/lib/ava/db');
+      const stats = await getReferralStats(user.id);
+      const botName = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot';
+      const link = `https://t.me/${botName}?start=${stats.code}`;
+      await send(chatId,
+        `💸 *Refer & Earn*\n\n` +
+        `Share your link — you earn *₦1,000* for every friend who joins Premium:\n\n${link}\n\n` +
+        `📊 *Your stats:*\n` +
+        `• ${stats.pending} joined, not yet Premium\n` +
+        `• ${stats.qualified} qualified — payout pending\n` +
+        `• ${stats.paid} paid out (₦${stats.totalEarned.toLocaleString()} total)\n\n` +
+        `Payouts are reviewed and sent manually for now — reach out once someone's qualified 🌸`
       );
       return;
     }

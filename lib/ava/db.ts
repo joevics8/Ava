@@ -14,15 +14,92 @@ export async function getUser(telegramId: number): Promise<AvaUser | null> {
   return data as AvaUser;
 }
 
-export async function createUser(telegramId: number): Promise<AvaUser | null> {
+export async function createUser(telegramId: number, referredByCode?: string): Promise<AvaUser | null> {
+  const referralCode = await generateUniqueReferralCode();
+
+  let referredBy: string | null = null;
+  if (referredByCode) {
+    const { data: referrer } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('referral_code', referredByCode.toUpperCase())
+      .single();
+    if (referrer) referredBy = referrer.id;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('users')
-    .insert({ telegram_id: telegramId, onboarding_step: 0 })
+    .insert({
+      telegram_id: telegramId,
+      onboarding_step: 0,
+      referral_code: referralCode,
+      referred_by: referredBy,
+    })
     .select()
     .single();
 
   if (error || !data) return null;
+
+  // Log the referral relationship for payout tracking. Self-referral (a
+  // referrer somehow referring their own second account) isn't blocked at
+  // this layer — telegram_id uniqueness prevents the exact same account,
+  // but a determined person could still create a second Telegram account.
+  // Flagging that as a known gap rather than solving it now: at current
+  // scale, manual review before payout is the practical guard.
+  if (referredBy) {
+    await supabaseAdmin.from('referrals').insert({
+      referrer_id: referredBy,
+      referred_id: data.id,
+      status: 'pending',
+    });
+  }
+
   return data as AvaUser;
+}
+
+// ─── Referrals ────────────────────────────────────────────────────────────────
+
+async function generateUniqueReferralCode(): Promise<string> {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L — avoids ambiguity
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    const { data } = await supabaseAdmin.from('users').select('id').eq('referral_code', code).single();
+    if (!data) return code;
+  }
+  // Extremely unlikely fallback — timestamp-based, still short
+  return 'R' + Date.now().toString(36).toUpperCase().slice(-5);
+}
+
+export async function getReferralStats(userId: string): Promise<{
+  code: string | null;
+  pending: number;
+  qualified: number;
+  paid: number;
+  totalEarned: number;
+}> {
+  const { data: user } = await supabaseAdmin.from('users').select('referral_code').eq('id', userId).single();
+  const { data: referrals } = await supabaseAdmin.from('referrals').select('status, payout_amount').eq('referrer_id', userId);
+
+  const rows = referrals || [];
+  const pending = rows.filter(r => r.status === 'pending').length;
+  const qualified = rows.filter(r => r.status === 'qualified').length;
+  const paid = rows.filter(r => r.status === 'paid').length;
+  const totalEarned = rows.filter(r => r.status === 'paid').reduce((sum, r) => sum + (r.payout_amount || 0), 0);
+
+  return { code: user?.referral_code || null, pending, qualified, paid, totalEarned };
+}
+
+// Called when a user's premium payment is confirmed — qualifies the referral
+// exactly once (transitions pending -> qualified). Renewal payments find the
+// row already past 'pending' and this is a no-op, so referrers aren't
+// double-credited for the same person renewing month after month.
+export async function qualifyReferralIfAny(referredUserId: string): Promise<void> {
+  await supabaseAdmin
+    .from('referrals')
+    .update({ status: 'qualified', qualified_at: new Date().toISOString() })
+    .eq('referred_id', referredUserId)
+    .eq('status', 'pending');
 }
 
 export async function updateUser(

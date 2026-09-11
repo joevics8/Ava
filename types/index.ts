@@ -21,6 +21,11 @@ export interface AvaUser {
   plan: Plan;
   email: string | null;
   created_at: string;
+  mode?: 'cycle' | 'pregnant';
+  pregnancy_start_date?: string | null;
+  premium_expires_at?: string | null;
+  referral_code?: string | null;
+  referred_by?: string | null;
 }
 
 export interface CycleData {

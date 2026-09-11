@@ -6,7 +6,22 @@ export const metadata: Metadata = {
   description: 'Ava learns your unique cycle, remembers your patterns, and talks to you like a friend who actually gets it.',
 };
 
-export default function HomePage() {
+const BOT_NAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot';
+
+export default function HomePage({
+  searchParams,
+}: {
+  searchParams: { ref?: string };
+}) {
+  // A referral link (avacare.app?ref=CODE) needs to survive the click through
+  // to Telegram, since that's the only place an account actually gets
+  // created — Telegram's own deep-link payload (?start=CODE) is what
+  // carries it the rest of the way, so we just forward the code into it.
+  const ref = searchParams.ref?.trim();
+  const botUrl = ref
+    ? `https://t.me/${BOT_NAME}?start=${encodeURIComponent(ref)}`
+    : `https://t.me/${BOT_NAME}`;
+
   return (
     <main className="min-h-screen bg-[#FFF5F7] flex flex-col items-center justify-center px-4 py-16">
       {/* Hero */}
@@ -21,7 +36,7 @@ export default function HomePage() {
         </p>
 
         <a
-          href="https://t.me/Ava_care_bot"
+          href={botUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-3 bg-[#E91E63] text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:bg-[#C2185B] transition-colors shadow-lg"
@@ -58,7 +73,7 @@ export default function HomePage() {
             <li>✓ Symptom & mood logging</li>
             <li>✓ 2 weeks of memory</li>
           </ul>
-          <a href="https://t.me/Ava_care_bot" target="_blank"
+          <a href={botUrl} target="_blank"
             className="block text-center bg-gray-100 text-gray-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors">
             Start Free
           </a>
@@ -77,7 +92,7 @@ export default function HomePage() {
             <li>✓ Ovulation test strip reading</li>
             <li>✓ Monthly cycle PDF report</li>
           </ul>
-          <a href="https://t.me/Ava_care_bot" target="_blank"
+          <a href={botUrl} target="_blank"
             className="block text-center bg-[#E91E63] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#C2185B] transition-colors">
             Get Premium
           </a>

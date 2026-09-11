@@ -72,6 +72,8 @@ export default function DashboardPage() {
     : null;
 
   const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' }) : '—';
+  const siteUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const referralLink = user.referral_code ? `${siteUrl}?ref=${user.referral_code}` : '';
 
   return (
     <main className="min-h-screen bg-[#FFF5F7]">
@@ -176,6 +178,26 @@ export default function DashboardPage() {
                 <div className="text-sm font-semibold text-yellow-800">✨ Premium active{expiresAt ? ` until ${expiresAt}` : ''}</div>
                 <button onClick={() => setActiveTab('settings')}
                   className="text-xs text-yellow-700 underline">Manage subscription</button>
+              </div>
+            )}
+
+            {/* Refer & Earn card */}
+            {user.referral_code && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold text-gray-800">💸 Refer & Earn</h2>
+                  <span className="text-xs text-gray-400">₦1,000 per friend</span>
+                </div>
+                <p className="text-sm text-gray-500">Share your link — you earn ₦1,000 for every friend who joins Premium.</p>
+                <div className="flex items-center gap-2">
+                  <input readOnly value={referralLink}
+                    className="flex-1 border border-pink-100 rounded-xl px-3 py-2 text-xs text-gray-600 bg-[#FFF5F7]" />
+                  <button
+                    onClick={() => navigator.clipboard.writeText(referralLink)}
+                    className="bg-[#E91E63] text-white px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap">
+                    Copy
+                  </button>
+                </div>
               </div>
             )}
           </>
