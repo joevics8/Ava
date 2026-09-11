@@ -13,6 +13,30 @@ import {
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
+// Default is the 'Boss' account since that's the one that's been running
+// premium — override with ADMIN_TELEGRAM_ID in env if that's not actually you.
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+
+// Best-effort admin alert on real failures — there's no Sentry/monitoring
+// service wired in, so without this the only way to know something broke
+// was to go check Vercel logs yourself. Wrapped in try/catch so a failed
+// notification can never itself crash the handler it's reporting from.
+async function notifyAdmin(context: string, err: unknown) {
+  try {
+    const detail = err instanceof Error ? err.message : String(err);
+    await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: ADMIN_TELEGRAM_ID,
+        text: `⚠️ Ava error in ${context}:\n${detail.slice(0, 500)}`,
+      }),
+    });
+  } catch {
+    // Nothing more we can do if even the alert fails.
+  }
+}
+
 function getContextualFollowUp(recentLog: string, mood: string): string {
   const lower = recentLog.toLowerCase();
   if (mood === 'good') {
@@ -96,6 +120,15 @@ async function sendTyping(chatId: number) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
   });
+}
+
+// Simple sliding-window rate limit backed by Supabase (no Redis configured
+// for this project). Protects against a spam loop or malicious actor
+// running up Gemini/Paystack costs — 20 messages/minute is generous for
+// real usage but blocks a runaway script.
+async function isRateLimited(telegramId: number): Promise<boolean> {
+  const { checkAndBumpRateLimit } = await import('@/lib/ava/db');
+  return checkAndBumpRateLimit(telegramId);
 }
 
 async function sendWithKeyboard(chatId: number, text: string, keyboard: any[][], markdown = false) {
@@ -202,6 +235,15 @@ async function processUpdate(update: any) {
     // mobile keyboard default) or stray punctuation silently broke every one
     // of them, including the pregnancy-mode switch. Use a normalized form.
     const normalizedText = text.toLowerCase().trim();
+
+    // ── Rate limit ───────────────────────────────────────────────────────────
+    // 20 messages/minute is generous for real usage but stops a spam loop
+    // (or malicious actor) from running up Gemini/Paystack costs. Silently
+    // drops rather than processing further — no Gemini call, no Telegram
+    // send — so it actually protects the thing it's meant to protect.
+    if (await isRateLimited(telegramId)) {
+      return NextResponse.json({ ok: true });
+    }
 
     // ── Photo messages ────────────────────────────────────────────────────────
     if (message.photo?.length) {
@@ -488,6 +530,7 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('Webhook error:', err);
+    await notifyAdmin('processUpdate', err);
     return NextResponse.json({ ok: true });
   }
 }
@@ -687,10 +730,7 @@ async function handleCommand(
     }
 
     case '/admin_referrals': {
-      // Owner-only. Default is the account that's been running premium
-      // (name 'Boss') — override with ADMIN_TELEGRAM_ID in env if that's
-      // not actually you.
-      const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+      // Owner-only.
       if (telegramId !== ADMIN_TELEGRAM_ID) {
         await send(chatId, "I don't recognise that command. Send /help to see what I can do 🌸");
         return;

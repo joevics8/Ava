@@ -15,12 +15,23 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+async function notifyAdmin(context: string, err: unknown) {
+  try {
+    const detail = err instanceof Error ? err.message : String(err);
+    await sendMessage(ADMIN_TELEGRAM_ID, `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}`);
+  } catch {
+    // Nothing more we can do if even the alert fails.
+  }
+}
+
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  try {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -35,6 +46,10 @@ export async function GET(req: NextRequest) {
   const results = { period_soon: 0, fertile: 0, confirm: 0, contraception: 0 };
 
   for (const user of users) {
+    // One user's bad data (a malformed date, a failed Telegram send)
+    // previously could crash the whole loop for every remaining user —
+    // this cron has no reason to be all-or-nothing per user.
+    try {
     // Pregnant-mode users shouldn't get cycle-based alerts at all — "your
     // period is late", "did it start? reply yes/not yet", and fertile-window
     // warnings are all wrong (and confusing, potentially distressing) once
@@ -121,6 +136,9 @@ export async function GET(req: NextRequest) {
       );
       results.contraception++;
     }
+    } catch (err) {
+      console.error('Alert cron per-user error:', user.telegram_id, err);
+    }
   }
 
   // ── Premium renewal reminders ────────────────────────────────────────────
@@ -131,6 +149,7 @@ export async function GET(req: NextRequest) {
     .not('premium_expires_at', 'is', null);
 
   for (const u of premiumUsers || []) {
+    try {
     const expires = new Date(u.premium_expires_at);
     const daysLeft = Math.ceil((expires.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     if (daysLeft === 3) {
@@ -140,7 +159,15 @@ export async function GET(req: NextRequest) {
 Send /premium to renew and keep your full memory and daily digest.`
       );
     }
+    } catch (err) {
+      console.error('Renewal reminder per-user error:', u.telegram_id, err);
+    }
   }
 
   return NextResponse.json({ ...results, total_users: users.length });
+  } catch (err) {
+    console.error('Alerts cron error:', err);
+    await notifyAdmin('cron/alerts', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
 }

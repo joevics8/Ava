@@ -343,3 +343,35 @@ export function formatMemoryForAI(logs: MemoryLog[]): string {
     })
     .join('\n');
 }
+
+// ─── Rate limiting ──────────────────────────────────────────────────────────
+// Sliding-window limit backed by Supabase (no Redis configured for this
+// project). Protects against a spam loop or malicious actor running up
+// Gemini/Paystack costs against the webhook.
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+export async function checkAndBumpRateLimit(telegramId: number): Promise<boolean> {
+  const now = new Date();
+  const { data: row } = await supabaseAdmin
+    .from('message_rate_limit')
+    .select('window_start, count')
+    .eq('telegram_id', telegramId)
+    .single();
+
+  if (!row || now.getTime() - new Date(row.window_start).getTime() > RATE_LIMIT_WINDOW_MS) {
+    await supabaseAdmin.from('message_rate_limit').upsert({
+      telegram_id: telegramId,
+      window_start: now.toISOString(),
+      count: 1,
+    });
+    return false;
+  }
+
+  if (row.count >= RATE_LIMIT_MAX) return true; // limited
+
+  await supabaseAdmin.from('message_rate_limit')
+    .update({ count: row.count + 1 })
+    .eq('telegram_id', telegramId);
+  return false;
+}

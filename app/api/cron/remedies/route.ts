@@ -11,12 +11,23 @@ async function sendMessage(chatId: number, text: string) {
   });
 }
 
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+async function notifyAdmin(context: string, err: unknown) {
+  try {
+    const detail = err instanceof Error ? err.message : String(err);
+    await sendMessage(ADMIN_TELEGRAM_ID, `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}`);
+  } catch {
+    // Nothing more we can do if even the alert fails.
+  }
+}
+
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  try {
   const now = new Date().toISOString();
 
   // Find remedies due for follow-up
@@ -31,6 +42,7 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   for (const item of due) {
+    try {
     const telegramId = (item.users as any)?.telegram_id;
     const name = (item.users as any)?.name || 'there';
     if (!telegramId) continue;
@@ -51,7 +63,15 @@ export async function GET(req: NextRequest) {
       .eq('id', item.id);
 
     sent++;
+    } catch (err) {
+      console.error('Remedy follow-up per-item error:', item.id, err);
+    }
   }
 
   return NextResponse.json({ sent, total: due.length });
+  } catch (err) {
+    console.error('Remedies cron error:', err);
+    await notifyAdmin('cron/remedies', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
 }

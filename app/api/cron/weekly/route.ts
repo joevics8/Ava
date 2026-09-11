@@ -13,12 +13,23 @@ async function sendMessage(chatId: number, text: string) {
   });
 }
 
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+async function notifyAdmin(context: string, err: unknown) {
+  try {
+    const detail = err instanceof Error ? err.message : String(err);
+    await sendMessage(ADMIN_TELEGRAM_ID, `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}`);
+  } catch {
+    // Nothing more we can do if even the alert fails.
+  }
+}
+
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  try {
   const { data: users } = await supabaseAdmin
     .from('users')
     .select('*')
@@ -45,4 +56,9 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ sent, total: users.length });
+  } catch (err) {
+    console.error('Weekly cron error:', err);
+    await notifyAdmin('cron/weekly', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
 }

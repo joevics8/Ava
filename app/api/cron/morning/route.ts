@@ -23,12 +23,27 @@ async function sendMorning(chatId: number, text: string, showButtons: boolean) {
   });
 }
 
+const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+async function notifyAdmin(context: string, err: unknown) {
+  try {
+    const detail = err instanceof Error ? err.message : String(err);
+    await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: ADMIN_TELEGRAM_ID, text: `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}` }),
+    });
+  } catch {
+    // Nothing more we can do if even the alert fails.
+  }
+}
+
 export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  try {
   // All users — free and premium
   const { data: users } = await supabaseAdmin
     .from('users')
@@ -61,4 +76,9 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ sent, total: users.length });
+  } catch (err) {
+    console.error('Morning cron error:', err);
+    await notifyAdmin('cron/morning', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
 }
