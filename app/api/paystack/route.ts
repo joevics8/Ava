@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  const { reference, metadata } = event.data;
+  const { reference, metadata, authorization, amount } = event.data;
   const telegramId = metadata?.telegram_id
     ? Number(metadata.telegram_id)
     : null;
@@ -65,13 +65,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  // Record the payment (with card fingerprint for referral fraud checks)
+  // before qualifying any referral, since qualification needs the fingerprint.
+  const { recordPayment } = await import('@/lib/ava/db');
+  const fingerprint = await recordPayment(user.id, reference, amount, {
+    bin: authorization?.bin,
+    last4: authorization?.last4,
+    bank: authorization?.bank,
+    card_type: authorization?.card_type,
+    authorization_code: authorization?.authorization_code,
+  });
+
   // Qualify a referral if this user was referred — qualifyReferralIfAny only
   // transitions a 'pending' row, so renewal payments (this webhook fires
   // every month) are a no-op after the first qualification, and referrers
-  // are never double-credited for the same person renewing.
+  // are never double-credited for the same person renewing. It also checks
+  // the card fingerprint against the referrer's own payments and any other
+  // accounts the same referrer has referred, marking the referral 'invalid'
+  // instead of 'qualified' when they match — the main realistic self-
+  // referral fraud pattern (same card, different "friend" accounts).
   if (user.referred_by) {
     const { qualifyReferralIfAny } = await import('@/lib/ava/db');
-    await qualifyReferralIfAny(user.id);
+    await qualifyReferralIfAny(user.id, fingerprint);
   }
 
   // Confirm upgrade in Telegram

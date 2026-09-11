@@ -697,6 +697,37 @@ async function handleCommand(
       return;
     }
 
+    case '/admin_referrals': {
+      // Owner-only. Default is the account that's been running premium
+      // (name 'Boss') — override with ADMIN_TELEGRAM_ID in env if that's
+      // not actually you.
+      const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
+      if (telegramId !== ADMIN_TELEGRAM_ID) {
+        await send(chatId, "I don't recognise that command. Send /help to see what I can do 🌸");
+        return;
+      }
+      const { getAdminReferralSummary } = await import('@/lib/ava/db');
+      const summary = await getAdminReferralSummary();
+
+      let text = `💸 *Referral Payouts Owed*\n\n`;
+      if (summary.qualified.length === 0) {
+        text += `Nothing owed right now.\n\n`;
+      } else {
+        text += summary.qualified
+          .map(q => `• ${q.referrerName} (${q.referrerTelegramId}) — referred ${q.referredName} — ₦${q.amount.toLocaleString()}`)
+          .join('\n') + '\n\n';
+      }
+      text += `*Totals:* ₦${summary.totals.qualifiedAmount.toLocaleString()} owed (${summary.totals.qualifiedCount}) · ₦${summary.totals.paidAmount.toLocaleString()} paid out (${summary.totals.paidCount})`;
+
+      if (summary.flagged.length > 0) {
+        text += `\n\n⚠️ *Flagged for review:*\n` +
+          summary.flagged.map(f => `• ${f.referrerName} → ${f.referredName}: ${f.note}`).join('\n');
+      }
+
+      await send(chatId, text);
+      return;
+    }
+
     default: {
       // Unknown command — let the user know
       await send(chatId, "I don't recognise that command. Send /help to see what I can do 🌸");

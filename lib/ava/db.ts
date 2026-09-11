@@ -94,12 +94,137 @@ export async function getReferralStats(userId: string): Promise<{
 // exactly once (transitions pending -> qualified). Renewal payments find the
 // row already past 'pending' and this is a no-op, so referrers aren't
 // double-credited for the same person renewing month after month.
-export async function qualifyReferralIfAny(referredUserId: string): Promise<void> {
+//
+// Fraud check: Paystack gives us a coarse card fingerprint (bin-last4-bank)
+// on every successful charge even though the "customer" email is synthetic
+// per telegram_id. Before qualifying, check whether this same card has paid
+// for the referrer's own account, or for another account this same referrer
+// has referred — both are strong signals of one person controlling both
+// ends of the referral. Those get marked 'invalid' instead of 'qualified'.
+// A match against some unrelated third party's card is a weaker signal
+// (could be a shared family card) — still qualifies, but with a note left
+// for manual review rather than a hard block.
+export async function qualifyReferralIfAny(referredUserId: string, fingerprint?: string | null): Promise<void> {
+  const { data: referral } = await supabaseAdmin
+    .from('referrals')
+    .select('id, referrer_id')
+    .eq('referred_id', referredUserId)
+    .eq('status', 'pending')
+    .single();
+
+  if (!referral) return;
+
+  if (fingerprint) {
+    const { data: matches } = await supabaseAdmin
+      .from('user_payments')
+      .select('user_id')
+      .eq('fingerprint', fingerprint)
+      .neq('user_id', referredUserId);
+
+    if (matches && matches.length > 0) {
+      const matchedUserIds = new Set(matches.map(m => m.user_id));
+
+      if (matchedUserIds.has(referral.referrer_id)) {
+        await supabaseAdmin.from('referrals').update({
+          status: 'invalid',
+          fraud_note: 'Same card as referrer\'s own payment — likely self-referral',
+        }).eq('id', referral.id);
+        return;
+      }
+
+      const { data: siblingReferrals } = await supabaseAdmin
+        .from('referrals')
+        .select('referred_id')
+        .eq('referrer_id', referral.referrer_id)
+        .neq('referred_id', referredUserId);
+      const siblingIds = new Set((siblingReferrals || []).map(r => r.referred_id));
+
+      const matchesSibling = Array.from(matchedUserIds).some(id => siblingIds.has(id));
+      if (matchesSibling) {
+        await supabaseAdmin.from('referrals').update({
+          status: 'invalid',
+          fraud_note: 'Card matches another account referred by the same person',
+        }).eq('id', referral.id);
+        return;
+      }
+
+      // Unrelated match — qualify, but flag for a human to glance at
+      await supabaseAdmin.from('referrals').update({
+        status: 'qualified',
+        qualified_at: new Date().toISOString(),
+        fraud_note: 'Card fingerprint also seen on another unrelated account — worth a quick manual check',
+      }).eq('id', referral.id);
+      return;
+    }
+  }
+
   await supabaseAdmin
     .from('referrals')
     .update({ status: 'qualified', qualified_at: new Date().toISOString() })
-    .eq('referred_id', referredUserId)
-    .eq('status', 'pending');
+    .eq('id', referral.id);
+}
+
+export async function recordPayment(
+  userId: string,
+  reference: string,
+  amount: number,
+  authorization?: { bin?: string; last4?: string; bank?: string; card_type?: string; authorization_code?: string }
+): Promise<string | null> {
+  const fingerprint = authorization?.bin && authorization?.last4
+    ? `${authorization.bin}-${authorization.last4}-${authorization.bank || ''}`
+    : null;
+
+  await supabaseAdmin.from('user_payments').insert({
+    user_id: userId,
+    reference,
+    amount,
+    card_bin: authorization?.bin || null,
+    card_last4: authorization?.last4 || null,
+    bank: authorization?.bank || null,
+    card_type: authorization?.card_type || null,
+    authorization_code: authorization?.authorization_code || null,
+    fingerprint,
+  });
+
+  return fingerprint;
+}
+
+export async function getAdminReferralSummary(): Promise<{
+  qualified: Array<{ referrerName: string; referrerTelegramId: number; referredName: string; amount: number }>;
+  flagged: Array<{ referrerName: string; referredName: string; note: string }>;
+  totals: { qualifiedCount: number; qualifiedAmount: number; paidCount: number; paidAmount: number };
+}> {
+  const { data: rows } = await supabaseAdmin
+    .from('referrals')
+    .select('status, payout_amount, fraud_note, referrer:referrer_id(name, telegram_id), referred:referred_id(name)')
+    .in('status', ['qualified', 'paid'])
+    .order('created_at', { ascending: true });
+
+  const all = (rows || []) as any[];
+  const qualified = all
+    .filter(r => r.status === 'qualified')
+    .map(r => ({
+      referrerName: r.referrer?.name || 'Unknown',
+      referrerTelegramId: r.referrer?.telegram_id,
+      referredName: r.referred?.name || 'Unknown',
+      amount: r.payout_amount,
+    }));
+  const flagged = all
+    .filter(r => r.fraud_note)
+    .map(r => ({ referrerName: r.referrer?.name || 'Unknown', referredName: r.referred?.name || 'Unknown', note: r.fraud_note }));
+
+  const paidRows = all.filter(r => r.status === 'paid');
+
+  return {
+    qualified,
+    flagged,
+    totals: {
+      qualifiedCount: qualified.length,
+      qualifiedAmount: qualified.reduce((s, r) => s + r.amount, 0),
+      paidCount: paidRows.length,
+      paidAmount: paidRows.reduce((s, r) => s + (r.payout_amount || 0), 0),
+    },
+  };
 }
 
 export async function updateUser(
