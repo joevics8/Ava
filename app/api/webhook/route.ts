@@ -841,7 +841,9 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     await maybeSuggestRemedy(chatId, user, text);
 
   } else if (category === 'RETRIEVAL') {
-    const response = await handleRetrieval(user, text, memoryLogs);
+    const { getCycleData } = await import('@/lib/ava/db');
+    const cycleData = await getCycleData(user.id);
+    const response = await handleRetrieval(user, text, memoryLogs, cycleData);
     await sendMessage(chatId, response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`, false);
 
   } else {

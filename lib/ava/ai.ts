@@ -199,19 +199,40 @@ Reply in this exact JSON format (no markdown, no backticks):
 export async function handleRetrieval(
   user: AvaUser,
   message: string,
-  memoryLogs: MemoryLog[]
+  memoryLogs: MemoryLog[],
+  cycleData?: { next_period_start?: string | null; next_period_end?: string | null; next_ovulation_start?: string | null; next_ovulation_end?: string | null; avg_cycle_length?: number | null; confidence_pct?: number | null } | null
 ): Promise<string> {
   const context = formatMemoryForAI(memoryLogs);
+
+  // Ground-truth prediction from cycle_data — the app already computed this
+  // properly (predictNextPeriod/predictOvulationWindow, with their confidence
+  // window), so the model should read it, not re-derive its own answer by
+  // doing "last period + avg cycle length" arithmetic from whatever dates
+  // happen to be mentioned in the memory log. Without this, the AI's own
+  // math (e.g. Sept 10 + 30 days = Oct 10) can quietly diverge from the
+  // actual stored prediction (Oct 8, from a ±2 day window) — same underlying
+  // data, two different-looking answers, which erodes trust in the numbers.
+  const cycleFacts = cycleData
+    ? `Current cycle prediction (use these exact values — do not recalculate them yourself):
+- Next period expected: ${cycleData.next_period_start || 'unknown'} to ${cycleData.next_period_end || 'unknown'}
+- Next fertile/ovulation window: ${cycleData.next_ovulation_start || 'unknown'} to ${cycleData.next_ovulation_end || 'unknown'}
+- Average cycle length: ${cycleData.avg_cycle_length || 'unknown'} days
+- Prediction confidence: ${cycleData.confidence_pct != null ? cycleData.confidence_pct + '%' : 'unknown'}`
+    : 'No cycle prediction data available yet.';
+
   const prompt = `The user is asking about their cycle or health history. Use their logged data to answer.
 
 User name: ${user.name}
 Goal: ${user.reproductive_goal}
+
+${cycleFacts}
+
 Memory log (most recent first):
 ${context}
 
 User question: "${message}"
 
-Answer warmly and specifically using their data.
+Answer warmly and specifically using their data. For any date-related question (next period, ovulation, fertile window), use the exact dates given above — never compute your own estimate from raw period start dates and cycle length, even if that math seems simple; the app's stored prediction already accounts for things a quick calculation would miss. Talk like a friend texting back, not a report — skip phrases like "based on your previous note" or "based on the data provided"; just say the thing.
 
 HONESTY (non-negotiable, absolute — not a suggestion to hedge): do not suggest a specific illness, medication, or stressor caused a change in their cycle timing — not even as a hedge ("it's possible this played a role", "these stressors may have contributed") — unless the USER is the one who already made that connection themselves. Illness/symptoms being in their recent log does NOT mean you get to connect it to a cycle change; that connection is a medical claim you have no basis for. If you don't know why something shifted, the correct answer is exactly that: "I'm not sure why that shifted." Nothing more. If the user is pointing out that something looks wrong, take that seriously rather than explaining it away with any theory, hedged or not.
 
