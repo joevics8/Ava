@@ -847,9 +847,11 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     const response = await handleConversation(user, followUpPrompt, memoryLogs);
     await sendMessage(chatId, (response || `Aww — how are you feeling overall? 🌸`) + updatedPeriodNote, false);
     const insight = await summarizeChatInsight(text, response);
-    const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
-    if (!isDuplicateInsight(insight, recentChat)) {
-      await addMemoryLog(user.id, 'chat', insight);
+    if (insight) {
+      const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
+      if (!isDuplicateInsight(insight, recentChat)) {
+        await addMemoryLog(user.id, 'chat', insight);
+      }
     }
 
     // Auto-suggest remedy list if a symptom keyword is detected and the user
@@ -866,9 +868,11 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     const response = await handleConversation(user, text, memoryLogs);
     await sendMessage(chatId, response || `I'm here — tell me more 🌸`, false);
     const insight = await summarizeChatInsight(text, response);
-    const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
-    if (!isDuplicateInsight(insight, recentChat)) {
-      await addMemoryLog(user.id, 'chat', insight);
+    if (insight) {
+      const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
+      if (!isDuplicateInsight(insight, recentChat)) {
+        await addMemoryLog(user.id, 'chat', insight);
+      }
     }
 
     // Free-flowing conversation can mention a symptom too ("ugh my back is

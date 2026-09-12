@@ -171,26 +171,30 @@ Warm, friendly tone. Not pushy. Max 3 sentences.`;
 // ─── Extract log summary for memory ──────────────────────────────────────────
 
 export async function extractLogSummary(message: string): Promise<{ category: string; summary: string; periodStart: boolean; daysAgo: number }> {
-  const prompt = `Extract a short memory log entry from this message for a period tracking app.
+  const prompt = `Extract a short memory tag from this message for a period tracking app.
 
 Message: "${message}"
 
 Also detect if this message reports that the user's period has just started (e.g. "my period started today", "it came early", "period showed up yesterday", "I'm on my period now") — as opposed to just mentioning a symptom, a past period, or asking a question. If so, figure out how many days ago it started (0 = today, 1 = yesterday, etc — default 0 if unclear).
 
-Reply in this exact JSON format (no markdown, no backticks):
-{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"10 words max describing what was logged","periodStart":true|false,"daysAgo":0}`;
+The summary must be a short TAG, not a sentence — 2-4 words, noun-phrase style, no articles ("a"/"the"), no verbs like "reported" or "logged", no punctuation at the end. This gets stored and re-read on every future message, so it must be as short as possible without losing the specific thing that happened.
+Good: "Unprotected sex", "Malaria symptoms", "Heavy cramps", "Sugar craving", "Missed pill"
+Bad: "The user had unprotected sex today", "Reported symptoms of malaria", "User is craving sugar"
 
-  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 150, thinkingLevel: 'minimal' });
+Reply in this exact JSON format (no markdown, no backticks):
+{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"2-4 word tag","periodStart":true|false,"daysAgo":0}`;
+
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 100, thinkingLevel: 'minimal' });
   try {
     const parsed = JSON.parse(result.trim());
     return {
       category: parsed.category || 'symptom',
-      summary: parsed.summary || message.slice(0, 60),
+      summary: (parsed.summary || message.slice(0, 40)).slice(0, 40),
       periodStart: Boolean(parsed.periodStart),
       daysAgo: Number.isFinite(parsed.daysAgo) ? Math.max(0, Math.min(7, parsed.daysAgo)) : 0,
     };
   } catch {
-    return { category: 'symptom', summary: message.slice(0, 60), periodStart: false, daysAgo: 0 };
+    return { category: 'symptom', summary: message.slice(0, 40), periodStart: false, daysAgo: 0 };
   }
 }
 
@@ -326,15 +330,22 @@ export async function summarizeChatInsight(
   userMessage: string,
   aiResponse: string
 ): Promise<string> {
-  const prompt = `Summarize the key health insight from this conversation in 10 words or less.
+  const prompt = `Extract the key health-relevant point from this conversation as a short TAG, not a sentence — 2-5 words, noun-phrase style, no articles, no verbs like "discussed" or "mentioned", no punctuation at the end. This gets stored and re-read on every future message, so it must be as short as possible without losing the specific thing that happened.
 
 User: "${userMessage}"
 Ava: "${aiResponse}"
 
-Reply with only the summary in 10 words or less. No punctuation at the end. No preamble.`;
+Good: "Cramp pattern, monthly", "Prefers yoga over running", "Sugar craving trigger"
+Bad: "The user mentioned they get cramps monthly", "Discussed a preference for yoga"
 
-  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 100, thinkingLevel: 'minimal' });
-  return result.slice(0, 80) || userMessage.slice(0, 60);
+If there's nothing genuinely worth remembering (small talk, a one-off question with no lasting relevance), reply with exactly: NONE
+
+Reply with only the tag (or NONE). No preamble.`;
+
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 60, thinkingLevel: 'minimal' });
+  const trimmed = result.trim();
+  if (!trimmed || trimmed.toUpperCase() === 'NONE') return '';
+  return trimmed.slice(0, 50);
 }
 
 const STOPWORDS = new Set([
