@@ -26,6 +26,8 @@ async function notifyAdmin(context: string, err: unknown) {
 }
 
 export async function GET(req: NextRequest) {
+  // Triggered by an external service (cron-job.org), not Vercel's native
+  // cron — plain query-param secret, matching the original setup.
   const secret = req.nextUrl.searchParams.get('secret');
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

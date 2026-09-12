@@ -328,6 +328,82 @@ export async function getMemoryContext(
   return data as MemoryLog[];
 }
 
+const PATTERN_STOPWORDS = new Set([
+  'about', 'today', 'again', 'still', 'really', 'quite', 'started', 'feeling',
+  'cycle', 'cycles', 'menstrual', 'period', 'periods',
+]);
+
+// The main intended use of memory: not "here's everything recent, pick
+// something" but a targeted lookup triggered by a specific symptom — same
+// idea as a person checking their own notes. When someone mentions cramps,
+// this checks whether the SAME thing has happened before (across their full
+// history, not just a recent window), how long ago, whether it lines up with
+// roughly the same point in a previous cycle, and what else was logged on
+// that same day last time — a factual basis for Ava to ask "did you have
+// sugar today too?" rather than assert a cause.
+export async function findSymptomPattern(
+  userId: string,
+  summary: string,
+  avgCycleLength?: number | null
+): Promise<{
+  keyword: string;
+  daysSinceLast: number;
+  sameTimeAsCycle: boolean;
+  sameDayCompanion: string | null;
+} | null> {
+  const keywords = summary
+    .toLowerCase()
+    .split(/\W+/)
+    .filter(w => w.length >= 4 && !PATTERN_STOPWORDS.has(w));
+
+  if (keywords.length === 0) return null;
+
+  // Look across full history (not just a recent window) for the same
+  // symptom/keyword — recurrence over months is exactly the kind of
+  // pattern a short recency window would miss entirely.
+  const { data: matches } = await supabaseAdmin
+    .from('memory_log')
+    .select('*')
+    .eq('user_id', userId)
+    .order('logged_at', { ascending: false })
+    .limit(300);
+
+  if (!matches || matches.length < 2) return null;
+
+  // matches[0] is the entry just logged for the current message — skip it.
+  const prior = matches.slice(1).find(m =>
+    keywords.some(k => m.summary.toLowerCase().includes(k))
+  );
+  if (!prior) return null;
+
+  const daysSinceLast = Math.round(
+    (Date.now() - new Date(prior.logged_at).getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  const cycleLen = avgCycleLength || 28;
+  const sameTimeAsCycle = Math.abs(daysSinceLast - cycleLen) <= 3
+    || Math.abs(daysSinceLast - cycleLen * 2) <= 3;
+
+  // What else was logged the same day as that prior occurrence — a
+  // concrete, checkable basis for a "did X happen again?" question,
+  // not an assertion.
+  const priorDate = new Date(prior.logged_at).toDateString();
+  const companion = matches
+    .slice(1)
+    .find(m =>
+      m.id !== prior.id &&
+      new Date(m.logged_at).toDateString() === priorDate &&
+      !keywords.some(k => m.summary.toLowerCase().includes(k))
+    );
+
+  return {
+    keyword: keywords[0],
+    daysSinceLast,
+    sameTimeAsCycle,
+    sameDayCompanion: companion?.summary || null,
+  };
+}
+
 export function formatMemoryForAI(logs: MemoryLog[]): string {
   if (logs.length === 0) return 'No history yet.';
   return logs

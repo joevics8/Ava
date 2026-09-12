@@ -818,11 +818,27 @@ async function routeMessage(
       }
     }
 
-    const followUpPrompt = `The user just said: "${text}"
+    // The main real use of memory: when a symptom is logged, look up
+    // whether the SAME thing has happened before — a targeted lookup, not
+    // "here's everything recent, mention whatever." This is what makes
+    // "oh you had cramps around this same time last cycle" or "last time
+    // this happened, you'd also logged X — was that the case today?"
+    // possible, without dumping unrelated history into every reply.
+    let patternNote = '';
+    if (['symptom', 'mood', 'flow'].includes(logCat)) {
+      const { findSymptomPattern, getCycleData } = await import('@/lib/ava/db');
+      const cycle = await getCycleData(user.id);
+      const pattern = await findSymptomPattern(user.id, summary, cycle?.avg_cycle_length);
+      if (pattern) {
+        patternNote = `\n\nRelevant history lookup (only mention this if it genuinely fits — do not force it in): the user logged something similar ${pattern.daysSinceLast} day(s) ago.${pattern.sameTimeAsCycle ? ' That is roughly the same point in their cycle as now — worth noting as a possible pattern if it feels natural to.' : ''}${pattern.sameDayCompanion ? ` On that same day, they had also logged: "${pattern.sameDayCompanion}" — if relevant, you can ask (as a question, not a claim) whether something similar was true today.` : ''}`;
+      }
+    }
 
+    const followUpPrompt = `The user just said: "${text}"
+${patternNote}
 Respond like a caring friend would to this specific message:
 - Acknowledge it warmly — briefly, don't over-explain
-- Only mention something from their recent context if it's genuinely relevant to THIS message — don't force a connection to an old, unrelated log entry just because it's available
+- Never bring up a past topic, symptom, or issue unless it is directly relevant to what they just said — no exceptions. The "relevant history lookup" above (if present) is the ONLY history you should consider mentioning, and only if it genuinely fits naturally — otherwise ignore it entirely.
 - If it fits naturally, ask one caring follow-up question — but not every single time; sometimes a short acknowledgment is enough on its own
 
 Keep it short — 1-3 sentences depending on what the message actually needs. Don't pad it out.`;
