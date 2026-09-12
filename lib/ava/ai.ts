@@ -211,7 +211,11 @@ ${context}
 
 User question: "${message}"
 
-Answer warmly and specifically using their data. If you spot a pattern, mention it. Maximum 3 sentences. Stop at 3.`;
+Answer warmly and specifically using their data.
+
+HONESTY (non-negotiable): only mention a pattern if you're genuinely confident it's real and supported by the data above — never invent a physiological explanation (like "illness shortened your cycle" or "medication caused this") just because it sounds plausible and something illness-related happens to be in their recent log. If their tracked dates look inconsistent or you're not sure why something changed, say so plainly — "I'm not sure why that shifted" is a better answer than a confident-sounding guess. If the user is pointing out that something looks wrong, take that seriously rather than explaining it away.
+
+Maximum 3 sentences. Stop at 3.`;
 
   const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 600, thinkingLevel: 'minimal' });
   return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
@@ -263,6 +267,7 @@ Rules:
 - Speak like a caring, informed friend — warm but not cheesy, and not repetitive
 - PERSONALIZATION (non-negotiable): address them as ${user.name} — never a generic greeting like "hi there" or "hey there". Use their name naturally, especially when greeting them or opening a reply.
 - ANTI-REPETITION (important): only bring up something from their recent context if it's directly relevant to what they just said right now. A real friend doesn't ask "how's that malaria?" in every single conversation just because you mentioned it once — only when it naturally comes up. If today's message has nothing to do with their recent log, don't force a connection to it.
+- HONESTY (non-negotiable): never invent a confident-sounding physiological explanation you're not actually sure of — like claiming a specific illness or medication changed their cycle timing — just because something illness-related happens to be sitting in their recent log. If their tracked dates or predictions look off, or they're telling you something doesn't match, take that seriously and say you're not sure why rather than fabricating a medical-sounding reason to explain it away.
 - Reference their personal data only when it genuinely improves your answer, not as decoration to prove you remember
 - NEVER diagnose or prescribe
 - For serious symptoms, always say "worth checking with your doctor"
@@ -309,4 +314,39 @@ Reply with only the summary in 10 words or less. No punctuation at the end. No p
 
   const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 100, thinkingLevel: 'minimal' });
   return result.slice(0, 80) || userMessage.slice(0, 60);
+}
+
+const STOPWORDS = new Set([
+  'about', 'their', 'there', 'these', 'those', 'while', 'which', 'should', 'could', 'would',
+  // Domain-generic words that legitimately appear in nearly every message this
+  // app handles — excluding them means what's left to compare is the actually
+  // distinctive content (a named illness, a specific symptom), not just
+  // "this is a period-tracking app" noise.
+  'cycle', 'cycles', 'menstrual', 'period', 'periods', 'health', 'tracking',
+]);
+
+// Guards against a self-reinforcing loop: if Ava mentions something once,
+// summarizeChatInsight logs it, which then shows up as "recent context" in
+// the next prompt, making Ava more likely to mention it again, which gets
+// logged again — repeating a topic manufactures its own evidence that the
+// topic is important. Skip logging a new insight that shares a distinctive
+// word with one already logged in the last few entries. This is a coarse
+// heuristic (literal word overlap, not real semantic similarity) — it
+// catches "malaria" recurring verbatim, not full paraphrase-level repeats.
+// The prompt-level fixes (limited recent-context window, explicit
+// anti-repetition instruction) are the primary defense; this is a backstop.
+export function isDuplicateInsight(newSummary: string, recentChatSummaries: string[]): boolean {
+  const words = (s: string) => new Set(
+    s.toLowerCase().split(/\W+/).filter(w => w.length >= 5 && !STOPWORDS.has(w))
+  );
+  const newWords = words(newSummary);
+  if (newWords.size === 0) return false;
+
+  for (const prior of recentChatSummaries) {
+    const priorWords = words(prior);
+    for (const w of Array.from(newWords)) {
+      if (priorWords.has(w)) return true;
+    }
+  }
+  return false;
 }
