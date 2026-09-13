@@ -1,7 +1,7 @@
 import type { AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
 import { getCurrentPhase, phaseEmoji } from './cycle';
-import { getDayData, getConfidenceLevel, personaliseSymptomLine } from './cycle-lookup';
+import { getDayData } from './cycle-lookup';
 
 // Was 'gemini-1.5-flash' — a shut-down model returning 404s in production
 // (confirmed via Vercel runtime logs), which broke the morning digest tip.
@@ -71,13 +71,28 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-// Check memory for a personal pattern relevant to today
+// Check memory for a personal pattern relevant to today. Gated behind a full
+// month of actual history (not just a log count) — before that, there
+// isn't enough data across enough of the cycle to honestly claim "you tend
+// to X"; it would just be pattern-matching on a handful of recent entries
+// and asserting a personal trend that isn't really established yet. Since
+// free users are capped at 14 days of retained history, this gate means
+// free users structurally never see this — which is the intended tradeoff,
+// not a bug: a real pattern claim needs real history, and free doesn't
+// have enough of it yet.
+export function hasMonthOfHistory(logs: MemoryLog[]): boolean {
+  if (logs.length === 0) return false;
+  const oldest = logs[logs.length - 1]; // logs are ordered most-recent-first
+  const daysSpan = (Date.now() - new Date(oldest.logged_at).getTime()) / (1000 * 60 * 60 * 24);
+  return daysSpan >= 30;
+}
+
 async function getPersonalInsight(
   phase: string,
   day: number,
   logs: MemoryLog[]
 ): Promise<string | null> {
-  if (logs.length < 10) return null;
+  if (logs.length < 10 || !hasMonthOfHistory(logs)) return null;
 
   const prompt = `A woman is on cycle day ${day} in the ${phase} phase.
 
@@ -139,30 +154,19 @@ export async function buildMorningDigest(
   // ── Research-based lookup — no AI, no estimation ──────────────────────────
   const dayData = getDayData(day, avg, duration);
 
-  // ── Personalise symptom line from memory ──────────────────────────────────
-  const symptomLine = personaliseSymptomLine(
-    dayData.phase,
-    dayData.symptomsGeneric,
-    logs,
-    day
-  );
-
-  // ── Confidence level ──────────────────────────────────────────────────────
-  const numCycles = cycleData.period_start_dates.length;
-  const recentLogs = logs.slice(0, 30).map(l => l.summary).join(' ').toLowerCase();
-  const hasLH = recentLogs.includes('lh') || recentLogs.includes('ovulation test') || recentLogs.includes('strip');
-  const hasBBT = recentLogs.includes('bbt') || recentLogs.includes('temperature');
-  const hasMucus = recentLogs.includes('mucus') || recentLogs.includes('discharge');
-  const { label: confidence } = getConfidenceLevel(numCycles, hasLH, hasBBT, hasMucus);
-
-  // ── Personal insight — AI only if enough history ──────────────────────────
-  // Previously this REPLACED the generic care tip whenever a personal
-  // insight existed, so established users stopped seeing any "care" content
-  // at all — just two symptom-shaped lines back to back. Now both are shown
-  // together in the same slot, so fertility/symptoms/care all stay covered
-  // without changing the digest's overall layout.
+  // ── Personal insight — only with a real month of history behind it. When
+  // it exists, it replaces the generic "Today:" line entirely rather than
+  // sitting alongside it — both would be making the same kind of claim
+  // (what's typical for this person at this point), and once there's real
+  // data backing the insight, the generic phase description is redundant
+  // rather than complementary.
   const personalInsight = await getPersonalInsight(phase, day, logs);
-  const insightLine = personalInsight
+
+  const todaySection = personalInsight
+    ? null
+    : '🌡️ *Today:* ' + dayData.symptomsGeneric;
+
+  const insightSection = personalInsight
     ? '🧠 ' + personalInsight + '\n💡 ' + dayData.tipGeneric
     : '💡 ' + dayData.tipGeneric;
 
@@ -178,7 +182,7 @@ export async function buildMorningDigest(
       const all = await getAllRemedies();
       const freeCrampsRemedy = all.find((r: any) => r.condition === 'cramps' && !r.premium);
       if (freeCrampsRemedy) {
-        remedyLine = `\n\n🌿 *Try today:* ${freeCrampsRemedy.name} — ${freeCrampsRemedy.description.split('.')[0]}. Send /remedies for more.`;
+        remedyLine = `🌿 *Try today:* ${freeCrampsRemedy.name} — ${freeCrampsRemedy.description.split('.')[0]}. Send /remedies for more.`;
       }
     } catch {
       // Non-critical — digest still works without this line if it fails.
@@ -190,22 +194,22 @@ export async function buildMorningDigest(
   if (cycleData.next_period_start) {
     const next = new Date(cycleData.next_period_start);
     const daysUntil = Math.ceil((next.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    if (daysUntil === 0) nextLine = '\n📅 Period expected around now';
-    else if (daysUntil > 0 && daysUntil <= 5) nextLine = '\n📅 Period in ~' + daysUntil + ' days';
+    if (daysUntil === 0) nextLine = '📅 Period expected around now';
+    else if (daysUntil > 0 && daysUntil <= 5) nextLine = '📅 Period in ~' + daysUntil + ' days';
   }
 
   // ── Assemble ──────────────────────────────────────────────────────────────
-  const text =
+  const sections = [
     getGreeting() + ', ' + user.name + ' 🌸\n' +
-    phaseEmoji[phase] + ' *' + dayData.phaseLabel + '* · Day ' + day + ' of ' + avg +
-    ' · Confidence: ' + confidence + '\n\n' +
-    dayData.fertilityEmoji + ' *Fertility possibility: ' + dayData.fertilityLabel + '*\n\n' +
-    '🌡️ *Today:* ' + symptomLine +
-    nextLine + remedyLine + '\n\n' +
-    insightLine + '\n\n' +
-    'How are you feeling this morning?';
+      phaseEmoji[phase] + ' *' + dayData.phaseLabel + '* · Day ' + day + ' of ' + avg,
+    dayData.fertilityEmoji + ' *Fertility possibility: ' + dayData.fertilityLabel + '*',
+  ];
+  if (todaySection) sections.push(todaySection);
+  if (nextLine || remedyLine) sections.push([nextLine, remedyLine].filter(Boolean).join('\n'));
+  sections.push(insightSection);
+  sections.push('How are you feeling this morning?');
 
-  return { text, showMoodButtons: true };
+  return { text: sections.join('\n\n'), showMoodButtons: true };
 }
 
 export const moodButtons = [
