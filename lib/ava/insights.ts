@@ -98,6 +98,8 @@ Write a warm, personal response as if you're a friend sharing observations. Stru
 - 1 positive observation
 - 1 thing worth keeping an eye on (never diagnostic)
 
+HONESTY (non-negotiable): never suggest a specific illness, medication, or stressor caused a change in her cycle or symptoms — not even as a hedge ("it's possible", "may have contributed") — unless she is the one who stated that connection herself in her log. Only describe patterns you can directly support with her actual logged data; if you're not sure why something happened, don't guess at a cause.
+
 Tone: warm, specific, personal. Never clinical. Max 200 words. Use her name once.`;
 
   const result = await callGemini(PRO, prompt);
@@ -136,6 +138,8 @@ Previous 30 days:
 ${previous.length > 0 ? formatLogs(previous) : 'No data for this period'}
 
 Identify 2-3 genuine changes or trends between the two periods. Be specific. If there's not enough to compare, say so warmly.
+
+HONESTY (non-negotiable): never suggest a specific illness, medication, or stressor caused a change — not even as a hedge — unless she stated that connection herself in her log. Describe what changed, not why, unless the cause is something she already told you.
 
 Tone: warm, conversational, like a friend who's been paying attention. Max 150 words. Never clinical or diagnostic.`;
 
@@ -179,7 +183,7 @@ Respond in this exact JSON format (no markdown):
   "changeDetected": "one sentence if cycles/symptoms have noticeably changed recently, or null"
 }
 
-Rules: Only report what you actually see in the data. Never invent patterns. Never diagnose.`;
+Rules: Only report what you actually see in the data. Never invent patterns. Never diagnose. Never suggest a specific illness, medication, or stressor caused a symptom or cycle change — not even as a hedge — unless she stated that connection herself in her log.`;
 
   try {
     const result = await callGemini(FLASH, prompt);
@@ -213,6 +217,8 @@ Write a clear, concise summary a doctor would find useful:
 2. Recurring symptoms (bullet points, only what appears in the data)
 3. Notable changes or concerns (if any)
 4. Questions she might want to ask (2-3 based on her patterns)
+
+HONESTY (non-negotiable): never suggest a specific illness, medication, or stressor caused a symptom or cycle change — not even as a hedge — unless she stated that connection herself in her log. This is for a real doctor visit; a fabricated cause could actively mislead the conversation with her doctor.
 
 Keep it factual, clear, and under 250 words. This is for a real doctor visit.`;
 
@@ -251,6 +257,8 @@ Write a 3-paragraph weekly briefing:
 1. What stood out this week (based on actual log entries)
 2. Where she is in her cycle and what to expect next week
 3. One gentle, actionable suggestion based on her patterns
+
+HONESTY (non-negotiable): never suggest a specific illness, medication, or stressor caused a change in her cycle or symptoms — not even as a hedge — unless she stated that connection herself in her log.
 
 Tone: like a caring friend catching up. Max 180 words.`;
 

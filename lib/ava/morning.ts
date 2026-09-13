@@ -87,7 +87,7 @@ export function hasMonthOfHistory(logs: MemoryLog[]): boolean {
   return daysSpan >= 30;
 }
 
-async function getPersonalInsight(
+export async function getPersonalInsight(
   phase: string,
   day: number,
   logs: MemoryLog[]

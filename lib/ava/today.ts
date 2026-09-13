@@ -1,7 +1,8 @@
 import { getCycleData, getMemoryContext } from './db';
 import { getCurrentPhase, phaseEmoji, predictNextPeriod, predictOvulationWindow } from './cycle';
 import { upsertCycleData } from './db';
-import { getDayData, getConfidenceLevel, personaliseSymptomLine } from './cycle-lookup';
+import { getDayData } from './cycle-lookup';
+import { getPersonalInsight, hasMonthOfHistory } from './morning';
 import type { AvaUser } from '@/types';
 
 function formatDate(d: Date): string {
@@ -55,21 +56,17 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
   // ── Research-based lookup ─────────────────────────────────────────────────
   const dayData = getDayData(day, avg, duration);
 
-  // ── Personalise symptom line ──────────────────────────────────────────────
-  const symptomLine = personaliseSymptomLine(
-    dayData.phase,
-    dayData.symptomsGeneric,
-    memoryLogs,
-    day
-  );
-
-  // ── Confidence ────────────────────────────────────────────────────────────
-  const numCycles = cycleData?.period_start_dates?.length || 1;
-  const recentText = memoryLogs.slice(0, 30).map(l => l.summary).join(' ').toLowerCase();
-  const hasLH = recentText.includes('lh') || recentText.includes('ovulation test');
-  const hasBBT = recentText.includes('bbt') || recentText.includes('temperature');
-  const hasMucus = recentText.includes('mucus') || recentText.includes('discharge');
-  const { label: confidence } = getConfidenceLevel(numCycles, hasLH, hasBBT, hasMucus);
+  // ── Personal insight — same real-data gate as the morning digest. Only
+  // claim "you tend to X" when there's an actual month of history behind
+  // it (and free users are capped at 14 days of retained memory, so this
+  // can never fire for them) — otherwise just show the plain phase
+  // description, no personalization. When the insight exists, it replaces
+  // the generic line rather than sitting alongside it, same as the digest.
+  const hasEnoughHistory = memoryLogs.length >= 10 && hasMonthOfHistory(memoryLogs);
+  const personalInsight = hasEnoughHistory ? await getPersonalInsight(phase, day, memoryLogs) : null;
+  const symptomSection = personalInsight
+    ? `🧠 ${personalInsight}`
+    : `🌡️ *Today:* ${dayData.symptomsGeneric}`;
 
   // ── Period and ovulation dates ────────────────────────────────────────────
   const nextStart = cycleData?.next_period_start ? new Date(cycleData.next_period_start) : null;
@@ -85,7 +82,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
   if (nextStart && nextEnd) {
     periodLine = daysUntilPeriod !== null && daysUntilPeriod <= 5
       ? `📅 Period in ~${daysUntilPeriod} days (${formatDate(nextStart)} – ${formatDate(nextEnd)})`
-      : `📅 Next period: ${formatDate(nextStart)} – ${formatDate(nextEnd)} (${cycleData?.confidence_pct || 70}% confidence)`;
+      : `📅 Next period: ${formatDate(nextStart)} – ${formatDate(nextEnd)}`;
   }
 
   let ovLine = '';
@@ -98,12 +95,11 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
 
   return (
     `${getGreeting()}, ${user.name}! 🌸\n\n` +
-    `${phaseEmoji[phase]} *${dayData.phaseLabel}* — Day ${day} of ${avg}\n` +
-    `Prediction confidence: ${confidence}\n\n` +
+    `${phaseEmoji[phase]} *${dayData.phaseLabel}* — Day ${day} of ${avg}\n\n` +
     `${dayData.fertilityEmoji} *Fertility possibility: ${dayData.fertilityLabel}*\n\n` +
     `${periodLine}\n` +
     `${ovLine}\n\n` +
-    `🌡️ *Today:* ${symptomLine}\n\n` +
+    `${symptomSection}\n\n` +
     `💡 ${dayData.tipGeneric}`
   );
 }
