@@ -344,7 +344,8 @@ const PATTERN_STOPWORDS = new Set([
 export async function findSymptomPattern(
   userId: string,
   summary: string,
-  avgCycleLength?: number | null
+  avgCycleLength?: number | null,
+  plan: 'free' | 'premium' = 'free'
 ): Promise<{
   keyword: string;
   daysSinceLast: number;
@@ -360,11 +361,20 @@ export async function findSymptomPattern(
 
   // Look across full history (not just a recent window) for the same
   // symptom/keyword — recurrence over months is exactly the kind of
-  // pattern a short recency window would miss entirely.
+  // pattern a short recency window would miss entirely. BUT this must
+  // still respect the same free (14 day) / premium (150 day) retention
+  // window as getMemoryContext — without this filter, free users got the
+  // exact same unlimited-lookback pattern matching as premium, which
+  // directly undermines "5 months of memory" as a paid feature.
+  const daysBack = plan === 'premium' ? 150 : 14;
+  const since = new Date();
+  since.setDate(since.getDate() - daysBack);
+
   const { data: matches } = await supabaseAdmin
     .from('memory_log')
     .select('*')
     .eq('user_id', userId)
+    .gte('logged_at', since.toISOString())
     .order('logged_at', { ascending: false })
     .limit(300);
 

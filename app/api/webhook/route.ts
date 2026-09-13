@@ -828,7 +828,7 @@ async function routeMessage(
     if (['symptom', 'mood', 'flow'].includes(logCat)) {
       const { findSymptomPattern, getCycleData } = await import('@/lib/ava/db');
       const cycle = await getCycleData(user.id);
-      const pattern = await findSymptomPattern(user.id, summary, cycle?.avg_cycle_length);
+      const pattern = await findSymptomPattern(user.id, summary, cycle?.avg_cycle_length, user.plan);
       if (pattern) {
         patternNote = `\n\nRelevant history lookup (only mention this if it genuinely fits — do not force it in): the user logged something similar ${pattern.daysSinceLast} day(s) ago.${pattern.sameTimeAsCycle ? ' That is roughly the same point in their cycle as now — worth noting as a possible pattern if it feels natural to.' : ''}${pattern.sameDayCompanion ? ` On that same day, they had also logged: "${pattern.sameDayCompanion}" — if relevant, you can ask (as a question, not a claim) whether something similar was true today.` : ''}`;
       }
