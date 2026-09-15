@@ -316,7 +316,7 @@ async function processUpdate(update: any) {
           );
         }
       } else {
-        const response = await analyseGenericImage(photoData.base64, photoData.mimeType, caption);
+        const response = await analyseGenericImage(photoData.base64, photoData.mimeType, user, caption);
         await sendMessage(chatId, response);
       }
 

@@ -1,5 +1,10 @@
 const GEMINI_PRO_VISION = 'gemini-3-flash-preview';
 
+import { getCycleData } from './db';
+import { getCurrentPhase } from './cycle';
+import { getDayData } from './cycle-lookup';
+import type { AvaUser } from '@/types';
+
 function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 }
@@ -196,8 +201,25 @@ Reply in this exact JSON format (no markdown):
 export async function analyseGenericImage(
   base64: string,
   mimeType: string,
+  user: AvaUser,
   caption?: string
 ): Promise<string> {
+  let phaseNote = 'no cycle data on file, so skip cycle framing entirely';
+  try {
+    const cycleData = await getCycleData(user.id);
+    if (cycleData?.period_start_dates?.length) {
+      const avg = Number(cycleData.avg_cycle_length) || 28;
+      const duration = cycleData.period_duration || 5;
+      const sorted = [...cycleData.period_start_dates].sort();
+      const lastStart = new Date(sorted[sorted.length - 1]);
+      const { day } = getCurrentPhase(lastStart, avg, duration);
+      const dayData = getDayData(day, avg, duration);
+      phaseNote = `she is currently in her ${dayData.phaseLabel}`;
+    }
+  } catch {
+    // Non-critical — image analysis still works without phase context.
+  }
+
   const res = await fetch(geminiUrl(GEMINI_PRO_VISION), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -206,9 +228,13 @@ export async function analyseGenericImage(
         parts: [
           { inline_data: { mime_type: mimeType, data: base64 } },
           {
-            text: `You are Ava, a warm cycle and wellness companion. The user sent this image${caption ? ` with caption: "${caption}"` : ''}.
+            text: `You are Ava, a warm cycle and wellness companion, talking to ${user.name}. She sent this image${caption ? ` with caption: "${caption}"` : ''}.
 
-Respond helpfully in 2-3 sentences. If it's health-related, give warm, non-diagnostic insight. If it's not health-related, respond naturally. Never be clinical.`,
+Respond helpfully in 2-3 sentences. If it's health-related, give warm, non-diagnostic insight. If it's not health-related, respond naturally. Never be clinical.
+
+WHOSE PHOTO IS THIS — check this first: if the caption or image makes clear this is of someone else (a friend, sister, a stranger, a product held by someone else) rather than ${user.name} herself, do NOT comment on that other person's appearance or give them personal advice — you don't know them and that's not what you're here for. Instead, gently redirect: mention you're best at helping with her own skin and health, tied to her own cycle, and offer to help if she sends her own photo instead.
+
+If it IS her own photo (a selfie, her own skin/body) and the topic is beauty, skin or appearance, you can tie tips to her current cycle phase (${phaseNote}) — but only when it's genuinely relevant to what she asked, not as a scripted add-on to every reply.`,
           },
         ],
       }],

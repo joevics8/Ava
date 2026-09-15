@@ -1,7 +1,8 @@
 // ─── /foods — nutrition & meal assistant ───────────────────────────────────
 //
 // Two things live here:
-// 1. The /foods menu (10 options) and the AI suggestion generator behind it.
+// 1. The /foods menu — food-request options plus a separate "update my food
+//    preferences" action — and the AI suggestion generator behind it.
 // 2. The "Tell Ava about my diet" flow — six short questions, one at a time,
 //    stored in users.food_profile (jsonb) and used to personalise every
 //    future food suggestion (here and in general conversation — see
@@ -25,30 +26,34 @@ interface FoodOption {
 }
 
 const FOOD_OPTIONS: FoodOption[] = [
-  { key: 'today', label: '1️⃣ What should I eat today?' },
-  { key: 'energy', label: '2️⃣ Food for more energy' },
-  { key: 'symptoms', label: '3️⃣ Food for my current symptoms' },
-  { key: 'cycle', label: '4️⃣ Food for my cycle' },
-  { key: 'weight_gain', label: '5️⃣ Healthy weight gain' },
-  { key: 'weight_loss', label: '6️⃣ Healthy weight loss' },
-  { key: 'sleep', label: '7️⃣ Better sleep' },
-  { key: 'fitness', label: '8️⃣ Fitness & recovery' },
-  { key: 'ideas', label: '9️⃣ Just give me meal ideas' },
-  { key: 'learn', label: '🔟 Tell Ava about my diet' },
+  { key: 'today', label: '🍽️ What should I eat today?' },
+  { key: 'energy', label: '⚡ Food for more energy' },
+  { key: 'symptoms', label: '🩺 Food for my current symptoms' },
+  { key: 'weight_gain', label: '⚖️ Healthy weight gain' },
+  { key: 'weight_loss', label: '⚖️ Healthy weight loss' },
+  { key: 'sleep', label: '😴 Better sleep' },
+  { key: 'fitness', label: '💪 Fitness & recovery' },
+  { key: 'ideas', label: '🎲 Just give me meal ideas' },
 ];
 
+// Not a food request — updates her saved diet profile, so it's kept out of
+// the list above and shown as its own action underneath.
+const UPDATE_PREFS_OPTION: FoodOption = { key: 'learn', label: '📝 Update my food preferences' };
+
 export async function showFoodMenu(chatId: number, sendKb: SendWithKeyboardFn): Promise<void> {
-  const keyboard = FOOD_OPTIONS.map(o => [{ text: o.label, callback_data: 'food_' + o.key }]);
+  const keyboard = [
+    ...FOOD_OPTIONS.map(o => [{ text: o.label, callback_data: 'food_' + o.key }]),
+    [{ text: UPDATE_PREFS_OPTION.label, callback_data: 'food_' + UPDATE_PREFS_OPTION.key }],
+  ];
   await sendKb(chatId, '🍽️ *What would you like help with?*', keyboard, true);
 }
 
 // ─── AI suggestion generation ──────────────────────────────────────────────
 
 const OPTION_INSTRUCTIONS: Record<string, string> = {
-  today: 'Suggest one practical meal or food combo she could have today.',
+  today: 'Suggest one practical meal or food combo she could have today, taking her current cycle phase into account (see phase info below) alongside anything else relevant.',
   energy: 'Suggest foods that can help with energy and fighting fatigue.',
   symptoms: 'Suggest foods that may help with the symptom(s) noted below. If none are noted, ask what she is feeling today in one short line, then still give general practical food advice.',
-  cycle: 'Suggest foods suited to her current cycle phase (see phase info below).',
   weight_gain: 'Suggest healthy, sustainable ways to gain weight through food choices.',
   weight_loss: 'Suggest healthy, sustainable food choices that support gradual weight loss.',
   sleep: 'Suggest foods that may support better sleep.',
@@ -58,7 +63,7 @@ const OPTION_INSTRUCTIONS: Record<string, string> = {
 
 function formatProfile(profile: FoodProfile): string {
   const entries = Object.entries(profile).filter(([, v]) => v);
-  if (!entries.length) return 'none shared yet — you can mention she can send /foods → "Tell Ava about my diet" to set this up, but don\'t make a big deal of it';
+  if (!entries.length) return 'none shared yet';
   return entries.map(([k, v]) => `${k.replace('_', ' ')}: ${v}`).join('; ');
 }
 
@@ -72,7 +77,7 @@ export async function generateFoodSuggestion(
   const localFoods = getCountryFoods(country).map(f => f.name).join(', ');
 
   let phaseContext = '';
-  if (optionKey === 'cycle' || optionKey === 'today') {
+  if (optionKey === 'today') {
     try {
       const cycleData = await getCycleData(user.id);
       if (cycleData?.period_start_dates?.length) {
@@ -150,9 +155,19 @@ export async function handleFoodCallback(
 
   const memoryLogs = await getMemoryContext(user.id, user.plan);
   const suggestion = await generateFoodSuggestion(user, key, memoryLogs);
-  await send(chatId, suggestion);
 
-  const cleanLabel = option.label.replace(/^[0-9️⃣🔟]+\s*/u, '');
+  // Nudge toward the profile-building flow exactly once, deterministically —
+  // not left to the model, which tended to repeat it on nearly every reply.
+  const foodProfile = ((user as any).food_profile || {}) as FoodProfile;
+  const hasAskedBefore = memoryLogs.some(l => l.category === 'insight' && l.summary?.startsWith('Asked Ava for food help'));
+  const shouldNudge = !hasAskedBefore && !Object.values(foodProfile).some(Boolean);
+  const nudge = shouldNudge
+    ? `\n\nWant these tailored to you? Tap "📝 Update my food preferences" in the /foods menu anytime.`
+    : '';
+
+  await send(chatId, suggestion + nudge);
+
+  const cleanLabel = option.label.replace(/^[^\p{L}\p{N}]+/u, '');
   await addMemoryLog(user.id, 'insight', `Asked Ava for food help: ${cleanLabel}`);
   return true;
 }
