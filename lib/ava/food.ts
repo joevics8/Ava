@@ -200,14 +200,18 @@ export async function maybeSuggestFood(
   const condition = detectCondition(text);
   if (!condition || !(condition in FOOD_TRIGGER_CONDITIONS)) return false;
 
-  // Don't pile on if we've already nudged food recently — check the same
-  // memory window callers already have on hand rather than a fresh query.
+  const optionKey = FOOD_TRIGGER_CONDITIONS[condition];
+
+  // Scoped to this specific condition, not "any food nudge ever" — she
+  // should still get an energy suggestion the next time she says she's
+  // tired, even if cravings triggered one last week. The memory window
+  // itself (via getMemoryContext) is what makes this fade over time rather
+  // than needing an explicit expiry.
   const alreadySuggestedRecently = memoryLogs.some(
-    l => l.category === 'insight' && l.summary?.startsWith('Auto-suggested food:')
+    l => l.category === 'insight' && l.summary?.startsWith(`Auto-suggested food: ${optionKey}`)
   );
   if (alreadySuggestedRecently) return false;
 
-  const optionKey = FOOD_TRIGGER_CONDITIONS[condition];
   const suggestion = await generateFoodSuggestion(user, optionKey, memoryLogs);
   await send(chatId, `🍽️ By the way — ${suggestion}`);
   await addMemoryLog(user.id, 'insight', `Auto-suggested food: ${optionKey}`);
