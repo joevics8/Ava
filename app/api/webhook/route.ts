@@ -299,14 +299,14 @@ async function processUpdate(update: any) {
       const imageType = await detectImageType(photoData.base64, photoData.mimeType, caption);
 
       if (imageType === 'ovulation_strip') {
-        const { result, isPositive, summary } = await analyseOvulationStrip(photoData.base64, photoData.mimeType);
+        const { result, isPositive, summary } = await analyseOvulationStrip(photoData.base64, photoData.mimeType, user);
         await sendMessage(chatId, result);
         if (user) await addMemoryLog(user.id, 'test', summary);
         if (isPositive && user) {
           await addMemoryLog(user.id, 'cycle', 'LH surge detected — ovulation likely within 12-36 hours');
         }
       } else if (imageType === 'pregnancy_test') {
-        const { result, isPositive, summary } = await analysePregnancyTest(photoData.base64, photoData.mimeType);
+        const { result, isPositive, summary } = await analysePregnancyTest(photoData.base64, photoData.mimeType, user);
         await sendMessage(chatId, result);
         if (user) await addMemoryLog(user.id, 'test', summary);
         if (isPositive && user) {
@@ -794,20 +794,21 @@ async function handleCommand(
   }
 }
 
-async function maybeSuggestRemedy(chatId: number, user: any, text: string): Promise<void> {
+async function maybeSuggestRemedy(chatId: number, user: any, text: string): Promise<boolean> {
   const { getActiveRemedies, showRemedyList } = await import('@/lib/ava/remedy-engine');
   const { detectCondition } = await import('@/lib/ava/remedies');
 
   const detectedCondition = detectCondition(text);
-  if (!detectedCondition) return;
+  if (!detectedCondition) return false;
 
   const alreadyTracking = await getActiveRemedies(user.id);
   const alreadyHasThis = alreadyTracking.some((r: any) => r.condition === detectedCondition);
-  if (alreadyHasThis) return;
+  if (alreadyHasThis) return false;
 
   await sendMessage(chatId, 'By the way — I have some natural remedies that might help with this 🌿');
   await showRemedyList(chatId, user, detectedCondition, sendWithKeyboard);
   await addMemoryLog(user.id, 'insight', 'Suggested remedies for ' + detectedCondition);
+  return true;
 }
 
 async function routeMessage(
@@ -883,8 +884,14 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     }
 
     // Auto-suggest remedy list if a symptom keyword is detected and the user
-    // isn't already tracking a remedy for it.
-    await maybeSuggestRemedy(chatId, user, text);
+    // isn't already tracking a remedy for it. Food is the fallback nudge for
+    // conditions remedies don't cover (fatigue, cravings, brain fog) — never
+    // both at once, that's two unsolicited follow-ups for one message.
+    const remedySuggested = await maybeSuggestRemedy(chatId, user, text);
+    if (!remedySuggested) {
+      const { maybeSuggestFood } = await import('@/lib/ava/food');
+      await maybeSuggestFood(chatId, user, text, memoryLogs, sendMessage);
+    }
 
   } else if (category === 'RETRIEVAL') {
     const { getCycleData } = await import('@/lib/ava/db');
@@ -906,7 +913,11 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     // Free-flowing conversation can mention a symptom too ("ugh my back is
     // killing me today") without it being classified as a LOG entry —
     // remedy suggestions shouldn't only fire for explicit symptom logs.
-    await maybeSuggestRemedy(chatId, user, text);
+    const remedySuggested = await maybeSuggestRemedy(chatId, user, text);
+    if (!remedySuggested) {
+      const { maybeSuggestFood } = await import('@/lib/ava/food');
+      await maybeSuggestFood(chatId, user, text, memoryLogs, sendMessage);
+    }
   }
 }
 

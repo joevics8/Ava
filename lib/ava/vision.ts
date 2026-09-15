@@ -92,7 +92,8 @@ export async function detectImageType(
 
 export async function analyseOvulationStrip(
   base64: string,
-  mimeType: string
+  mimeType: string,
+  user: AvaUser
 ): Promise<{ result: string; isPositive: boolean; summary: string }> {
   const res = await fetch(geminiUrl(GEMINI_PRO_VISION), {
     method: 'POST',
@@ -102,7 +103,7 @@ export async function analyseOvulationStrip(
         parts: [
           { inline_data: { mime_type: mimeType, data: base64 } },
           {
-            text: `This is an ovulation LH test strip. Analyse it carefully.
+            text: `This is an ovulation LH test strip, sent by ${user.name}. Analyse it carefully.
 
 Look at the test line (T) compared to the control line (C):
 - If the test line is as dark or darker than the control line → POSITIVE (LH surge, ovulation likely in 12-36 hours)
@@ -114,7 +115,7 @@ Reply in this exact JSON format (no markdown):
   "reading": "POSITIVE|NEGATIVE|LOW|UNCLEAR",
   "line_description": "brief description of what you see",
   "confidence": "high|medium|low",
-  "advice": "one warm friendly sentence of advice based on the result"
+  "advice": "one warm sentence of advice based on the result, addressing her as ${user.name}"
 }`,
           },
         ],
@@ -146,7 +147,8 @@ Reply in this exact JSON format (no markdown):
 
 export async function analysePregnancyTest(
   base64: string,
-  mimeType: string
+  mimeType: string,
+  user: AvaUser
 ): Promise<{ result: string; isPositive: boolean; summary: string }> {
   const res = await fetch(geminiUrl(GEMINI_PRO_VISION), {
     method: 'POST',
@@ -156,7 +158,7 @@ export async function analysePregnancyTest(
         parts: [
           { inline_data: { mime_type: mimeType, data: base64 } },
           {
-            text: `This is a pregnancy test. Analyse it carefully.
+            text: `This is a pregnancy test, sent by ${user.name}. Analyse it carefully.
 
 - Two lines (even a faint second line) → POSITIVE
 - One line only → NEGATIVE
@@ -167,7 +169,7 @@ Reply in this exact JSON format (no markdown):
   "reading": "POSITIVE|NEGATIVE|INVALID|UNCLEAR",
   "line_description": "brief description of what you see",
   "confidence": "high|medium|low",
-  "advice": "one warm, sensitive, friendly sentence based on the result — be gentle regardless of outcome"
+  "advice": "one warm, sensitive sentence based on the result, addressing her as ${user.name} — be gentle regardless of outcome"
 }`,
           },
         ],
@@ -234,7 +236,9 @@ Respond helpfully in 2-3 sentences. If it's health-related, give warm, non-diagn
 
 WHOSE PHOTO IS THIS — check this first: if the caption or image makes clear this is of someone else (a friend, sister, a stranger, a product held by someone else) rather than ${user.name} herself, do NOT comment on that other person's appearance or give them personal advice — you don't know them and that's not what you're here for. Instead, gently redirect: mention you're best at helping with her own skin and health, tied to her own cycle, and offer to help if she sends her own photo instead.
 
-If it IS her own photo (a selfie, her own skin/body) and the topic is beauty, skin or appearance, you can tie tips to her current cycle phase (${phaseNote}) — but only when it's genuinely relevant to what she asked, not as a scripted add-on to every reply.`,
+If it IS her own photo (a selfie, her own skin/body) and the topic is beauty, skin or appearance, you can tie tips to her current cycle phase (${phaseNote}) — but only when it's genuinely relevant to what she asked, not as a scripted add-on to every reply.
+
+PERIOD-RELATED PHOTOS: If this looks like a period-related photo — flow/blood, a pad or cup, cramping context, a heating pad — you can reference her current cycle day/phase (${phaseNote}) if it's relevant. If she seems worried about something specific (colour, amount, clots), give brief, general, non-diagnostic context and suggest seeing a doctor if it feels off to her — never diagnose or rule anything out from a photo.`,
           },
         ],
       }],

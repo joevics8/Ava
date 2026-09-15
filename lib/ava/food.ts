@@ -172,6 +172,48 @@ export async function handleFoodCallback(
   return true;
 }
 
+// ─── Auto-surfacing in natural conversation ────────────────────────────────
+//
+// Mirrors maybeSuggestRemedy's pattern in webhook/route.ts: when a symptom
+// keyword is detected in a free-flowing message, that same detector can
+// signal a food-appropriate condition too. Deliberately a small, distinct
+// set from remedies.ts's full condition list — food is the better fit for
+// energy/craving-type things, remedies win for pain/skin/sleep-type things,
+// so a message only ever triggers one unsolicited follow-up, not both.
+// emotional_eating is intentionally excluded — auto-suggesting food on top
+// of that risks reinforcing the exact pattern, not helping it.
+export const FOOD_TRIGGER_CONDITIONS: Record<string, string> = {
+  fatigue: 'energy',
+  low_iron_fatigue: 'energy',
+  food_cravings: 'ideas',
+  brain_fog: 'energy',
+};
+
+export async function maybeSuggestFood(
+  chatId: number,
+  user: AvaUser,
+  text: string,
+  memoryLogs: MemoryLog[],
+  send: SendFn
+): Promise<boolean> {
+  const { detectCondition } = await import('./remedies');
+  const condition = detectCondition(text);
+  if (!condition || !(condition in FOOD_TRIGGER_CONDITIONS)) return false;
+
+  // Don't pile on if we've already nudged food recently — check the same
+  // memory window callers already have on hand rather than a fresh query.
+  const alreadySuggestedRecently = memoryLogs.some(
+    l => l.category === 'insight' && l.summary?.startsWith('Auto-suggested food:')
+  );
+  if (alreadySuggestedRecently) return false;
+
+  const optionKey = FOOD_TRIGGER_CONDITIONS[condition];
+  const suggestion = await generateFoodSuggestion(user, optionKey, memoryLogs);
+  await send(chatId, `🍽️ By the way — ${suggestion}`);
+  await addMemoryLog(user.id, 'insight', `Auto-suggested food: ${optionKey}`);
+  return true;
+}
+
 // ─── "Tell Ava about my diet" flow ──────────────────────────────────────────
 
 const FOOD_PROFILE_QUESTIONS: { field: keyof FoodProfile; question: string }[] = [
