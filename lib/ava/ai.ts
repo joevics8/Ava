@@ -1,10 +1,11 @@
 import type { MessageCategory, AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
 import { formatMemoryForAI } from './db';
+import { getCountryFoods } from './food-data';
 
 // URLs built lazily at call time so env vars are always available
-const FLASH = 'gemini-3.1-flash-lite';
-const PRO = 'gemini-3-flash-preview';
+export const FLASH = 'gemini-3.1-flash-lite';
+export const PRO = 'gemini-3-flash-preview';
 
 function geminiUrl(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -29,7 +30,7 @@ function extractText(data: any): { text: string; finishReason?: string } {
   return { text, finishReason: data?.candidates?.[0]?.finishReason };
 }
 
-async function callGemini(
+export async function callGemini(
   model: string,
   prompt: string,
   systemPrompt?: string,
@@ -276,14 +277,26 @@ export async function handleConversation(
 ): Promise<string> {
   const context = getRecentConversationContext(memoryLogs);
 
+  const country = (user as any).country as string | undefined;
+  const foodProfile = (user as any).food_profile as Record<string, string> | undefined;
+  const localFoods = getCountryFoods(country);
+  const foodProfileLines = foodProfile && Object.keys(foodProfile).length
+    ? Object.entries(foodProfile).map(([k, v]) => `${k}: ${v}`).join(', ')
+    : 'not shared yet — she can send /foods → "Tell Ava about my diet" to set this up';
+
   const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app. This has to feel like talking to a real friend who knows this person — never generic, and never repetitive like a script.
 
 About this user:
 - Name: ${user.name}
 - Age: ${user.age}
+- Country: ${country || 'not stated'}
 - Reproductive goal: ${user.reproductive_goal}
 - Known conditions: ${user.conditions?.join(', ') || 'none stated'}
 - Birth control: ${user.birth_control || 'none stated'}
+- Diet profile: ${foodProfileLines}
+${localFoods.length ? `- Common local foods you can suggest for her country: ${localFoods.map(f => f.name).join(', ')}` : ''}
+
+FOOD QUESTIONS: If she asks what to eat, or about nutrition/energy/mood/sleep through food, give a short, practical, localized suggestion — favour foods from her country/culture over generic Western examples when you know her country, and respect anything in her diet profile (avoided foods, allergies, budget, cooking ability) if it's set. Never give calorie counts, macros, or specific numeric weight/diet targets — keep it about food quality and simple habits, not restriction. If she wants more structured help, you can mention she can send /foods.
 
 Recent context (last few days only — their full history lives in /insights, not here):
 ${context}

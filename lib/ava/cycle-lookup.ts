@@ -41,7 +41,10 @@ export interface CycleDayData {
   fertilityLabel: FertilityLabel;
   fertilityEmoji: string;
   symptomsGeneric: string;   // shown if no personal pattern found
-  tipGeneric: string;        // practical, no drugs
+  eatTipGeneric: string;     // food suggestion — practical, no drugs
+  doTipGeneric: string;      // activity/behaviour suggestion
+  nutrientTags: string[];    // e.g. ['iron','energy'] — used to swap in local foods when the user's country is known (see food-data.ts)
+  eatReasonClause: string;   // short trailing clause reused when substituting local foods, e.g. "can help restore your energy"
 }
 
 // ─── Fertility offset mapping ─────────────────────────────────────────────────
@@ -103,18 +106,24 @@ function getPhaseContent(
   day: number,
   periodDuration: number,
   ovulationDay: number
-): { symptoms: string; tip: string } {
+): { symptoms: string; eatTip: string; doTip: string; nutrientTags: string[]; eatReasonClause: string } {
   switch (phase) {
     case 'menstrual':
       if (day <= Math.min(2, periodDuration)) {
         return {
           symptoms: 'Flow is typically heaviest now. Cramping, fatigue, and lower back pain are common.',
-          tip: 'Rest when you can. Heat on your lower abdomen and iron-rich foods can help restore energy.',
+          eatTip: 'Try iron-rich foods such as beans, lentils, spinach or lean meat.',
+          doTip: 'Rest when you can, and use a heat pack on your lower abdomen for cramps.',
+          nutrientTags: ['iron', 'energy'],
+          eatReasonClause: 'can help restore your energy',
         };
       }
       return {
         symptoms: 'Flow is easing. You may still feel some fatigue and mild cramping.',
-        tip: 'Iron-rich foods like spinach and lentils help restore energy as your period winds down.',
+        eatTip: 'Keep up iron-rich foods like spinach, lentils and beans as your period winds down.',
+        doTip: 'Light movement like walking or stretching can help ease any lingering cramps.',
+        nutrientTags: ['iron'],
+        eatReasonClause: 'can help keep your energy up',
       };
 
     case 'follicular': {
@@ -122,43 +131,64 @@ function getPhaseContent(
       if (daysSincePeriod <= 3) {
         return {
           symptoms: 'Oestrogen is rising. Energy is returning and mood tends to lift.',
-          tip: 'A good time to restart exercise routines — your body is rebuilding.',
+          eatTip: 'Protein-rich foods like eggs, fish or beans support your body as it rebuilds.',
+          doTip: 'A good time to restart exercise routines — your body is rebuilding.',
+          nutrientTags: ['protein'],
+          eatReasonClause: 'can support your body as it rebuilds',
         };
       }
       return {
         symptoms: 'Energy and confidence are typically at their highest this week.',
-        tip: 'Take on demanding tasks and social plans — oestrogen is working in your favour.',
+        eatTip: 'Fresh fruit, vegetables and whole grains support your rising energy this week.',
+        doTip: 'Take on demanding tasks and social plans — oestrogen is working in your favour.',
+        nutrientTags: ['energy', 'fiber'],
+        eatReasonClause: 'can support your rising energy',
       };
     }
 
     case 'ovulatory':
       return {
         symptoms: 'You may notice egg-white discharge, a slight temperature rise, or mild pelvic twinges.',
-        tip: 'Hydrate well and note any mid-cycle pain — it is usually normal and passes quickly.',
+        eatTip: 'Hydrate well and include water-rich foods like cucumber, watermelon or coconut water.',
+        doTip: 'Note any mid-cycle pain — it is usually normal and passes quickly.',
+        nutrientTags: ['hydration'],
+        eatReasonClause: 'can help keep you well hydrated',
       };
 
     case 'early_luteal':
       return {
         symptoms: 'Progesterone is rising. Mild breast tenderness or slight bloating may begin.',
-        tip: 'Steady meals and moderate movement support a smooth transition.',
+        eatTip: 'Steady, protein-rich meals support a smooth transition.',
+        doTip: 'Moderate movement like a walk or light workout can help too.',
+        nutrientTags: ['protein'],
+        eatReasonClause: 'can support a smooth transition',
       };
 
     case 'mid_luteal':
       return {
         symptoms: 'Progesterone is at its peak. Energy tends to be steady.',
-        tip: 'Magnesium-rich foods like dark chocolate, nuts and leafy greens may help.',
+        eatTip: 'Magnesium-rich foods like dark chocolate, nuts and leafy greens may help.',
+        doTip: 'Keep up regular movement — energy tends to be steady this week.',
+        nutrientTags: ['magnesium', 'mood'],
+        eatReasonClause: 'may help with mood and steady energy',
       };
 
     case 'late_luteal':
       return {
         symptoms: 'PMS symptoms often peak now — irritability, bloating, cravings, and fatigue are common.',
-        tip: 'Be gentle with yourself. B6-rich foods like bananas and chickpeas support mood.',
+        eatTip: 'B6-rich foods like bananas and chickpeas can help support your mood.',
+        doTip: 'Be gentle with yourself — a short walk or light stretch can ease tension.',
+        nutrientTags: ['mood'],
+        eatReasonClause: 'can help support your mood',
       };
 
     case 'premenstrual':
       return {
         symptoms: 'Your period is approaching. Cramping, bloating, and low energy are typical.',
-        tip: 'Stock up on period supplies and prepare your heat pack — gentle movement often helps more than rest alone.',
+        eatTip: 'Light, warm meals with whole grains can help as energy dips before your period.',
+        doTip: 'Stock up on period supplies and prepare your heat pack — gentle movement often helps more than rest alone.',
+        nutrientTags: ['comfort', 'carbs'],
+        eatReasonClause: 'can help as energy dips before your period',
       };
   }
 }
@@ -182,7 +212,7 @@ export function getCycleLookup(cycleLength: number): CycleDayData[] {
     const offset = day - ovulationDay;
     const fertilityLabel: FertilityLabel = FERTILITY_OFFSET_MAP[offset] ?? 'Minimal';
     const phase = getPhase(day, periodDuration, ovulationDay, clamped);
-    const { symptoms, tip } = getPhaseContent(phase, day, periodDuration, ovulationDay);
+    const { symptoms, eatTip, doTip, nutrientTags, eatReasonClause } = getPhaseContent(phase, day, periodDuration, ovulationDay);
 
     days.push({
       day,
@@ -191,7 +221,10 @@ export function getCycleLookup(cycleLength: number): CycleDayData[] {
       fertilityLabel,
       fertilityEmoji: FERTILITY_EMOJI[fertilityLabel],
       symptomsGeneric: symptoms,
-      tipGeneric: tip,
+      eatTipGeneric: eatTip,
+      doTipGeneric: doTip,
+      nutrientTags,
+      eatReasonClause,
     });
   }
 
@@ -215,7 +248,7 @@ export function getDayData(
     const offset = cycleDay - ovulationDay;
     const fertilityLabel: FertilityLabel = FERTILITY_OFFSET_MAP[offset] ?? 'Minimal';
     const phase = getPhase(cycleDay, periodDuration, ovulationDay, clamped);
-    const { symptoms, tip } = getPhaseContent(phase, cycleDay, periodDuration, ovulationDay);
+    const { symptoms, eatTip, doTip, nutrientTags, eatReasonClause } = getPhaseContent(phase, cycleDay, periodDuration, ovulationDay);
     return {
       day: cycleDay,
       phase,
@@ -223,7 +256,10 @@ export function getDayData(
       fertilityLabel,
       fertilityEmoji: FERTILITY_EMOJI[fertilityLabel],
       symptomsGeneric: symptoms,
-      tipGeneric: tip,
+      eatTipGeneric: eatTip,
+      doTipGeneric: doTip,
+      nutrientTags,
+      eatReasonClause,
     };
   }
 

@@ -30,24 +30,33 @@ export async function handleOnboardingStep(
   if (step === 0) {
     const name = message.trim().split(' ')[0]; // first name only
     await updateUser(telegramId, { name, onboarding_step: 1 });
-    await send(chatId, `Nice to meet you, ${name} 🌷\n\nHow old are you?`);
+    await send(chatId, `Nice to meet you, ${name} 🌷\n\nWhat country are you in? 🌍`);
     return;
   }
 
-  // Step 1: age
+  // Step 1: country — free text, no validation. Used for tracking generally
+  // and to localise food suggestions (/foods and the morning digest).
   if (step === 1) {
+    const country = message.trim().slice(0, 60);
+    await updateUser(telegramId, { country, onboarding_step: 2 } as any);
+    await send(chatId, `Got it 💕\n\nHow old are you?`);
+    return;
+  }
+
+  // Step 2: age
+  if (step === 2) {
     const age = parseInt(message.trim());
     if (isNaN(age) || age < 10 || age > 65) {
       await send(chatId, 'Just a number is fine — how old are you?');
       return;
     }
-    await updateUser(telegramId, { age, onboarding_step: 2 });
+    await updateUser(telegramId, { age, onboarding_step: 3 });
     await send(chatId, `Got it 💕\n\nWhen did your last period start? 🩸\n\n_Example: 15 Aug 2026_`);
     return;
   }
 
-  // Step 2: last period date
-  if (step === 2) {
+  // Step 3: last period date
+  if (step === 3) {
     const d = parseDate(message);
     if (!d) {
       await send(chatId, `I couldn't read that date 😅\n\nTry something like: *15 Aug 2026*`);
@@ -57,13 +66,13 @@ export async function handleOnboardingStep(
     await upsertCycleData(user.id, {
       period_start_dates: [d.toISOString().split('T')[0]],
     });
-    await updateUser(telegramId, { onboarding_step: 3 });
+    await updateUser(telegramId, { onboarding_step: 4 });
     await send(chatId, `Got it 🌸\n\nDo you remember when the period before that started?\n\n_Send the date or type *skip*_`);
     return;
   }
 
-  // Step 3: second period date (optional)
-  if (step === 3) {
+  // Step 4: second period date (optional)
+  if (step === 4) {
     if (!isSkip(message)) {
       const d = parseDate(message);
       if (!d) {
@@ -76,13 +85,13 @@ export async function handleOnboardingStep(
         period_start_dates: [...dates, d.toISOString().split('T')[0]],
       });
     }
-    await updateUser(telegramId, { onboarding_step: 4 });
+    await updateUser(telegramId, { onboarding_step: 5 });
     await send(chatId, `And the one before that?\n\n_Send the date or type *skip*_`);
     return;
   }
 
-  // Step 4: third period date (optional)
-  if (step === 4) {
+  // Step 5: third period date (optional)
+  if (step === 5) {
     if (!isSkip(message)) {
       const d = parseDate(message);
       if (!d) {
@@ -95,13 +104,13 @@ export async function handleOnboardingStep(
         period_start_dates: [...dates, d.toISOString().split('T')[0]],
       });
     }
-    await updateUser(telegramId, { onboarding_step: 5 });
+    await updateUser(telegramId, { onboarding_step: 6 });
     await send(chatId, `How long is your cycle usually? 🌙\n\n_Example: 28, 30, 32 days..._`);
     return;
   }
 
-  // Step 5: cycle length
-  if (step === 5) {
+  // Step 6: cycle length
+  if (step === 6) {
     const len = parseInt(message.replace(/\D/g, ''));
     if (isNaN(len) || len < 15 || len > 60) {
       await send(chatId, `Most cycles are between 21–45 days. What's yours usually like?`);
@@ -124,20 +133,20 @@ export async function handleOnboardingStep(
       confidence_pct: confidence,
     });
 
-    await updateUser(telegramId, { onboarding_step: 6 });
+    await updateUser(telegramId, { onboarding_step: 7 });
     await send(chatId, `Perfect 🌷\n\nHow many days does your period usually last?\n\n_Example: 3, 4, 5, 6... days_`);
     return;
   }
 
-  // Step 6: period duration
-  if (step === 6) {
+  // Step 7: period duration
+  if (step === 7) {
     const dur = parseInt(message.replace(/\D/g, ''));
     if (isNaN(dur) || dur < 1 || dur > 10) {
       await send(chatId, `Usually between 2–8 days — what's yours?`);
       return;
     }
     await upsertCycleData(user.id, { period_duration: dur });
-    await updateUser(telegramId, { onboarding_step: 7 });
+    await updateUser(telegramId, { onboarding_step: 8 });
     await send(chatId,
       `Got it 💕\n\nWhat would you like Ava to help you with the most? 🎯\n\n` +
       `1. Track my cycle\n2. Plan pregnancy\n3. Avoid pregnancy\n4. Understand my body\n\n` +
@@ -146,8 +155,8 @@ export async function handleOnboardingStep(
     return;
   }
 
-  // Step 7: goals (multi-select)
-  if (step === 7) {
+  // Step 8: goals (multi-select)
+  if (step === 8) {
     const goalMap: Record<string, string> = {
       '1': 'track', '2': 'conceive', '3': 'prevent', '4': 'understand',
     };
@@ -158,7 +167,7 @@ export async function handleOnboardingStep(
 
     await updateUser(telegramId, {
       reproductive_goal: primaryGoal,
-      onboarding_step: 8,
+      onboarding_step: 9,
       onboarding_complete: true,
     });
     await addMemoryLog(user.id, 'insight', `Goals: ${goals.join(', ')}`);

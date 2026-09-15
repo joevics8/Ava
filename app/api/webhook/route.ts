@@ -201,6 +201,18 @@ async function processUpdate(update: any) {
         return;
       }
 
+      // ── Food menu button callbacks ───────────────────────────────────────
+      if (cbData.startsWith('food_')) {
+        try {
+          const { handleFoodCallback } = await import('@/lib/ava/food');
+          await handleFoodCallback(cbChatId, cbUser, cbData, sendMessage, sendWithKeyboard);
+        } catch (err) {
+          console.error('Food callback error:', err);
+          await sendMessage(cbChatId, 'Something went wrong — please try /foods again 🌸');
+        }
+        return;
+      }
+
       // ── Mood button callbacks ────────────────────────────────────────────
       if (cbData.startsWith('mood_')) {
         const moodMap: Record<string, string> = {
@@ -492,6 +504,13 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
       return NextResponse.json({ ok: true });
     }
 
+    // ── "Tell Ava about my diet" flow ───────────────────────────────────────
+    if ((user as any).food_profile_step > 0) {
+      const { handleFoodProfileStep } = await import('@/lib/ava/food');
+      await handleFoodProfileStep(chatId, telegramId, user, text, sendMessage);
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Settings flow ─────────────────────────────────────────────────────────
     if (user.onboarding_step >= 90) {
       const { handleSettingsStep } = await import('@/lib/ava/settings');
@@ -553,7 +572,7 @@ async function handleCommand(
         return;
       }
       if (user.onboarding_complete) {
-        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
+        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/foods — nutrition & meal ideas\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
       } else {
         await send(chatId, "Hi, I'm *Ava* 🌸 Let's get you set up — what's your name?", true);
       }
@@ -582,6 +601,14 @@ async function handleCommand(
       if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
       const { showConditionMenu } = await import('@/lib/ava/remedy-engine');
       await showConditionMenu(chatId, user, sendKb);
+      return;
+    }
+
+    case '/foods':
+    case '/food': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      const { showFoodMenu } = await import('@/lib/ava/food');
+      await showFoodMenu(chatId, sendKb);
       return;
     }
 
@@ -673,7 +700,7 @@ async function handleCommand(
 
     case '/settings': {
       if (!user) { await send(chatId, "Send /start to begin 🌸"); return; }
-      await send(chatId, "What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Switch mode (cycle/pregnancy)\n7. Delete my data\n\nJust send the number.");
+      await send(chatId, "What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Switch mode (cycle/pregnancy)\n7. Delete my data\n8. My country\n\nJust send the number.");
       const { updateUser } = await import('@/lib/ava/db');
       await updateUser(telegramId, { onboarding_step: 90 } as any);
       return;
@@ -696,6 +723,7 @@ async function handleCommand(
     case '/help': {
       await send(chatId,
         "/today — cycle summary\n" +
+        "/foods — nutrition & meal ideas\n" +
         "/remedies — natural remedies\n" +
         "/insights — what Ava has learned about you\n" +
         "/changes — what changed recently\n" +

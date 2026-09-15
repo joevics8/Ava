@@ -13,6 +13,9 @@ export interface AvaUser {
   height: number | null;
   weight: number | null;
   reproductive_goal: ReproductiveGoal | null;
+  country: string | null;
+  food_profile_step: number;
+  food_profile: FoodProfile | null;
   activity_level: ActivityLevel | null;
   birth_control: string | null;
   conditions: string[] | null;
@@ -40,6 +43,18 @@ export interface CycleData {
   next_ovulation_end: string | null;
   confidence_pct: number | null;
   updated_at: string;
+}
+
+// Collected one question at a time via the "Tell Ava about my diet" flow
+// (/foods → 🔟). All fields optional/free-text — this is used to tailor
+// AI-generated food suggestions, never validated against a fixed list.
+export interface FoodProfile {
+  breakfast?: string;
+  avoid?: string;
+  allergies?: string;
+  budget?: string;
+  meals_per_day?: string;
+  cooking?: string;
 }
 
 export interface MemoryLog {

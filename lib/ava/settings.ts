@@ -62,6 +62,10 @@ export async function handleSettingsStep(
         await updateUser(telegramId, { onboarding_step: 99 });
         await send(chatId, `⚠️ Are you sure you want to delete *all* your data? This cannot be undone.\n\nSend *YES DELETE* to confirm or anything else to cancel.`);
         break;
+      case '8':
+        await updateUser(telegramId, { onboarding_step: 97 } as any);
+        await send(chatId, `What country are you in? 🌍`);
+        break;
       default:
         await updateUser(telegramId, { onboarding_step: 0 });
         await send(chatId, `No problem — settings closed. Just talk to me anytime 🌸`);
@@ -176,6 +180,14 @@ export async function handleSettingsStep(
       await updateUser(telegramId, { onboarding_step: 0 });
       await send(chatId, `No changes made 🌸`);
     }
+    return;
+  }
+
+  // ── Update country ─────────────────────────────────────────────────────────
+  if (step === 97) {
+    const country = text.slice(0, 60);
+    await updateUser(telegramId, { country, onboarding_step: 0 } as any);
+    await send(chatId, `Updated — you're set to *${country}* 🌍`);
     return;
   }
 

@@ -2,6 +2,7 @@ import type { AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
 import { getCurrentPhase, phaseEmoji } from './cycle';
 import { getDayData } from './cycle-lookup';
+import { localizeEatTip } from './food-data';
 
 // Was 'gemini-1.5-flash' — a shut-down model returning 404s in production
 // (confirmed via Vercel runtime logs), which broke the morning digest tip.
@@ -166,9 +167,15 @@ export async function buildMorningDigest(
     ? null
     : '🌡️ *Today:* ' + dayData.symptomsGeneric;
 
+  const eatLine = '🍽️ *Eat:* ' + localizeEatTip(
+    dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country
+  );
+  const doLine = '🏃 *Do:* ' + dayData.doTipGeneric;
+  const actionLines = eatLine + '\n' + doLine;
+
   const insightSection = personalInsight
-    ? '🧠 ' + personalInsight + '\n💡 ' + dayData.tipGeneric
-    : '💡 ' + dayData.tipGeneric;
+    ? '🧠 ' + personalInsight + '\n' + actionLines
+    : actionLines;
 
   // ── Extra actionable help for the toughest days ────────────────────────────
   // Days 1-2 of a period are usually the most acute (heaviest flow, worst
