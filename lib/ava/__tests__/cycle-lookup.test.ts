@@ -53,3 +53,28 @@ describe('getDayData — clamping', () => {
     expect(() => getDayData(1, 90)).not.toThrow();
   });
 });
+
+describe('getDayData — day-to-day variation within the same phase window', () => {
+  it('day 7 and day 8 of a 30-day cycle (both early follicular) render different digest text', () => {
+    // Exact scenario from the reported screenshot: consecutive days landing
+    // in the same 3-day "early follicular" bucket produced a byte-identical
+    // morning digest. Both still describe the same phase, but the actual
+    // wording should differ day to day.
+    const day7 = getDayData(7, 30);
+    const day8 = getDayData(8, 30);
+    expect(day7.phase).toBe('follicular');
+    expect(day8.phase).toBe('follicular');
+    expect(day7.eatTipGeneric).not.toBe(day8.eatTipGeneric);
+    expect(day7.doTipGeneric).not.toBe(day8.doTipGeneric);
+    expect(day7.symptomsGeneric).not.toBe(day8.symptomsGeneric);
+  });
+
+  it('adjacent days within the same window still carry the same nutrient tags and reason clause', () => {
+    // Wording varies; the underlying categorisation used for localisation
+    // (food-data.ts) should not.
+    const day7 = getDayData(7, 30);
+    const day8 = getDayData(8, 30);
+    expect(day7.nutrientTags).toEqual(day8.nutrientTags);
+    expect(day7.eatReasonClause).toBe(day8.eatReasonClause);
+  });
+});

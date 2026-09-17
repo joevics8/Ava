@@ -101,7 +101,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
     `${periodLine}\n` +
     `${ovLine}\n\n` +
     `${symptomSection}\n\n` +
-    `🍽️ *Eat:* ${localizeEatTip(dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country)}\n` +
+    `🍽️ *Eat:* ${localizeEatTip(dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country)}\n\n` +
     `🏃 *Do:* ${dayData.doTipGeneric}`
   );
 }

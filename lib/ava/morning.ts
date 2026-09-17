@@ -171,7 +171,7 @@ export async function buildMorningDigest(
     dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country
   );
   const doLine = '🏃 *Do:* ' + dayData.doTipGeneric;
-  const actionLines = eatLine + '\n' + doLine;
+  const actionLines = eatLine + '\n\n' + doLine;
 
   const insightSection = personalInsight
     ? '🧠 ' + personalInsight + '\n' + actionLines

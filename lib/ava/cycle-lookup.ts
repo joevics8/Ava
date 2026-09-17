@@ -100,6 +100,15 @@ const PHASE_LABELS: Record<PhaseKey, string> = {
 // a single line per phase — e.g. day 1-2 of a period reads differently from
 // day 4-5 of the same period. Phrased as possibilities, never certainties.
 // No supplement doses, no drug names, no percentages.
+//
+// Each phase-window returns 2 variants per line (symptoms/eatTip/doTip), and
+// getPhaseContent picks one deterministically from the actual cycle day —
+// so two consecutive days in the same window (e.g. day 7 and day 8, both
+// "early follicular") don't render byte-identical digests.
+
+function pick(variants: [string, string], day: number): string {
+  return variants[day % 2];
+}
 
 function getPhaseContent(
   phase: PhaseKey,
@@ -111,17 +120,35 @@ function getPhaseContent(
     case 'menstrual':
       if (day <= Math.min(2, periodDuration)) {
         return {
-          symptoms: 'Flow is typically heaviest now. Cramping, fatigue, and lower back pain are common.',
-          eatTip: 'Try iron-rich foods such as beans, lentils, spinach or lean meat.',
-          doTip: 'Rest when you can, and use a heat pack on your lower abdomen for cramps.',
+          symptoms: pick([
+            'Flow is typically heaviest now. Cramping, fatigue, and lower back pain are common.',
+            'Flow tends to be at its heaviest today. You may feel more tired than usual, with some cramping.',
+          ], day),
+          eatTip: pick([
+            'Try iron-rich foods such as beans, lentils, spinach or lean meat.',
+            'Iron-rich options like liver, beans or dark leafy greens can help today.',
+          ], day),
+          doTip: pick([
+            'Rest when you can, and use a heat pack on your lower abdomen for cramps.',
+            'It\'s okay to slow down today — a heat pack and some rest can ease cramping.',
+          ], day),
           nutrientTags: ['iron', 'energy'],
           eatReasonClause: 'can help restore your energy',
         };
       }
       return {
-        symptoms: 'Flow is easing. You may still feel some fatigue and mild cramping.',
-        eatTip: 'Keep up iron-rich foods like spinach, lentils and beans as your period winds down.',
-        doTip: 'Light movement like walking or stretching can help ease any lingering cramps.',
+        symptoms: pick([
+          'Flow is easing. You may still feel some fatigue and mild cramping.',
+          'Flow is starting to taper off, though some tiredness and light cramping can linger.',
+        ], day),
+        eatTip: pick([
+          'Keep up iron-rich foods like spinach, lentils and beans as your period winds down.',
+          'Continue with iron-rich meals — think beans, leafy greens or lean meat — as things wind down.',
+        ], day),
+        doTip: pick([
+          'Light movement like walking or stretching can help ease any lingering cramps.',
+          'A short walk or some gentle stretching can help with any remaining discomfort.',
+        ], day),
         nutrientTags: ['iron'],
         eatReasonClause: 'can help keep your energy up',
       };
@@ -130,17 +157,35 @@ function getPhaseContent(
       const daysSincePeriod = day - periodDuration;
       if (daysSincePeriod <= 3) {
         return {
-          symptoms: 'Oestrogen is rising. Energy is returning and mood tends to lift.',
-          eatTip: 'Protein-rich foods like eggs, fish or beans support your body as it rebuilds.',
-          doTip: 'A good time to restart exercise routines — your body is rebuilding.',
+          symptoms: pick([
+            'Oestrogen is rising. Energy is returning and mood tends to lift.',
+            'You\'re likely feeling more like yourself again — energy and mood tend to pick up here.',
+          ], day),
+          eatTip: pick([
+            'Protein-rich foods like eggs, fish or beans support your body as it rebuilds.',
+            'Eggs, fish or moi moi can give your body good protein to rebuild with today.',
+          ], day),
+          doTip: pick([
+            'A good time to restart exercise routines — your body is rebuilding.',
+            'Your energy is coming back — a good window to ease back into movement.',
+          ], day),
           nutrientTags: ['protein'],
           eatReasonClause: 'can support your body as it rebuilds',
         };
       }
       return {
-        symptoms: 'Energy and confidence are typically at their highest this week.',
-        eatTip: 'Fresh fruit, vegetables and whole grains support your rising energy this week.',
-        doTip: 'Take on demanding tasks and social plans — oestrogen is working in your favour.',
+        symptoms: pick([
+          'Energy and confidence are typically at their highest this week.',
+          'This is usually a high-energy stretch — mood and focus tend to be strong.',
+        ], day),
+        eatTip: pick([
+          'Fresh fruit, vegetables and whole grains support your rising energy this week.',
+          'Lean into fresh produce and whole grains — they match your rising energy well this week.',
+        ], day),
+        doTip: pick([
+          'Take on demanding tasks and social plans — oestrogen is working in your favour.',
+          'A good week to tackle bigger tasks or plans — your energy is naturally higher.',
+        ], day),
         nutrientTags: ['energy', 'fiber'],
         eatReasonClause: 'can support your rising energy',
       };
@@ -148,45 +193,90 @@ function getPhaseContent(
 
     case 'ovulatory':
       return {
-        symptoms: 'You may notice egg-white discharge, a slight temperature rise, or mild pelvic twinges.',
-        eatTip: 'Hydrate well and include water-rich foods like cucumber, watermelon or coconut water.',
-        doTip: 'Note any mid-cycle pain — it is usually normal and passes quickly.',
+        symptoms: pick([
+          'You may notice egg-white discharge, a slight temperature rise, or mild pelvic twinges.',
+          'Some notice a slight temperature rise or brief pelvic twinges around now — both are usually normal.',
+        ], day),
+        eatTip: pick([
+          'Hydrate well and include water-rich foods like cucumber, watermelon or coconut water.',
+          'Keep your water intake up — cucumber, watermelon or coconut water are good extras today.',
+        ], day),
+        doTip: pick([
+          'Note any mid-cycle pain — it is usually normal and passes quickly.',
+          'Mild mid-cycle twinges are common and usually pass on their own within a day.',
+        ], day),
         nutrientTags: ['hydration'],
         eatReasonClause: 'can help keep you well hydrated',
       };
 
     case 'early_luteal':
       return {
-        symptoms: 'Progesterone is rising. Mild breast tenderness or slight bloating may begin.',
-        eatTip: 'Steady, protein-rich meals support a smooth transition.',
-        doTip: 'Moderate movement like a walk or light workout can help too.',
+        symptoms: pick([
+          'Progesterone is rising. Mild breast tenderness or slight bloating may begin.',
+          'You may start noticing slight bloating or breast tenderness as progesterone rises.',
+        ], day),
+        eatTip: pick([
+          'Steady, protein-rich meals support a smooth transition.',
+          'Balanced, protein-rich meals can help keep energy steady through this shift.',
+        ], day),
+        doTip: pick([
+          'Moderate movement like a walk or light workout can help too.',
+          'Keep movement moderate — a walk or light workout suits this phase well.',
+        ], day),
         nutrientTags: ['protein'],
         eatReasonClause: 'can support a smooth transition',
       };
 
     case 'mid_luteal':
       return {
-        symptoms: 'Progesterone is at its peak. Energy tends to be steady.',
-        eatTip: 'Magnesium-rich foods like dark chocolate, nuts and leafy greens may help.',
-        doTip: 'Keep up regular movement — energy tends to be steady this week.',
+        symptoms: pick([
+          'Progesterone is at its peak. Energy tends to be steady.',
+          'Hormones are near their peak here — most feel fairly steady, energy-wise.',
+        ], day),
+        eatTip: pick([
+          'Magnesium-rich foods like dark chocolate, nuts and leafy greens may help.',
+          'A little dark chocolate, some nuts, or leafy greens can help with magnesium today.',
+        ], day),
+        doTip: pick([
+          'Keep up regular movement — energy tends to be steady this week.',
+          'This is usually a steady-energy week — good for keeping your regular routine going.',
+        ], day),
         nutrientTags: ['magnesium', 'mood'],
         eatReasonClause: 'may help with mood and steady energy',
       };
 
     case 'late_luteal':
       return {
-        symptoms: 'PMS symptoms often peak now — irritability, bloating, cravings, and fatigue are common.',
-        eatTip: 'B6-rich foods like bananas and chickpeas can help support your mood.',
-        doTip: 'Be gentle with yourself — a short walk or light stretch can ease tension.',
+        symptoms: pick([
+          'PMS symptoms often peak now — irritability, bloating, cravings, and fatigue are common.',
+          'This is often when PMS is most noticeable — mood swings, bloating or cravings are common.',
+        ], day),
+        eatTip: pick([
+          'B6-rich foods like bananas and chickpeas can help support your mood.',
+          'Bananas, chickpeas or oats can help with B6 to support your mood today.',
+        ], day),
+        doTip: pick([
+          'Be gentle with yourself — a short walk or light stretch can ease tension.',
+          'Go easy on yourself today — light movement can help take the edge off tension.',
+        ], day),
         nutrientTags: ['mood'],
         eatReasonClause: 'can help support your mood',
       };
 
     case 'premenstrual':
       return {
-        symptoms: 'Your period is approaching. Cramping, bloating, and low energy are typical.',
-        eatTip: 'Light, warm meals with whole grains can help as energy dips before your period.',
-        doTip: 'Stock up on period supplies and prepare your heat pack — gentle movement often helps more than rest alone.',
+        symptoms: pick([
+          'Your period is approaching. Cramping, bloating, and low energy are typical.',
+          'Your period is close now — some cramping, bloating or low energy is common around this point.',
+        ], day),
+        eatTip: pick([
+          'Light, warm meals with whole grains can help as energy dips before your period.',
+          'Warm, simple meals with whole grains can help as your energy naturally dips.',
+        ], day),
+        doTip: pick([
+          'Stock up on period supplies and prepare your heat pack — gentle movement often helps more than rest alone.',
+          'A good day to get period supplies ready — gentle movement can help more than resting all day.',
+        ], day),
         nutrientTags: ['comfort', 'carbs'],
         eatReasonClause: 'can help as energy dips before your period',
       };
