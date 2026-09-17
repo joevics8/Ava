@@ -7,12 +7,12 @@
 // "beans, ugu and liver" lands very differently for a Nigerian user than
 // the generic "beans, lentils, spinach" fallback.
 //
-// This file is a seed, not a finished product. It currently only covers
-// Nigeria in real depth (the primary market right now). The intended path
-// forward — per product notes — is to research ~50 common foods per target
-// country and tag each with the nutrients/benefits it's known for (energy,
-// iron, protein, strength, etc.), so this list can grow country by country
-// without touching any of the code that reads it.
+// This file is a seed, not a finished product. Nigeria now has 50 foods
+// (the primary market right now) — the intended path forward — per product
+// notes — is to research a similar ~50 common foods for each additional
+// target country and tag each with the nutrients/benefits it's known for
+// (energy, iron, protein, strength, etc.), so this list can grow country by
+// country without touching any of the code that reads it.
 //
 // Tag vocabulary is intentionally small and shared with cycle-lookup.ts's
 // CycleDayData.nutrientTags: 'iron' | 'energy' | 'protein' | 'magnesium' |
@@ -49,6 +49,33 @@ export const COUNTRY_FOODS: Record<string, CountryFood[]> = {
     { name: 'pepper soup', tags: ['comfort'] },
     { name: 'pap (ogi)', tags: ['comfort', 'carbs'] },
     { name: 'dark leafy greens (efo)', tags: ['iron', 'magnesium'] },
+    { name: 'tomatoes', tags: ['digestion', 'hydration'] },
+    { name: 'onions', tags: ['digestion'] },
+    { name: 'scent leaf (nchanwu)', tags: ['digestion', 'comfort'] },
+    { name: 'bitter leaf', tags: ['digestion'] },
+    { name: 'pumpkin (elegede)', tags: ['fiber', 'carbs'] },
+    { name: 'sweet potato', tags: ['carbs', 'energy', 'fiber'] },
+    { name: 'garri (cassava)', tags: ['carbs', 'energy'] },
+    { name: 'millet', tags: ['fiber', 'energy'] },
+    { name: 'guinea corn (sorghum)', tags: ['fiber', 'iron'] },
+    { name: 'brown rice', tags: ['fiber', 'carbs'] },
+    { name: 'oats', tags: ['fiber', 'energy'] },
+    { name: 'tigernut (aya)', tags: ['energy', 'digestion'] },
+    { name: 'cashew nuts', tags: ['magnesium', 'energy'] },
+    { name: 'African walnut (asala)', tags: ['magnesium', 'mood'] },
+    { name: 'honey', tags: ['energy', 'comfort'] },
+    { name: 'ginger', tags: ['digestion', 'comfort'] },
+    { name: 'garlic', tags: ['digestion'] },
+    { name: 'turmeric', tags: ['digestion'] },
+    { name: 'lemon', tags: ['hydration', 'digestion'] },
+    { name: 'orange', tags: ['hydration', 'fiber'] },
+    { name: 'pineapple', tags: ['digestion', 'hydration'] },
+    { name: 'pawpaw (papaya)', tags: ['digestion', 'fiber'] },
+    { name: 'mango', tags: ['energy', 'fiber'] },
+    { name: 'avocado (ube)', tags: ['magnesium', 'strength'] },
+    { name: 'crayfish', tags: ['protein', 'iron'] },
+    { name: 'snail', tags: ['protein', 'iron'] },
+    { name: 'yoghurt (fura da nono)', tags: ['protein', 'digestion'] },
   ],
 };
 

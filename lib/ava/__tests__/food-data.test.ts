@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { getCountryFoods, pickLocalFoods, localizeEatTip } from '../food-data';
 
 describe('getCountryFoods', () => {
+  it('returns 50 seeded foods for Nigeria', () => {
+    // Product target per research notes — locks in the count so a future
+    // edit that accidentally drops entries gets caught.
+    expect(getCountryFoods('Nigeria').length).toBe(50);
+  });
+
   it('returns the Nigeria list for common spellings/aliases', () => {
     expect(getCountryFoods('Nigeria').length).toBeGreaterThan(0);
     expect(getCountryFoods('nigeria').length).toBeGreaterThan(0);
