@@ -66,6 +66,15 @@ export async function handleSettingsStep(
         await updateUser(telegramId, { onboarding_step: 97 } as any);
         await send(chatId, `What country are you in? 🌍`);
         break;
+      case '9': {
+        const newValue = !(user as any).affirmations_enabled;
+        await updateUser(telegramId, { affirmations_enabled: newValue, onboarding_step: 0 } as any);
+        await send(chatId, newValue
+          ? `Daily affirmations are back on 🌸 You'll get one each morning.`
+          : `Daily affirmations are off. You can still get one anytime via /affirmations.`
+        );
+        break;
+      }
       default:
         await updateUser(telegramId, { onboarding_step: 0 });
         await send(chatId, `No problem — settings closed. Just talk to me anytime 🌸`);

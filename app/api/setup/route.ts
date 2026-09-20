@@ -34,6 +34,8 @@ export async function GET() {
         { command: 'start', description: 'Start or restart Ava' },
         { command: 'today', description: 'Your daily cycle summary' },
         { command: 'foods', description: 'Nutrition & meal ideas' },
+        { command: 'affirmations', description: 'Daily affirmations' },
+        { command: 'meditate', description: 'Short guided meditations' },
         { command: 'log', description: 'Track symptoms, mood or flow' },
         { command: 'remedies', description: 'Natural remedies for your symptoms' },
         { command: 'insights', description: 'What Ava has learned about you' },

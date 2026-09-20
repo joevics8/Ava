@@ -16,6 +16,7 @@ export interface AvaUser {
   country: string | null;
   food_profile_step: number;
   food_profile: FoodProfile | null;
+  affirmations_enabled: boolean;
   activity_level: ActivityLevel | null;
   birth_control: string | null;
   conditions: string[] | null;

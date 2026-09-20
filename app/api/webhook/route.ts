@@ -213,6 +213,30 @@ async function processUpdate(update: any) {
         return;
       }
 
+      // ── Affirmation menu button callbacks ────────────────────────────────
+      if (cbData.startsWith('aff_')) {
+        try {
+          const { handleAffirmationCallback } = await import('@/lib/ava/affirmations');
+          await handleAffirmationCallback(cbChatId, cbData, sendMessage);
+        } catch (err) {
+          console.error('Affirmation callback error:', err);
+          await sendMessage(cbChatId, 'Something went wrong — please try /affirmations again 🌸');
+        }
+        return;
+      }
+
+      // ── Meditation menu button callbacks ─────────────────────────────────
+      if (cbData.startsWith('med_')) {
+        try {
+          const { handleMeditationCallback } = await import('@/lib/ava/meditations');
+          await handleMeditationCallback(cbChatId, cbData, sendMessage);
+        } catch (err) {
+          console.error('Meditation callback error:', err);
+          await sendMessage(cbChatId, 'Something went wrong — please try /meditate again 🌸');
+        }
+        return;
+      }
+
       // ── Mood button callbacks ────────────────────────────────────────────
       if (cbData.startsWith('mood_')) {
         const moodMap: Record<string, string> = {
@@ -572,7 +596,7 @@ async function handleCommand(
         return;
       }
       if (user.onboarding_complete) {
-        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/foods — nutrition & meal ideas\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
+        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/foods — nutrition & meal ideas\n/affirmations — daily affirmations\n/meditate — short guided meditations\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
       } else {
         await send(chatId, "Hi, I'm *Ava* 🌸 Let's get you set up — what's your name?", true);
       }
@@ -609,6 +633,22 @@ async function handleCommand(
       if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
       const { showFoodMenu } = await import('@/lib/ava/food');
       await showFoodMenu(chatId, sendKb);
+      return;
+    }
+
+    case '/affirmations':
+    case '/affirmation': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      const { showAffirmationMenu } = await import('@/lib/ava/affirmations');
+      await showAffirmationMenu(chatId, user, send, sendKb);
+      return;
+    }
+
+    case '/meditate':
+    case '/meditation': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      const { showMeditationMenu } = await import('@/lib/ava/meditations');
+      await showMeditationMenu(chatId, user, send, sendKb);
       return;
     }
 
@@ -700,7 +740,7 @@ async function handleCommand(
 
     case '/settings': {
       if (!user) { await send(chatId, "Send /start to begin 🌸"); return; }
-      await send(chatId, "What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Switch mode (cycle/pregnancy)\n7. Delete my data\n8. My country\n\nJust send the number.");
+      await send(chatId, "What would you like to update? ⚙️\n\n1. My name\n2. Last period date\n3. Cycle length\n4. Period duration\n5. My goal\n6. Switch mode (cycle/pregnancy)\n7. Delete my data\n8. My country\n9. Toggle daily affirmations\n\nJust send the number.");
       const { updateUser } = await import('@/lib/ava/db');
       await updateUser(telegramId, { onboarding_step: 90 } as any);
       return;
@@ -724,6 +764,8 @@ async function handleCommand(
       await send(chatId,
         "/today — cycle summary\n" +
         "/foods — nutrition & meal ideas\n" +
+        "/affirmations — daily affirmations\n" +
+        "/meditate — short guided meditations\n" +
         "/remedies — natural remedies\n" +
         "/insights — what Ava has learned about you\n" +
         "/changes — what changed recently\n" +
@@ -884,13 +926,17 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     }
 
     // Auto-suggest remedy list if a symptom keyword is detected and the user
-    // isn't already tracking a remedy for it. Food is the fallback nudge for
-    // conditions remedies don't cover (fatigue, cravings, brain fog) — never
-    // both at once, that's two unsolicited follow-ups for one message.
+    // isn't already tracking a remedy for it. Food and meditation are
+    // fallback nudges for conditions remedies don't cover — never more than
+    // one at once, that's multiple unsolicited follow-ups for one message.
     const remedySuggested = await maybeSuggestRemedy(chatId, user, text);
     if (!remedySuggested) {
       const { maybeSuggestFood } = await import('@/lib/ava/food');
-      await maybeSuggestFood(chatId, user, text, memoryLogs, sendMessage);
+      const foodSuggested = await maybeSuggestFood(chatId, user, text, memoryLogs, sendMessage);
+      if (!foodSuggested) {
+        const { maybeSuggestMeditation } = await import('@/lib/ava/meditations');
+        await maybeSuggestMeditation(chatId, user, text, memoryLogs, sendMessage);
+      }
     }
 
   } else if (category === 'RETRIEVAL') {
@@ -916,7 +962,11 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     const remedySuggested = await maybeSuggestRemedy(chatId, user, text);
     if (!remedySuggested) {
       const { maybeSuggestFood } = await import('@/lib/ava/food');
-      await maybeSuggestFood(chatId, user, text, memoryLogs, sendMessage);
+      const foodSuggested = await maybeSuggestFood(chatId, user, text, memoryLogs, sendMessage);
+      if (!foodSuggested) {
+        const { maybeSuggestMeditation } = await import('@/lib/ava/meditations');
+        await maybeSuggestMeditation(chatId, user, text, memoryLogs, sendMessage);
+      }
     }
   }
 }
