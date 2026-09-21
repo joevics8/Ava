@@ -217,7 +217,7 @@ async function processUpdate(update: any) {
       if (cbData.startsWith('aff_')) {
         try {
           const { handleAffirmationCallback } = await import('@/lib/ava/affirmations');
-          await handleAffirmationCallback(cbChatId, cbData, sendMessage);
+          await handleAffirmationCallback(cbChatId, cbUser, cbData, sendMessage);
         } catch (err) {
           console.error('Affirmation callback error:', err);
           await sendMessage(cbChatId, 'Something went wrong — please try /affirmations again 🌸');
@@ -233,6 +233,18 @@ async function processUpdate(update: any) {
         } catch (err) {
           console.error('Meditation callback error:', err);
           await sendMessage(cbChatId, 'Something went wrong — please try /meditate again 🌸');
+        }
+        return;
+      }
+
+      // ── Onboarding: daily affirmation opt-in (final onboarding step) ────
+      if (cbData === 'onb_aff_yes' || cbData === 'onb_aff_no') {
+        try {
+          const { completeOnboardingAfterAffirmationChoice } = await import('@/lib/ava/onboarding-raw');
+          await completeOnboardingAfterAffirmationChoice(cbChatId, cbTelegramId, cbUser, cbData === 'onb_aff_yes', sendMessage);
+        } catch (err) {
+          console.error('Onboarding affirmation choice error:', err);
+          await sendMessage(cbChatId, 'Something went wrong finishing setup — please send /start again 🌸');
         }
         return;
       }
@@ -491,7 +503,7 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     // ── Onboarding ────────────────────────────────────────────────────────────
     if (!user.onboarding_complete) {
       const { handleOnboardingStep } = await import('@/lib/ava/onboarding-raw');
-      await handleOnboardingStep(chatId, telegramId, user, text, sendMessage);
+      await handleOnboardingStep(chatId, telegramId, user, text, sendMessage, sendWithKeyboard);
       return NextResponse.json({ ok: true });
     }
 

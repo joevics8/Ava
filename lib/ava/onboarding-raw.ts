@@ -4,6 +4,7 @@ import { generateDailyTip } from './ai';
 import type { AvaUser } from '@/types';
 
 type SendFn = (chatId: number, text: string, markdown?: boolean) => Promise<void>;
+type SendWithKeyboardFn = (chatId: number, text: string, keyboard: any[][], markdown?: boolean) => Promise<void>;
 
 function parseDate(input: string): Date | null {
   const cleaned = input.replace(/(\d+)(st|nd|rd|th)/gi, '$1').replace(/,/g, '').trim();
@@ -22,7 +23,8 @@ export async function handleOnboardingStep(
   telegramId: number,
   user: AvaUser,
   message: string,
-  send: SendFn
+  send: SendFn,
+  sendKb: SendWithKeyboardFn
 ): Promise<void> {
   const step = user.onboarding_step;
 
@@ -168,12 +170,39 @@ export async function handleOnboardingStep(
     await updateUser(telegramId, {
       reproductive_goal: primaryGoal,
       onboarding_step: 9,
-      onboarding_complete: true,
     });
     await addMemoryLog(user.id, 'insight', `Goals: ${goals.join(', ')}`);
-    await sendWelcomeInsight(chatId, telegramId, user, send, goals);
+
+    await sendKb(chatId,
+      'One last thing 🌸\n\nWant a short daily affirmation each morning?',
+      [
+        [{ text: "Yes, I'd love that", callback_data: 'onb_aff_yes' }],
+        [{ text: 'No thanks', callback_data: 'onb_aff_no' }],
+      ]
+    );
     return;
   }
+}
+
+// Called from the onboarding affirmation opt-in callback (step 9, after the
+// Yes/No choice) to finish onboarding and send the welcome insight. Goals
+// aren't persisted as an array anywhere durable, so this reconstructs a
+// single-item list from the saved primary goal — a small cosmetic
+// simplification of the welcome message's goal summary, not a data loss.
+export async function completeOnboardingAfterAffirmationChoice(
+  chatId: number,
+  telegramId: number,
+  user: AvaUser,
+  affirmationsEnabled: boolean,
+  send: SendFn
+): Promise<void> {
+  await updateUser(telegramId, {
+    affirmations_enabled: affirmationsEnabled,
+    onboarding_complete: true,
+    onboarding_step: 10,
+  } as any);
+  const goals = user.reproductive_goal ? [user.reproductive_goal] : ['track'];
+  await sendWelcomeInsight(chatId, telegramId, user, send, goals as any);
 }
 
 const goalLabels: Record<string, string> = {

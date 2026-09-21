@@ -598,15 +598,31 @@ export async function showAffirmationMenu(chatId: number, user: any, send: SendF
   }
 
   const keyboard = AFFIRMATION_CATEGORIES.map(c => [{ text: `${c.emoji} ${c.label} — ${c.tagline}`, callback_data: 'aff_' + c.key }]);
+  keyboard.push([{
+    text: user.affirmations_enabled ? '🔕 Turn off daily affirmations' : '🔔 Turn on daily affirmations',
+    callback_data: user.affirmations_enabled ? 'aff_toggle_off' : 'aff_toggle_on',
+  }]);
   await send(chatId, '💬 *Pick an affirmation category:*', true);
   await sendKb(chatId, '\u200b', keyboard, true);
 }
 
 export async function handleAffirmationCallback(
   chatId: number,
+  user: any,
   callbackData: string,
   send: SendFn
 ): Promise<boolean> {
+  if (callbackData === 'aff_toggle_on' || callbackData === 'aff_toggle_off') {
+    const { updateUser } = await import('./db');
+    const enabled = callbackData === 'aff_toggle_on';
+    await updateUser(user.telegram_id, { affirmations_enabled: enabled } as any);
+    await send(chatId, enabled
+      ? "Daily affirmations are on 🌸 You'll get one each morning."
+      : 'Daily affirmations are off. You can turn them back on anytime from /affirmations or /settings.'
+    );
+    return true;
+  }
+
   if (!callbackData.startsWith('aff_')) return false;
   const key = callbackData.replace('aff_', '');
   const list = AFFIRMATIONS[key];
