@@ -9,9 +9,25 @@ describe('MEDITATIONS content', () => {
     }
   });
 
+  it('every script has a non-empty title, duration, setup, and script body', () => {
+    for (const key of Object.keys(MEDITATIONS)) {
+      for (const item of MEDITATIONS[key]) {
+        expect(item.title.length).toBeGreaterThan(0);
+        expect(item.duration.length).toBeGreaterThan(0);
+        expect(item.setup.length).toBeGreaterThan(0);
+        expect(item.script.length).toBeGreaterThan(0);
+        // setup is meant to be short position/posture instructions, not the
+        // full guided content — script should always be the longer part.
+        expect(item.script.length).toBeGreaterThan(item.setup.length);
+      }
+    }
+  });
+
   it('has no duplicate scripts across the whole library', () => {
     const all: string[] = [];
-    for (const key of Object.keys(MEDITATIONS)) all.push(...MEDITATIONS[key]);
+    for (const key of Object.keys(MEDITATIONS)) {
+      for (const item of MEDITATIONS[key]) all.push(item.script);
+    }
     expect(new Set(all).size).toBe(all.length);
   });
 });

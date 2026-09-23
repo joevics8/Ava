@@ -602,8 +602,7 @@ export async function showAffirmationMenu(chatId: number, user: any, send: SendF
     text: user.affirmations_enabled ? '🔕 Turn off daily affirmations' : '🔔 Turn on daily affirmations',
     callback_data: user.affirmations_enabled ? 'aff_toggle_off' : 'aff_toggle_on',
   }]);
-  await send(chatId, '💬 *Pick an affirmation category:*', true);
-  await sendKb(chatId, '\u200b', keyboard, true);
+  await sendKb(chatId, '💬 *Pick an affirmation category:*', keyboard, true);
 }
 
 export async function handleAffirmationCallback(

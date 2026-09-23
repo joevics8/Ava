@@ -139,11 +139,15 @@ async function sendWithKeyboard(chatId: number, text: string, keyboard: any[][],
     reply_markup: keyboard.length ? { inline_keyboard: keyboard } : undefined,
   };
   if (markdown) body.parse_mode = 'Markdown';
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
+  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error('Telegram sendWithKeyboard error:', JSON.stringify(err));
+  }
 }
 
 export async function POST(req: NextRequest) {
