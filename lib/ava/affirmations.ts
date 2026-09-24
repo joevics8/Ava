@@ -11,26 +11,30 @@ export interface AffirmationCategory {
   emoji: string;
   label: string;
   tagline: string;
+  // Which underlying AFFIRMATIONS[] keys this menu button draws from. Menu
+  // was trimmed from 12 buttons to 6 for length — content wasn't cut, the
+  // related categories were pooled together instead (e.g. Stress,
+  // Overthinking, Inner calm and Focus are all "help me settle down" asks
+  // in practice, so one button now draws from all four pools).
+  poolKeys: string[];
 }
 
 export const AFFIRMATION_CATEGORIES: AffirmationCategory[] = [
-  { key: 'morning', emoji: '🌅', label: 'Morning', tagline: 'Start with intention' },
-  { key: 'confidence', emoji: '💪', label: 'Confidence', tagline: 'Believe in yourself' },
-  { key: 'focus', emoji: '🧠', label: 'Focus', tagline: 'Stay grounded' },
-  { key: 'stress', emoji: '😌', label: 'Stress', tagline: 'Give yourself permission to slow down' },
-  { key: 'overthinking', emoji: '💭', label: 'Overthinking', tagline: "Let go of what you can't control" },
-  { key: 'self_worth', emoji: '💗', label: 'Self-worth', tagline: 'Remember your value' },
-  { key: 'growth', emoji: '🌱', label: 'Growth', tagline: 'Keep moving forward' },
-  { key: 'self_compassion', emoji: '🫶', label: 'Self-compassion', tagline: 'Be kinder to yourself' },
-  { key: 'sleep', emoji: '🌙', label: 'Sleep', tagline: 'End the day peacefully' },
-  { key: 'period_days', emoji: '🌸', label: 'Period days', tagline: 'Be gentle with yourself' },
-  { key: 'motivation', emoji: '🔥', label: 'Motivation', tagline: 'Keep going' },
-  { key: 'inner_calm', emoji: '🧘', label: 'Inner calm', tagline: 'Find your balance' },
+  { key: 'morning', emoji: '🌅', label: 'Morning', tagline: 'Start with intention', poolKeys: ['morning'] },
+  { key: 'calm', emoji: '😌', label: 'Calm', tagline: 'Slow down and let go', poolKeys: ['stress', 'overthinking', 'inner_calm', 'focus'] },
+  { key: 'self_worth_group', emoji: '💗', label: 'Self-worth', tagline: 'Believe in your value', poolKeys: ['confidence', 'self_worth', 'self_compassion'] },
+  { key: 'growth_group', emoji: '🌱', label: 'Growth', tagline: 'Keep moving forward', poolKeys: ['growth', 'motivation'] },
+  { key: 'sleep', emoji: '🌙', label: 'Sleep', tagline: 'End the day peacefully', poolKeys: ['sleep'] },
+  { key: 'period_days', emoji: '🌸', label: 'Period days', tagline: 'Be gentle with yourself', poolKeys: ['period_days'] },
 ];
 
 export const AFFIRMATIONS_INTRO =
   "🌸 *How affirmations work*\nPick a category and Ava will share a short affirmation — read it, or say it out loud like you're repeating after a friend. There's no right way to do it, just let the words land.";
 
+// Underlying content pools — kept at the original 12 keys so none of the
+// 105 affirmations had to be rewritten or dropped when the menu shrank to
+// 6 buttons. AFFIRMATION_CATEGORIES above maps each visible button to one
+// or more of these.
 export const AFFIRMATIONS: Record<string, string[]> = {
   morning: [
 `Some mornings call for quiet confidence, and this is one of them.
@@ -624,10 +628,13 @@ export async function handleAffirmationCallback(
 
   if (!callbackData.startsWith('aff_')) return false;
   const key = callbackData.replace('aff_', '');
-  const list = AFFIRMATIONS[key];
-  if (!list || !list.length) return true;
+  const category = AFFIRMATION_CATEGORIES.find(c => c.key === key);
+  if (!category) return true;
 
-  const pick = list[Math.floor(Math.random() * list.length)];
+  const pool = category.poolKeys.flatMap(k => AFFIRMATIONS[k] || []);
+  if (!pool.length) return true;
+
+  const pick = pool[Math.floor(Math.random() * pool.length)];
   await send(chatId, pick);
   return true;
 }

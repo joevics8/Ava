@@ -2,18 +2,35 @@ import { describe, it, expect } from 'vitest';
 import { AFFIRMATIONS, AFFIRMATION_CATEGORIES, getDailyMorningAffirmation } from '../affirmations';
 
 describe('AFFIRMATIONS content', () => {
-  it('has all 12 categories with content', () => {
+  it('menu has exactly 6 categories, each mapping to at least one content pool', () => {
+    expect(AFFIRMATION_CATEGORIES.length).toBe(6);
     for (const cat of AFFIRMATION_CATEGORIES) {
-      expect(AFFIRMATIONS[cat.key]?.length).toBeGreaterThan(0);
+      expect(cat.poolKeys.length).toBeGreaterThan(0);
+      for (const poolKey of cat.poolKeys) {
+        expect(AFFIRMATIONS[poolKey]?.length).toBeGreaterThan(0);
+      }
     }
   });
 
-  it('morning has 50 affirmations, all other categories have at least 5', () => {
+  it('morning has 50 affirmations, every other content pool has at least 5', () => {
     expect(AFFIRMATIONS.morning.length).toBe(50);
-    for (const cat of AFFIRMATION_CATEGORIES) {
-      if (cat.key === 'morning') continue;
-      expect(AFFIRMATIONS[cat.key].length).toBeGreaterThanOrEqual(5);
+    for (const key of Object.keys(AFFIRMATIONS)) {
+      if (key === 'morning') continue;
+      expect(AFFIRMATIONS[key].length).toBeGreaterThanOrEqual(5);
     }
+  });
+
+  it('no content pool was dropped when the menu shrank from 12 to 6 — all 105 affirmations still reachable', () => {
+    const reachable = new Set<string>();
+    for (const cat of AFFIRMATION_CATEGORIES) {
+      for (const poolKey of cat.poolKeys) reachable.add(poolKey);
+    }
+    const allContentKeys = Object.keys(AFFIRMATIONS);
+    for (const key of allContentKeys) expect(reachable.has(key)).toBe(true);
+
+    let total = 0;
+    for (const key of allContentKeys) total += AFFIRMATIONS[key].length;
+    expect(total).toBe(105);
   });
 
   it('every affirmation has multiple distinct lines (not a single line, not a repeated line)', () => {

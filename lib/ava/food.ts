@@ -27,13 +27,11 @@ interface FoodOption {
 
 const FOOD_OPTIONS: FoodOption[] = [
   { key: 'today', label: '🍽️ What should I eat today?' },
-  { key: 'energy', label: '⚡ Food for more energy' },
+  { key: 'energy', label: '⚡ Food for energy & fitness' },
   { key: 'symptoms', label: '🩺 Food for my current symptoms' },
   { key: 'weight_gain', label: '⚖️ Healthy weight gain' },
   { key: 'weight_loss', label: '⚖️ Healthy weight loss' },
   { key: 'sleep', label: '😴 Better sleep' },
-  { key: 'fitness', label: '💪 Fitness & recovery' },
-  { key: 'ideas', label: '🎲 Just give me meal ideas' },
 ];
 
 // Not a food request — updates her saved diet profile, so it's kept out of
@@ -50,9 +48,15 @@ export async function showFoodMenu(chatId: number, sendKb: SendWithKeyboardFn): 
 
 // ─── AI suggestion generation ──────────────────────────────────────────────
 
+// Menu trimmed from 8 buttons to 6 for length — 'fitness' and 'ideas' are
+// no longer their own menu buttons, but the instructions stay defined here
+// since they're still reachable: 'energy' now folds in fitness/recovery
+// (see its broadened instruction below), 'today' folds in generic meal
+// ideas, and 'ideas' itself is still used internally by
+// maybeSuggestFood's food_cravings trigger.
 const OPTION_INSTRUCTIONS: Record<string, string> = {
-  today: 'Suggest one practical meal or food combo she could have today, taking her current cycle phase into account (see phase info below) alongside anything else relevant.',
-  energy: 'Suggest foods that can help with energy and fighting fatigue.',
+  today: 'Suggest one practical meal, food combo, or simple meal idea she could have today, taking her current cycle phase into account (see phase info below) alongside anything else relevant.',
+  energy: 'Suggest foods that can help with energy, fatigue, or supporting fitness and exercise recovery.',
   symptoms: 'Suggest foods that may help with the symptom(s) noted below. If none are noted, ask what she is feeling today in one short line, then still give general practical food advice.',
   weight_gain: 'Suggest healthy, sustainable ways to gain weight through food choices.',
   weight_loss: 'Suggest healthy, sustainable food choices that support gradual weight loss.',
