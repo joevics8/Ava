@@ -7,11 +7,24 @@ export type { Remedy } from './remedy-engine';
 // Condition keyword detector — still used by webhook
 export function detectCondition(message: string): string | null {
   const lower = message.toLowerCase();
+
+  // Body-location + skin-symptom combos need to match regardless of word
+  // order ("breakouts coming out from my neck" vs a fixed "neck breakout"
+  // phrase) — a real report came in as the former and the old fixed-phrase
+  // entries below missed it entirely. Checked before the generic map so a
+  // mention of neck/back/chest/body alongside any skin-eruption word routes
+  // to the body-acne remedies (different, real content — loose clothing,
+  // tea tree oil, post-workout showering) instead of the facial-acne set.
+  const skinWords = ['acne', 'breakout', 'pimple', 'spot', 'blemish'];
+  const bodyLocations = ['neck', 'back', 'chest', 'body'];
+  if (skinWords.some(w => lower.includes(w)) && bodyLocations.some(w => lower.includes(w))) {
+    return 'acne_body';
+  }
+
   const map: Record<string, string> = {
     'leg cramp': 'leg_cramps', 'calf cramp': 'leg_cramps',
     cramp: 'cramps', 'period pain': 'cramps', dysmenorrhea: 'cramps', 'stomach pain': 'cramps',
     bloat: 'bloating', 'water retention': 'water_retention', swollen: 'water_retention', puffy: 'water_retention',
-    'back acne': 'acne_body', 'chest acne': 'acne_body', 'body acne': 'acne_body', 'back breakout': 'acne_body',
     acne: 'acne', breakout: 'acne', pimple: 'acne', spot: 'acne', blemish: 'acne',
     mood: 'pms_mood', irritable: 'pms_mood', pms: 'pms_mood', 'mood swing': 'pms_mood',
     'heavy flow': 'heavy_flow', 'heavy period': 'heavy_flow', 'bleeding a lot': 'heavy_flow',

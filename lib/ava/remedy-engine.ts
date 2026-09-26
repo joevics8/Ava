@@ -94,16 +94,12 @@ export async function showRemedyList(
   const conditionLabel = remedies[0].condition_label;
   const lockedCount = remedies.filter(r => r.premium && !isPremium).length;
 
-  // Build numbered list text — locked remedies are shown (not hidden) with a
-  // lock icon, so free users know exactly what they're missing rather than
-  // the list quietly looking shorter than it is.
-  const list = remedies.map((r, i) => {
-    const locked = r.premium && !isPremium;
-    const label = locked ? `🔒 *${r.name}* (Premium)` : `*${r.name}*`;
-    return `${i + 1}. ${label}\n_${r.description.slice(0, 80)}..._`;
-  }).join('\n\n');
-
-  // Build keyboard — one remedy per row, locked ones show a lock icon too
+  // Build keyboard — one remedy per row, locked ones show a lock icon too.
+  // No per-item description preview in the message text anymore — it was
+  // always truncated mid-sentence ("...The effe...") since it's just a
+  // slice(0, 80), which reads as broken, and it's redundant with the
+  // button labels right below it anyway. Tapping a button shows the full
+  // description via showRemedyDetail.
   const keyboard = remedies.map(r => ([
     { text: (r.premium && !isPremium ? '🔒 ' : '') + r.name, callback_data: 'rem_view_' + r.id },
   ]));
@@ -116,7 +112,7 @@ export async function showRemedyList(
 
   await sendWithKeyboard(
     chatId,
-    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:\n\n' + list + upsell,
+    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:' + upsell,
     keyboard,
     true
   );
