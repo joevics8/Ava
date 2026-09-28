@@ -21,6 +21,29 @@ export function detectCondition(message: string): string | null {
     return 'acne_body';
   }
 
+  // Same word-order-independent pattern for a few new conditions that would
+  // otherwise be silently swallowed by an existing, shorter generic keyword
+  // ('itchy' -> vaginal_itching, 'puffy'/'swollen' -> water_retention,
+  // 'sleep' -> sleep) regardless of phrase order or which is checked first.
+  if (lower.includes('scalp') && (lower.includes('itch') || lower.includes('dandruff') || lower.includes('flak'))) {
+    return lower.includes('dandruff') || lower.includes('flak') ? 'dandruff' : 'itchy_scalp';
+  }
+  if (lower.includes('eye') && (lower.includes('puffy') || lower.includes('swoll') || lower.includes('puffiness'))) {
+    return 'puffy_eyes';
+  }
+  if (lower.includes('oversleep') || lower.includes('overslept') || (lower.includes('sleep') && lower.includes('too much'))) {
+    return 'oversleeping';
+  }
+
+  // Body-part + descriptor combos where natural phrasing puts the words in
+  // any order ("my heels are so cracked", "nails keep peeling"). Word
+  // boundaries stop 'lip' matching 'slip', 'nail' matching 'snail', etc.
+  const has = (re: RegExp) => re.test(lower);
+  if (has(/\bheels?\b/) && (lower.includes('crack') || lower.includes('dry') || lower.includes('rough'))) return 'cracked_heels';
+  if (has(/\blips?\b/) && (lower.includes('chap') || lower.includes('crack') || lower.includes('dry') || lower.includes('peel'))) return 'chapped_lips';
+  if (has(/\bnails?\b/) && lower.includes('ridge')) return 'nail_ridges';
+  if (has(/\bnails?\b/) && (lower.includes('brittle') || lower.includes('peel') || lower.includes('break') || lower.includes('snap'))) return 'brittle_nails';
+
   const map: Record<string, string> = {
     'leg cramp': 'leg_cramps', 'calf cramp': 'leg_cramps',
     cramp: 'cramps', 'period pain': 'cramps', dysmenorrhea: 'cramps', 'stomach pain': 'cramps',
@@ -63,16 +86,47 @@ export function detectCondition(message: string): string | null {
     overwhelmed: 'stress_overwhelm', stressed: 'stress_overwhelm', 'so much pressure': 'stress_overwhelm',
     'really low': 'severe_mood_dips', pmdd: 'severe_mood_dips', 'mood crash': 'severe_mood_dips',
     'period smell': 'period_odor', 'period odor': 'period_odor', 'smell bad': 'period_odor',
-    'sensitive skin': 'sensitive_skin', 'skin flare': 'sensitive_skin', rash: 'sensitive_skin',
+    'sensitive skin': 'sensitive_skin', 'skin flare': 'sensitive_skin',
     'cold hands': 'cold_hands_feet', 'cold feet': 'cold_hands_feet',
     thirsty: 'increased_thirst', 'so thirsty': 'increased_thirst',
     'period flu': 'period_flu', 'body aches and chills': 'period_flu', chills: 'period_flu',
     'pelvic pressure': 'pelvic_pressure', 'pelvic heaviness': 'pelvic_pressure', heaviness: 'pelvic_pressure',
     'everything hurts more': 'increased_pain_sensitivity', 'more sensitive to pain': 'increased_pain_sensitivity',
+
+    // Batch 1 additions (25 new conditions) — see itchy_scalp/puffy_eyes/
+    // oversleeping above for the three that needed AND-based pre-checks
+    // instead of a simple entry here.
+    'dark underarm': 'dark_underarms', 'underarms are dark': 'dark_underarms',
+    'dark inner thigh': 'dark_inner_thighs', 'dark thigh': 'dark_inner_thighs',
+    'ingrown hair': 'ingrown_hairs', 'razor bump': 'ingrown_hairs',
+    'cracked heel': 'cracked_heels', 'dry heel': 'cracked_heels', 'heels are cracked': 'cracked_heels',
+    'chapped lip': 'chapped_lips', 'dry lip': 'chapped_lips', 'lips are chapped': 'chapped_lips',
+    dandruff: 'dandruff', 'flaky scalp': 'dandruff',
+    'split end': 'split_ends', 'brittle hair': 'split_ends',
+    'brittle nail': 'brittle_nails', 'peeling nail': 'brittle_nails', 'nails keep breaking': 'brittle_nails',
+    'nail ridge': 'nail_ridges', 'ridged nail': 'nail_ridges', 'ridges on my nail': 'nail_ridges',
+    'dark circle': 'dark_circles', 'under eye dark': 'dark_circles', 'dark under eye': 'dark_circles',
+    'acid reflux': 'acid_reflux', heartburn: 'acid_reflux',
+    flatulence: 'gas_flatulence', gassy: 'gas_flatulence', 'passing gas': 'gas_flatulence',
+    'bad breath': 'bad_breath', 'breath smells': 'bad_breath',
+    'no appetite': 'loss_of_appetite', 'not hungry': 'loss_of_appetite', 'lost my appetite': 'loss_of_appetite', "don't feel like eating": 'loss_of_appetite',
+    'increased appetite': 'increased_appetite', 'always hungry': 'increased_appetite', 'extremely hungry': 'increased_appetite', "can't stop eating": 'increased_appetite',
+    'energy crash': 'afternoon_energy_crash', 'afternoon slump': 'afternoon_energy_crash', 'afternoon crash': 'afternoon_energy_crash', '2pm slump': 'afternoon_energy_crash',
+    'neck tension': 'neck_shoulder_tension', 'shoulder tension': 'neck_shoulder_tension', 'tight shoulders': 'neck_shoulder_tension', 'neck and shoulder': 'neck_shoulder_tension',
+    'jaw clench': 'jaw_clenching', 'clenching my jaw': 'jaw_clenching', tmj: 'jaw_clenching', 'jaw pain': 'jaw_clenching',
+    'wrist pain': 'wrist_hand_pain', 'hand pain': 'wrist_hand_pain', 'wrist hurts': 'wrist_hand_pain',
+    'hip pain': 'hip_pain', 'hips hurt': 'hip_pain',
+    tailbone: 'tailbone_pain', coccyx: 'tailbone_pain',
+    'rib pain': 'rib_pain', 'ribs hurt': 'rib_pain',
   };
 
   for (const [keyword, cond] of Object.entries(map)) {
     if (lower.includes(keyword)) return cond;
   }
+
+  // 'rash' needs a word boundary — as a plain substring it matched inside
+  // 'crash', 'trash', 'brash' etc. (surfaced when 'energy crash' was added).
+  // Checked last to keep its old lowest-priority position in the map.
+  if (/\brash(es)?\b/.test(lower)) return 'sensitive_skin';
   return null;
 }
