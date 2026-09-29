@@ -15,11 +15,22 @@ export function detectCondition(message: string): string | null {
   // mention of neck/back/chest/body alongside any skin-eruption word routes
   // to the body-acne remedies (different, real content — loose clothing,
   // tea tree oil, post-workout showering) instead of the facial-acne set.
-  const skinWords = ['acne', 'breakout', 'pimple', 'spot', 'blemish'];
+  // 'spot' must be a whole word: as a substring it matched 'spotting' (a
+  // different condition), 'Spotify', 'hotspot' etc.
+  const skinWords = ['acne', 'breakout', 'pimple', 'blemish'];
+  const hasSkinWord = skinWords.some(w => lower.includes(w)) || /\bspots?\b/.test(lower);
   const bodyLocations = ['neck', 'back', 'chest', 'body'];
-  if (skinWords.some(w => lower.includes(w)) && bodyLocations.some(w => lower.includes(w))) {
+  if (hasSkinWord && bodyLocations.some(w => lower.includes(w))) {
     return 'acne_body';
   }
+
+  // Whole-word matches for short keywords that were previously plain
+  // substrings and misfired on ordinary words: 'uti' inside 'solution',
+  // 'routine', 'beautiful'; 'clot' inside 'clothes'; 'spot' inside
+  // 'spotting'. Spotting is checked first so it wins over acne's 'spot'.
+  if (/\bspotting\b/.test(lower)) return 'spotting';
+  if (/\butis?\b/.test(lower)) return 'uti_prone';
+  if (/\bspots?\b/.test(lower)) return 'acne';
 
   // Same word-order-independent pattern for a few new conditions that would
   // otherwise be silently swallowed by an existing, shorter generic keyword
@@ -33,6 +44,15 @@ export function detectCondition(message: string): string | null {
   }
   if (lower.includes('oversleep') || lower.includes('overslept') || (lower.includes('sleep') && lower.includes('too much'))) {
     return 'oversleeping';
+  }
+  if (lower.includes('sweat') && lower.includes('night')) {
+    return 'night_sweats';
+  }
+  // 'lumpy breast' overlaps with the existing 'breast tender'/'sore breast'
+  // keywords for plain breast_tenderness — checked first so the more
+  // specific fibrocystic condition wins when "lumpy" is actually mentioned.
+  if (lower.includes('lumpy') && lower.includes('breast')) {
+    return 'fibrocystic_breasts';
   }
 
   // Body-part + descriptor combos where natural phrasing puts the words in
@@ -48,13 +68,13 @@ export function detectCondition(message: string): string | null {
     'leg cramp': 'leg_cramps', 'calf cramp': 'leg_cramps',
     cramp: 'cramps', 'period pain': 'cramps', dysmenorrhea: 'cramps', 'stomach pain': 'cramps',
     bloat: 'bloating', 'water retention': 'water_retention', swollen: 'water_retention', puffy: 'water_retention',
-    acne: 'acne', breakout: 'acne', pimple: 'acne', spot: 'acne', blemish: 'acne',
+    acne: 'acne', breakout: 'acne', pimple: 'acne', blemish: 'acne',
     mood: 'pms_mood', irritable: 'pms_mood', pms: 'pms_mood', 'mood swing': 'pms_mood',
     'heavy flow': 'heavy_flow', 'heavy period': 'heavy_flow', 'bleeding a lot': 'heavy_flow',
     'breast tender': 'breast_tenderness', 'sore breast': 'breast_tenderness', boob: 'breast_tenderness',
     tired: 'fatigue', fatigue: 'fatigue', exhausted: 'fatigue', 'no energy': 'fatigue',
     'low iron': 'low_iron_fatigue', anemic: 'low_iron_fatigue', anaemia: 'low_iron_fatigue',
-    irregular: 'irregular_cycles', pcos: 'irregular_cycles', 'missed period': 'irregular_cycles',
+    irregular: 'irregular_cycles', 'missed period': 'irregular_cycles',
     'short cycle': 'short_cycles', 'cycle is short': 'short_cycles',
     'long cycle': 'long_cycles', 'delayed period': 'long_cycles', 'late period': 'long_cycles',
     sleep: 'sleep', insomnia: 'sleep', "can't sleep": 'sleep',
@@ -63,7 +83,7 @@ export function detectCondition(message: string): string | null {
     'vaginal dry': 'vaginal_dryness', 'dry down there': 'vaginal_dryness',
     discharge: 'vaginal_health', vaginal: 'vaginal_health',
     'yeast infection': 'yeast_infection_prone', thrush: 'yeast_infection_prone',
-    'uti': 'uti_prone', 'urinary tract': 'uti_prone', 'burning when i pee': 'uti_prone',
+    'urinary tract': 'uti_prone', 'burning when i pee': 'uti_prone',
     'painful sex': 'painful_sex', 'sex hurts': 'painful_sex', 'hurts during sex': 'painful_sex',
     'ovulation pain': 'ovulation_pain', mittelschmerz: 'ovulation_pain',
     headache: 'headaches', migraine: 'migraines',
@@ -80,7 +100,7 @@ export function detectCondition(message: string): string | null {
     'hair loss': 'hair_thinning', 'hair thinning': 'hair_thinning', 'losing hair': 'hair_thinning', shedding: 'hair_thinning',
     'dry skin': 'dry_skin',
     'oily skin': 'oily_skin', greasy: 'oily_skin',
-    'blood clot': 'period_clots', clot: 'period_clots',
+    'blood clot': 'period_clots',
     spotting: 'spotting', 'spotting between periods': 'spotting',
     'binge eat': 'emotional_eating', 'emotional eating': 'emotional_eating', 'stress eat': 'emotional_eating',
     overwhelmed: 'stress_overwhelm', stressed: 'stress_overwhelm', 'so much pressure': 'stress_overwhelm',
@@ -118,6 +138,26 @@ export function detectCondition(message: string): string | null {
     'hip pain': 'hip_pain', 'hips hurt': 'hip_pain',
     tailbone: 'tailbone_pain', coccyx: 'tailbone_pain',
     'rib pain': 'rib_pain', 'ribs hurt': 'rib_pain',
+
+    // Batch 2 additions (18 new conditions — hormonal/PCOS/common issues)
+    pcos: 'pcos_symptoms', 'polycystic ovar': 'pcos_symptoms',
+    'hormonal imbalance': 'hormonal_imbalance', 'hormones are off': 'hormonal_imbalance', 'hormone imbalance': 'hormonal_imbalance',
+    'facial hair': 'excess_facial_hair', 'chin hair': 'excess_facial_hair', hirsutism: 'excess_facial_hair',
+    'dark neck': 'dark_neck_patches', 'dark patch': 'dark_neck_patches', acanthosis: 'dark_neck_patches',
+    'hormonal weight': 'hormonal_weight_gain', 'belly fat': 'hormonal_weight_gain', 'weight gain around my middle': 'hormonal_weight_gain',
+    thyroid: 'thyroid_symptoms', hypothyroid: 'thyroid_symptoms', 'sluggish thyroid': 'thyroid_symptoms',
+    endometriosis: 'endometriosis_pain',
+    fibroid: 'fibroid_symptoms',
+    perimenopause: 'perimenopause_symptoms', 'perimenopausal': 'perimenopause_symptoms',
+    'night sweat': 'night_sweats', 'sweating at night': 'night_sweats', 'wake up sweating': 'night_sweats',
+    'vitamin d': 'low_vitamin_d', 'low vitamin d': 'low_vitamin_d',
+    'birth control side effect': 'birth_control_side_effects', 'pill side effect': 'birth_control_side_effects',
+    'lumpy breast': 'fibrocystic_breasts', 'fibrocystic': 'fibrocystic_breasts',
+    'ovarian cyst': 'ovarian_cyst_pain', 'cyst pain': 'ovarian_cyst_pain',
+    'sweat a lot': 'excessive_sweating', 'sweating too much': 'excessive_sweating', 'excessive sweating': 'excessive_sweating',
+    'period lasting': 'prolonged_periods', 'period won\'t stop': 'prolonged_periods', 'period wont stop': 'prolonged_periods', 'bleeding for too long': 'prolonged_periods',
+    'light period': 'light_periods', 'barely bleeding': 'light_periods', 'very light flow': 'light_periods',
+    'leak when i laugh': 'pelvic_floor_weakness', 'leak when i cough': 'pelvic_floor_weakness', 'leak when i sneeze': 'pelvic_floor_weakness', 'pelvic floor': 'pelvic_floor_weakness',
   };
 
   for (const [keyword, cond] of Object.entries(map)) {
@@ -127,6 +167,7 @@ export function detectCondition(message: string): string | null {
   // 'rash' needs a word boundary — as a plain substring it matched inside
   // 'crash', 'trash', 'brash' etc. (surfaced when 'energy crash' was added).
   // Checked last to keep its old lowest-priority position in the map.
+  if (/\bclots?\b/.test(lower)) return 'period_clots';
   if (/\brash(es)?\b/.test(lower)) return 'sensitive_skin';
   return null;
 }

@@ -94,3 +94,37 @@ describe('detectCondition — batch 1 new conditions (collision-prone ones)', ()
     expect(detectCondition('dark inner thigh area')).toBe('dark_inner_thighs');
   });
 });
+
+describe('detectCondition — batch 2 (hormonal/PCOS/common issues)', () => {
+  it('routes pcos to the dedicated pcos_symptoms condition, not the old generic irregular_cycles', () => {
+    expect(detectCondition('I think I have PCOS')).toBe('pcos_symptoms');
+  });
+
+  it('still routes plain irregular cycle mentions correctly', () => {
+    expect(detectCondition('my cycle is so irregular lately')).toBe('irregular_cycles');
+  });
+
+  it('does not false-match "endo" inside unrelated words like endorphins', () => {
+    expect(detectCondition('feeling good, endorphins are pumping')).toBeNull();
+    expect(detectCondition('my doctor thinks it could be endometriosis')).toBe('endometriosis_pain');
+  });
+
+  it('routes the rest of batch 2 correctly', () => {
+    expect(detectCondition('hormonal imbalance is rough')).toBe('hormonal_imbalance');
+    expect(detectCondition('dealing with facial hair growth')).toBe('excess_facial_hair');
+    expect(detectCondition('noticed a dark patch on my neck')).toBe('dark_neck_patches');
+    expect(detectCondition('so much belly fat lately')).toBe('hormonal_weight_gain');
+    expect(detectCondition('my thyroid feels off')).toBe('thyroid_symptoms');
+    expect(detectCondition('fibroid pain again')).toBe('fibroid_symptoms');
+    expect(detectCondition('think I am in perimenopause')).toBe('perimenopause_symptoms');
+    expect(detectCondition('waking up sweating every night')).toBe('night_sweats');
+    expect(detectCondition('low vitamin d probably')).toBe('low_vitamin_d');
+    expect(detectCondition('bad pill side effects')).toBe('birth_control_side_effects');
+    expect(detectCondition('lumpy breast tenderness')).toBe('fibrocystic_breasts');
+    expect(detectCondition('sharp ovarian cyst pain')).toBe('ovarian_cyst_pain');
+    expect(detectCondition('sweating too much lately')).toBe('excessive_sweating');
+    expect(detectCondition('my period won\'t stop')).toBe('prolonged_periods');
+    expect(detectCondition('such a light period this month')).toBe('light_periods');
+    expect(detectCondition('I leak when I laugh')).toBe('pelvic_floor_weakness');
+  });
+});
