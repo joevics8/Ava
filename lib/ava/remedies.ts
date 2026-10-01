@@ -48,6 +48,27 @@ export function detectCondition(message: string): string | null {
   if (lower.includes('sweat') && lower.includes('night')) {
     return 'night_sweats';
   }
+  // Localized sweating needs to beat the generic excessive_sweating entries
+  // further down, and 'swollen' needs to beat the existing bare
+  // 'swollen'->water_retention keyword when ankles/feet are mentioned.
+  if (lower.includes('sweat') && (lower.includes('palm') || lower.includes('hand'))) {
+    return 'sweaty_palms';
+  }
+  if ((lower.includes('swoll') || lower.includes('swelling')) && (lower.includes('ankle') || lower.includes('feet') || lower.includes('foot'))) {
+    return 'swollen_ankles_feet';
+  }
+  if (lower.includes('eye') && lower.includes('twitch')) {
+    return 'eye_twitching';
+  }
+  if (lower.includes('eye') && (lower.includes('dry') || lower.includes('gritty'))) {
+    return 'dry_eyes';
+  }
+  if (lower.includes('eye') && (lower.includes('strain') || lower.includes('tired') || lower.includes('screen'))) {
+    return 'eye_strain';
+  }
+  if (lower.includes('shin') && (lower.includes('splint') || lower.includes('pain') || lower.includes('sore'))) {
+    return 'shin_splints';
+  }
   // 'lumpy breast' overlaps with the existing 'breast tender'/'sore breast'
   // keywords for plain breast_tenderness — checked first so the more
   // specific fibrocystic condition wins when "lumpy" is actually mentioned.
@@ -158,6 +179,29 @@ export function detectCondition(message: string): string | null {
     'period lasting': 'prolonged_periods', 'period won\'t stop': 'prolonged_periods', 'period wont stop': 'prolonged_periods', 'bleeding for too long': 'prolonged_periods',
     'light period': 'light_periods', 'barely bleeding': 'light_periods', 'very light flow': 'light_periods',
     'leak when i laugh': 'pelvic_floor_weakness', 'leak when i cough': 'pelvic_floor_weakness', 'leak when i sneeze': 'pelvic_floor_weakness', 'pelvic floor': 'pelvic_floor_weakness',
+
+    // Batch 3 additions (25 new conditions). The collision-prone ones
+    // (sweaty palms, swollen ankles/feet, eye dry/strain/twitch, shin
+    // splints) are handled as AND-based pre-checks above, not here.
+    'heat rash': 'heat_rash', 'prickly heat': 'heat_rash',
+    'body odor': 'body_odor', 'smell different': 'body_odor', 'underarm smell': 'body_odor',
+    'foot odor': 'foot_odor', 'feet smell': 'foot_odor', 'smelly feet': 'foot_odor',
+    'stretch mark': 'stretch_marks',
+    cellulite: 'cellulite_appearance',
+    'varicose vein': 'varicose_veins', 'spider vein': 'varicose_veins',
+    'keratosis pilaris': 'keratosis_pilaris', 'chicken skin': 'keratosis_pilaris', 'bumpy skin': 'keratosis_pilaris',
+    'mouth ulcer': 'mouth_ulcers', 'canker sore': 'mouth_ulcers',
+    'cold sore': 'cold_sores', 'fever blister': 'cold_sores',
+    'bleeding gum': 'bleeding_gums', 'gums bleed': 'bleeding_gums', 'sensitive gum': 'bleeding_gums',
+    'sensitive teeth': 'sensitive_teeth', 'tooth sensitivity': 'sensitive_teeth', 'teeth hurt': 'sensitive_teeth',
+    stye: 'styes',
+    'hay fever': 'seasonal_allergies', 'seasonal allerg': 'seasonal_allergies', 'allergies acting up': 'seasonal_allergies',
+    'frequent cold': 'frequent_colds', 'catching colds': 'frequent_colds', 'keep getting sick': 'frequent_colds', 'weak immune': 'frequent_colds',
+    'plantar fasciitis': 'plantar_pain', 'arch pain': 'plantar_pain', 'foot arch': 'plantar_pain',
+    'corner of my mouth': 'cracked_mouth_corners', 'corners of my mouth': 'cracked_mouth_corners', 'cracked corner': 'cracked_mouth_corners',
+    'restless arm': 'restless_arms',
+    lonely: 'loneliness', 'feeling isolated': 'loneliness', 'feel so alone': 'loneliness',
+    burnout: 'burnout', 'burnt out': 'burnout', 'burned out': 'burnout',
   };
 
   for (const [keyword, cond] of Object.entries(map)) {

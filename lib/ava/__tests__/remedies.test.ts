@@ -128,3 +128,59 @@ describe('detectCondition — batch 2 (hormonal/PCOS/common issues)', () => {
     expect(detectCondition('I leak when I laugh')).toBe('pelvic_floor_weakness');
   });
 });
+
+describe('detectCondition — batch 3 (skin/hygiene/dental/eye/emotional)', () => {
+  it('routes sweaty palms to sweaty_palms, not the existing excessive_sweating keywords', () => {
+    expect(detectCondition('my palms are so sweaty')).toBe('sweaty_palms');
+  });
+
+  it('still routes plain excessive sweating correctly', () => {
+    expect(detectCondition('sweating too much lately')).toBe('excessive_sweating');
+  });
+
+  it('routes ankle/feet swelling to swollen_ankles_feet, not plain water_retention', () => {
+    expect(detectCondition('my ankles are so swollen today')).toBe('swollen_ankles_feet');
+    expect(detectCondition('feet swelling after work')).toBe('swollen_ankles_feet');
+  });
+
+  it('still routes plain swelling/puffiness to water_retention', () => {
+    expect(detectCondition('feeling so swollen and puffy')).toBe('water_retention');
+  });
+
+  it('routes eye complaints to the right specific eye condition', () => {
+    expect(detectCondition('my eye keeps twitching')).toBe('eye_twitching');
+    expect(detectCondition('my eyes are so dry')).toBe('dry_eyes');
+    expect(detectCondition('eyes are strained from the screen')).toBe('eye_strain');
+  });
+
+  it('routes shin pain to shin_splints regardless of word order', () => {
+    expect(detectCondition('shin splints again')).toBe('shin_splints');
+    expect(detectCondition('pain in my shin after running')).toBe('shin_splints');
+  });
+
+  it('does not confuse body_odor with the existing period_odor keyword "smell bad"', () => {
+    expect(detectCondition('my period smells bad')).toBe('period_odor');
+    expect(detectCondition('noticing a body odor change lately')).toBe('body_odor');
+  });
+
+  it('routes the rest of batch 3 correctly', () => {
+    expect(detectCondition('bad heat rash on my back')).toBe('heat_rash');
+    expect(detectCondition('my feet smell so bad')).toBe('foot_odor');
+    expect(detectCondition('new stretch marks appearing')).toBe('stretch_marks');
+    expect(detectCondition('cellulite bothering me')).toBe('cellulite_appearance');
+    expect(detectCondition('varicose veins on my legs')).toBe('varicose_veins');
+    expect(detectCondition('I think I have keratosis pilaris')).toBe('keratosis_pilaris');
+    expect(detectCondition('painful mouth ulcer today')).toBe('mouth_ulcers');
+    expect(detectCondition('a cold sore is forming')).toBe('cold_sores');
+    expect(detectCondition('my gums bleed when I brush')).toBe('bleeding_gums');
+    expect(detectCondition('my teeth hurt with cold drinks')).toBe('sensitive_teeth');
+    expect(detectCondition('I think I have a stye')).toBe('styes');
+    expect(detectCondition('bad hay fever this week')).toBe('seasonal_allergies');
+    expect(detectCondition('I keep catching colds lately')).toBe('frequent_colds');
+    expect(detectCondition('plantar fasciitis pain')).toBe('plantar_pain');
+    expect(detectCondition('corners of my mouth are cracked')).toBe('cracked_mouth_corners');
+    expect(detectCondition('restless arm feeling at night')).toBe('restless_arms');
+    expect(detectCondition('feeling so lonely lately')).toBe('loneliness');
+    expect(detectCondition('totally burnt out from work')).toBe('burnout');
+  });
+});
