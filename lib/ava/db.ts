@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
-import type { AvaUser, CycleData, MemoryLog, LogCategory } from '@/types';
+import type { AvaUser, CycleData, MemoryLog, LogCategory, ChatTurn } from '@/types';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -326,6 +326,50 @@ export async function getMemoryContext(
 
   if (error || !data) return [];
   return data as MemoryLog[];
+}
+
+// ─── Chat history (short-term conversation context) ──────────────────────────
+// Separate from memory_log: this keeps the literal text of the last few
+// exchanges so the model can follow a conversation ("yes", "why?", "what about
+// the second one?"). Read BEFORE saving the new user message so it isn't
+// duplicated in the prompt.
+
+const CHAT_HISTORY_KEEP = 10; // rows retained per user (read side only uses a few)
+
+export async function getRecentChatMessages(userId: string, limit = 4): Promise<ChatTurn[]> {
+  const { data, error } = await supabaseAdmin
+    .from('chat_history')
+    .select('role, content, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !data) return [];
+  return data.reverse().map(r => ({ role: r.role as 'user' | 'model', content: r.content as string }));
+}
+
+export async function addChatMessage(userId: string, role: 'user' | 'model', content: string): Promise<void> {
+  if (!content || !content.trim()) return;
+  const { error } = await supabaseAdmin.from('chat_history').insert({
+    user_id: userId,
+    role,
+    content: content.slice(0, 2000),
+  });
+  if (error) {
+    console.error('addChatMessage error:', error);
+    return;
+  }
+
+  // Prune: keep only the newest CHAT_HISTORY_KEEP rows for this user.
+  const { data: old } = await supabaseAdmin
+    .from('chat_history')
+    .select('id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(CHAT_HISTORY_KEEP, CHAT_HISTORY_KEEP + 50);
+  if (old && old.length > 0) {
+    await supabaseAdmin.from('chat_history').delete().in('id', old.map(o => o.id));
+  }
 }
 
 const PATTERN_STOPWORDS = new Set([

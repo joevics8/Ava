@@ -1,4 +1,4 @@
-import type { MessageCategory, AvaUser } from '@/types';
+import type { MessageCategory, AvaUser, ChatTurn } from '@/types';
 import type { MemoryLog } from '@/types';
 import { formatMemoryForAI } from './db';
 import { getCountryFoods } from './food-data';
@@ -30,15 +30,46 @@ function extractText(data: any): { text: string; finishReason?: string } {
   return { text, finishReason: data?.candidates?.[0]?.finishReason };
 }
 
+// Gemini needs turns that start with 'user' and alternate roles. Drop any
+// leading model turns and merge consecutive same-role turns (e.g. a user
+// message that got no reply) so the request is always valid.
+function buildHistoryTurns(history?: ChatTurn[]): { role: string; parts: { text: string }[] }[] {
+  if (!history || history.length === 0) return [];
+  const turns: { role: string; parts: { text: string }[] }[] = [];
+  for (const t of history) {
+    if (!t.content?.trim()) continue;
+    if (turns.length === 0 && t.role !== 'user') continue;
+    const last = turns[turns.length - 1];
+    if (last && last.role === t.role) {
+      last.parts[0].text += '\n' + t.content;
+    } else {
+      turns.push({ role: t.role, parts: [{ text: t.content }] });
+    }
+  }
+  // The new message is a user turn, so history must end on a model turn.
+  // A trailing user turn means Ava never replied to it (e.g. an error), so
+  // drop it rather than send two user turns in a row.
+  while (turns.length > 0 && turns[turns.length - 1].role === 'user') turns.pop();
+  return turns;
+}
+
 export async function callGemini(
   model: string,
   prompt: string,
   systemPrompt?: string,
-  opts: { maxOutputTokens?: number; thinkingLevel?: ThinkingLevel } = {}
+  opts: { maxOutputTokens?: number; thinkingLevel?: ThinkingLevel; history?: ChatTurn[] } = {}
 ): Promise<string> {
-  const contents = systemPrompt
-    ? [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] }]
-    : [{ role: 'user', parts: [{ text: prompt }] }];
+  const history = buildHistoryTurns(opts.history);
+  // With history, send the system prompt as systemInstruction so it stays
+  // separate from the conversation turns. Without history, behaviour is
+  // unchanged (system prompt prepended to the single user turn).
+  const useSystemInstruction = !!systemPrompt && history.length > 0;
+  const contents = useSystemInstruction
+    ? [...history, { role: 'user', parts: [{ text: prompt }] }]
+    : systemPrompt
+      ? [{ role: 'user', parts: [{ text: systemPrompt + '\n\n' + prompt }] }]
+      : [{ role: 'user', parts: [{ text: prompt }] }];
+  const systemInstruction = useSystemInstruction ? { parts: [{ text: systemPrompt }] } : undefined;
 
   const buildConfig = (maxOutputTokens: number, thinkingLevel?: ThinkingLevel) => {
     const generationConfig: any = { maxOutputTokens };
@@ -51,7 +82,7 @@ export async function callGemini(
       const res = await fetch(geminiUrl(model), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig }),
+        body: JSON.stringify(systemInstruction ? { systemInstruction, contents, generationConfig } : { contents, generationConfig }),
       });
 
       const data = await res.json();
@@ -205,7 +236,8 @@ export async function handleRetrieval(
   user: AvaUser,
   message: string,
   memoryLogs: MemoryLog[],
-  cycleData?: { next_period_start?: string | null; next_period_end?: string | null; next_ovulation_start?: string | null; next_ovulation_end?: string | null; avg_cycle_length?: number | null; confidence_pct?: number | null } | null
+  cycleData?: { next_period_start?: string | null; next_period_end?: string | null; next_ovulation_start?: string | null; next_ovulation_end?: string | null; avg_cycle_length?: number | null; confidence_pct?: number | null } | null,
+  history: ChatTurn[] = []
 ): Promise<string> {
   const context = formatMemoryForAI(memoryLogs);
 
@@ -243,7 +275,7 @@ HONESTY (non-negotiable, absolute — not a suggestion to hedge): do not suggest
 
 LENGTH: match the question — a quick factual question gets a quick, direct answer (sometimes one sentence), a genuinely multi-part question can run longer. Don't default to the same length every time.`;
 
-  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 600, thinkingLevel: 'minimal' });
+  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 600, thinkingLevel: 'minimal', history });
   return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
 }
 
@@ -273,7 +305,8 @@ function getRecentConversationContext(logs: MemoryLog[]): string {
 export async function handleConversation(
   user: AvaUser,
   message: string,
-  memoryLogs: MemoryLog[]
+  memoryLogs: MemoryLog[],
+  history: ChatTurn[] = []
 ): Promise<string> {
   const context = getRecentConversationContext(memoryLogs);
 
@@ -313,9 +346,9 @@ Rules:
 - For serious symptoms, always say "worth checking with your doctor"
 - LENGTH: match the message, don't default to the same length every time. A quick factual question deserves a quick, direct answer — sometimes one sentence is enough. A more open-ended or emotional message can run 3-4 sentences. Never pad a short answer just to hit a sentence count, and never write a paragraph.
 - VARIETY: don't reuse the same opening words, sentence rhythm, or stock phrases reply after reply — vary how you start and structure each response like a real person would
-- One emoji max, and not on every message`;
+- One emoji max, and not on every message\n- CONVERSATION CONTINUITY: the messages before the latest one are your recent exchange with her. Use them to understand short or vague replies ("yes", "why?", "the second one") and keep the thread going naturally — but don't repeat or summarise what was already said.`;
 
-  const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 900, thinkingLevel: 'minimal' });
+  const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 900, thinkingLevel: 'minimal', history });
   return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;
 }
 

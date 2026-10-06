@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog } from '@/lib/ava/db';
+import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage } from '@/lib/ava/db';
 import {
   classifyMessage,
   extractLogSummary,
@@ -876,6 +876,11 @@ async function routeMessage(
   user: any,
   memoryLogs: any[]
 ) {
+  // Short-term conversation context: the last 4 stored messages (2 from the
+  // user + 2 from Ava) — together with the incoming message that makes 5.
+  // Fetched before saving the new message so it isn't duplicated.
+  const history = await getRecentChatMessages(user.id, 4);
+
   // Check for remedy outcome update
   const { detectRemedyIntent, updateRemedyOutcome } = await import('@/lib/ava/remedy-engine');
 
@@ -931,8 +936,11 @@ Respond like a caring friend would to this specific message:
 Keep it short — 1-3 sentences depending on what the message actually needs. Don't pad it out.`;
 
     await sendTyping(chatId);
-    const response = await handleConversation(user, followUpPrompt, memoryLogs);
-    await sendMessage(chatId, (response || `Aww — how are you feeling overall? 🌸`) + updatedPeriodNote, false);
+    const response = await handleConversation(user, followUpPrompt, memoryLogs, history);
+    const logReply = (response || `Aww — how are you feeling overall? 🌸`) + updatedPeriodNote;
+    await sendMessage(chatId, logReply, false);
+    await addChatMessage(user.id, 'user', text);
+    await addChatMessage(user.id, 'model', logReply);
     const insight = await summarizeChatInsight(text, response);
     if (insight) {
       const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
@@ -958,12 +966,18 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
   } else if (category === 'RETRIEVAL') {
     const { getCycleData } = await import('@/lib/ava/db');
     const cycleData = await getCycleData(user.id);
-    const response = await handleRetrieval(user, text, memoryLogs, cycleData);
-    await sendMessage(chatId, response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`, false);
+    const response = await handleRetrieval(user, text, memoryLogs, cycleData, history);
+    const retrievalReply = response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`;
+    await sendMessage(chatId, retrievalReply, false);
+    await addChatMessage(user.id, 'user', text);
+    await addChatMessage(user.id, 'model', retrievalReply);
 
   } else {
-    const response = await handleConversation(user, text, memoryLogs);
-    await sendMessage(chatId, response || `I'm here — tell me more 🌸`, false);
+    const response = await handleConversation(user, text, memoryLogs, history);
+    const convoReply = response || `I'm here — tell me more 🌸`;
+    await sendMessage(chatId, convoReply, false);
+    await addChatMessage(user.id, 'user', text);
+    await addChatMessage(user.id, 'model', convoReply);
     const insight = await summarizeChatInsight(text, response);
     if (insight) {
       const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);

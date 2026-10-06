@@ -58,6 +58,11 @@ export interface FoodProfile {
   cooking?: string;
 }
 
+export interface ChatTurn {
+  role: 'user' | 'model';
+  content: string;
+}
+
 export interface MemoryLog {
   id: string;
   user_id: string;
