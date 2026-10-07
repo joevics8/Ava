@@ -24,6 +24,30 @@ export function detectCondition(message: string): string | null {
     return 'acne_body';
   }
 
+  // Batch 5 pre-checks. Each of these would otherwise be swallowed by an
+  // earlier, shorter generic keyword: 'acne'/'spot' (acne scars), 'sleep'
+  // (nightmares, night waking), 'stress'/'anxious' (exam nerves), 'thigh'
+  // (chafing) and 'skin' conditions (dull skin). Word boundaries stop
+  // 'scar' matching 'scare'/'scarf' and 'exam' matching 'example'.
+  if (/\bscars?\b/.test(lower) && (lower.includes('acne') || lower.includes('pimple') || lower.includes('breakout'))) {
+    return 'acne_scars';
+  }
+  if (lower.includes('chaf')) {
+    return 'chafing';
+  }
+  if (lower.includes('nightmare') || lower.includes('bad dream') || lower.includes('vivid dream')) {
+    return 'nightmares';
+  }
+  if (
+    /\b(exams?|interview|presentation|public speaking)\b/.test(lower) &&
+    ['nervous', 'nerves', 'anxious', 'anxiety', 'stress', 'panic', 'worried', 'scared'].some(w => lower.includes(w))
+  ) {
+    return 'exam_nerves';
+  }
+  if (lower.includes('skin') && ['dull', 'lifeless', 'lackluster', 'lacklustre', 'no glow'].some(w => lower.includes(w))) {
+    return 'dull_skin';
+  }
+
   // Whole-word matches for short keywords that were previously plain
   // substrings and misfired on ordinary words: 'uti' inside 'solution',
   // 'routine', 'beautiful'; 'clot' inside 'clothes'; 'spot' inside
@@ -47,6 +71,11 @@ export function detectCondition(message: string): string | null {
   }
   if (lower.includes('sweat') && lower.includes('night')) {
     return 'night_sweats';
+  }
+  // Waking in the night: 'sleep' (insomnia) would otherwise take "can't stay
+  // asleep"-style messages. Excludes 'sweat' so night sweats keep priority.
+  if (/\b(wake|waking|woke)( me)? up\b/.test(lower) && (lower.includes('night') || /\b[234] ?am\b/.test(lower)) && !lower.includes('sweat')) {
+    return 'night_waking';
   }
   // Localized sweating needs to beat the generic excessive_sweating entries
   // further down, and 'swollen' needs to beat the existing bare
@@ -202,6 +231,30 @@ export function detectCondition(message: string): string | null {
     'restless arm': 'restless_arms',
     lonely: 'loneliness', 'feeling isolated': 'loneliness', 'feel so alone': 'loneliness',
     burnout: 'burnout', 'burnt out': 'burnout', 'burned out': 'burnout',
+
+    // Batch 5 additions (25 new conditions). acne_scars, chafing,
+    // nightmares, night_waking, exam_nerves and dull_skin are handled as
+    // pre-checks above; piles, doms and ear pain are whole-word checks
+    // after this map.
+    hemorrhoid: 'hemorrhoids', haemorrhoid: 'hemorrhoids',
+    'sore throat': 'sore_throat', 'scratchy throat': 'sore_throat',
+    cough: 'cough',
+    'stuffy nose': 'stuffy_nose', 'blocked nose': 'stuffy_nose', 'nasal congestion': 'stuffy_nose', congested: 'stuffy_nose', 'runny nose': 'stuffy_nose',
+    sinus: 'sinus_pressure',
+    sunburn: 'sunburn', sunburnt: 'sunburn',
+    'mosquito bite': 'insect_bites', 'insect bite': 'insect_bites', 'bug bite': 'insect_bites', 'bitten by': 'insect_bites',
+    'burned my': 'minor_burns', 'burnt my': 'minor_burns', 'minor burn': 'minor_burns', scalded: 'minor_burns',
+    'small cut': 'minor_cuts_scrapes', 'minor cut': 'minor_cuts_scrapes', 'paper cut': 'minor_cuts_scrapes', 'scraped my': 'minor_cuts_scrapes', 'cut myself': 'minor_cuts_scrapes', 'cut on my': 'minor_cuts_scrapes',
+    hangover: 'hangover',
+    toothache: 'toothache', 'tooth ache': 'toothache', 'tooth pain': 'toothache', 'tooth hurts': 'toothache',
+    earache: 'earache', 'ear ache': 'earache',
+    posture: 'poor_posture', slouch: 'poor_posture', hunched: 'poor_posture',
+    dehydrat: 'dehydration',
+    'dry hair': 'dry_hair', 'frizzy hair': 'dry_hair', frizz: 'dry_hair',
+    'clogged pore': 'clogged_pores', 'large pore': 'clogged_pores', 'open pore': 'clogged_pores', 'enlarged pore': 'clogged_pores', 'visible pore': 'clogged_pores', blackhead: 'clogged_pores', whitehead: 'clogged_pores',
+    'sore muscle': 'sore_muscles', 'muscle soreness': 'sore_muscles', 'muscles are sore': 'sore_muscles', 'post-workout soreness': 'sore_muscles',
+    'dry mouth': 'dry_mouth', 'mouth is dry': 'dry_mouth', 'mouth feels dry': 'dry_mouth',
+    'self-esteem': 'low_self_esteem', 'self esteem': 'low_self_esteem', 'body image': 'low_self_esteem', 'hate my body': 'low_self_esteem',
   };
 
   for (const [keyword, cond] of Object.entries(map)) {
@@ -211,6 +264,12 @@ export function detectCondition(message: string): string | null {
   // 'rash' needs a word boundary — as a plain substring it matched inside
   // 'crash', 'trash', 'brash' etc. (surfaced when 'energy crash' was added).
   // Checked last to keep its old lowest-priority position in the map.
+  // Word-order-independent 'nose ... blocked/stuffy'. Lives after the map so
+  // earlier matches (hay fever, allergies) still win.
+  if (lower.includes('nose') && /blocked|stuffy|stuffed|congest/.test(lower)) return 'stuffy_nose';
+  if (/\bpiles\b/.test(lower)) return 'hemorrhoids';
+  if (/\bdoms\b/.test(lower)) return 'sore_muscles';
+  if (/\bear ?(pain|ache)s?\b/.test(lower)) return 'earache';
   if (/\bclots?\b/.test(lower)) return 'period_clots';
   if (/\brash(es)?\b/.test(lower)) return 'sensitive_skin';
   return null;

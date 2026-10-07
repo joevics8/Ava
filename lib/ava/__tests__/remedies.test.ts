@@ -184,3 +184,57 @@ describe('detectCondition — batch 3 (skin/hygiene/dental/eye/emotional)', () =
     expect(detectCondition('totally burnt out from work')).toBe('burnout');
   });
 });
+
+describe('detectCondition — batch 5 (everyday wellness)', () => {
+  it('routes the simple map-based conditions', () => {
+    expect(detectCondition('I think I have hemorrhoids')).toBe('hemorrhoids');
+    expect(detectCondition('piles are so painful')).toBe('hemorrhoids');
+    expect(detectCondition('sore throat all day')).toBe('sore_throat');
+    expect(detectCondition('I have a dry cough')).toBe('cough');
+    expect(detectCondition('feeling really congested')).toBe('stuffy_nose');
+    expect(detectCondition('sinus pressure behind my eyes')).toBe('sinus_pressure');
+    expect(detectCondition('got badly sunburnt')).toBe('sunburn');
+    expect(detectCondition('mosquito bites everywhere')).toBe('insect_bites');
+    expect(detectCondition('I burned my hand cooking')).toBe('minor_burns');
+    expect(detectCondition('I cut myself chopping onions')).toBe('minor_cuts_scrapes');
+    expect(detectCondition('such a hangover today')).toBe('hangover');
+    expect(detectCondition('terrible toothache')).toBe('toothache');
+    expect(detectCondition('I have an earache')).toBe('earache');
+    expect(detectCondition('my ear pain is back')).toBe('earache');
+    expect(detectCondition('my posture is awful')).toBe('poor_posture');
+    expect(detectCondition('I think I am dehydrated')).toBe('dehydration');
+    expect(detectCondition('my hair is so dry and frizzy')).toBe('dry_hair');
+    expect(detectCondition('so many blackheads')).toBe('clogged_pores');
+    expect(detectCondition('muscle soreness after the gym')).toBe('sore_muscles');
+    expect(detectCondition('my mouth is dry all the time')).toBe('dry_mouth');
+    expect(detectCondition('I hate my body lately')).toBe('low_self_esteem');
+  });
+
+  it('routes word-order-dependent conditions regardless of phrasing', () => {
+    expect(detectCondition('my nose is so blocked')).toBe('stuffy_nose');
+    expect(detectCondition('my skin looks dull')).toBe('dull_skin');
+    expect(detectCondition('I keep waking up at night')).toBe('night_waking');
+    expect(detectCondition('woke up at 3am again')).toBe('night_waking');
+    expect(detectCondition('so nervous about my exam')).toBe('exam_nerves');
+    expect(detectCondition('acne scars on my cheeks')).toBe('acne_scars');
+    expect(detectCondition('thigh chafing is killing me')).toBe('chafing');
+    expect(detectCondition('I keep having nightmares')).toBe('nightmares');
+  });
+
+  it('does not steal messages that belong to earlier conditions', () => {
+    expect(detectCondition('I leak when I cough')).toBe('pelvic_floor_weakness');
+    expect(detectCondition('I wake up sweating at night')).toBe('night_sweats');
+    expect(detectCondition('corners of my mouth are dry and cracked')).toBe('cracked_mouth_corners');
+    expect(detectCondition('hay fever and a stuffy nose')).toBe('seasonal_allergies');
+    expect(detectCondition('pregnancy test made me anxious')).toBe('anxiety');
+    expect(detectCondition('I feel burned out')).toBe('burnout');
+    expect(detectCondition('I cannot sleep')).toBe('sleep');
+    expect(detectCondition('painful breakouts on my neck')).toBe('acne_body');
+    expect(detectCondition('my eyes are so dry')).toBe('dry_eyes');
+  });
+
+  it('uses word boundaries so ordinary words do not misroute', () => {
+    expect(detectCondition('for example my cramps are bad')).toBe('cramps');
+    expect(detectCondition('I scarf down food and feel bloated')).toBe('bloating');
+  });
+});
