@@ -45,6 +45,16 @@ export function detectCondition(message: string): string | null {
   if (/\b(pads?|sanitary|liners?)\b/.test(lower) && (/\bitch/.test(lower) || ['rash', 'irritat', 'sore', 'chaf'].some(w => lower.includes(w)))) {
     return 'pad_irritation';
   }
+  // Batch 7 pre-check: 'tired' would otherwise route to fatigue. Requires a
+  // legs/feet word and steps aside for the more specific conditions
+  // (swelling, cramps, restless legs, cold feet, odour, heels, nails, gym soreness).
+  if (
+    /\b(legs?|feet|foot)\b/.test(lower) &&
+    ['tired', 'aching', 'achy', 'heavy', 'sore', 'hurt'].some(w => lower.includes(w)) &&
+    !['swol', 'swell', 'cramp', 'restless', 'cold', 'odor', 'odour', 'smell', 'crack', 'heel', 'numb', 'tingl', 'athlete', 'blister', 'wart', 'ingrown', 'toenail', 'gym', 'workout', 'exercise', 'shin'].some(w => lower.includes(w))
+  ) {
+    return 'tired_legs_feet';
+  }
   if (lower.includes('chaf')) {
     return 'chafing';
   }
@@ -293,6 +303,16 @@ export function detectCondition(message: string): string | null {
     hiccup: 'hiccups',
     'bite my nails': 'nail_biting', 'biting my nails': 'nail_biting', 'bite my nail': 'nail_biting', 'nail biting': 'nail_biting', 'nail-biting': 'nail_biting',
     'yellow teeth': 'stained_teeth', 'stained teeth': 'stained_teeth', 'teeth whitening': 'stained_teeth', 'whiten my teeth': 'stained_teeth', 'teeth are yellow': 'stained_teeth',
+
+    // Batch 7 additions (final 6 conditions). tired_legs_feet is a pre-check
+    // above. 'cold' is only matched in full phrases so 'cold sore' and
+    // 'cold hands' keep routing to their own conditions (and 'frequent cold'
+    // / 'catching colds' still route to frequent_colds, which comes first).
+    'grey hair': 'premature_grey_hair', 'gray hair': 'premature_grey_hair', greying: 'premature_grey_hair', graying: 'premature_grey_hair', 'going grey': 'premature_grey_hair', 'going gray': 'premature_grey_hair', 'white hair': 'premature_grey_hair',
+    'common cold': 'common_cold', 'have a cold': 'common_cold', 'got a cold': 'common_cold', 'caught a cold': 'common_cold', 'catching a cold': 'common_cold', 'coming down with a cold': 'common_cold', 'bad cold': 'common_cold', 'head cold': 'common_cold', 'chest cold': 'common_cold',
+    'dry nose': 'dry_nose', 'nose is dry': 'dry_nose', 'nasal dryness': 'dry_nose', 'crusty nose': 'dry_nose',
+    sneez: 'sneezing',
+    hoarse: 'hoarse_voice', 'lost my voice': 'hoarse_voice', 'losing my voice': 'hoarse_voice', 'voice is gone': 'hoarse_voice', 'voice gone': 'hoarse_voice', croaky: 'hoarse_voice', 'raspy voice': 'hoarse_voice',
   };
 
   for (const [keyword, cond] of Object.entries(map)) {
@@ -305,6 +325,8 @@ export function detectCondition(message: string): string | null {
   // Word-order-independent 'nose ... blocked/stuffy'. Lives after the map so
   // earlier matches (hay fever, allergies) still win.
   if (lower.includes('nose') && /blocked|stuffy|stuffed|congest/.test(lower)) return 'stuffy_nose';
+  // Word-order-independent 'nose ... dry/crusty' (after the map so 'dry skin on my nose' still wins).
+  if (/\bnose\b/.test(lower) && /\bdry\b|dryness|crust/.test(lower)) return 'dry_nose';
   // Batch 6 post-map checks (earlier map matches still win).
   if (/athlete.?s? ?foot/.test(lower) || (lower.includes('fungal') && lower.includes('foot'))) return 'athletes_foot';
   if (/\bwarts?\b/.test(lower) || lower.includes('verruca')) return 'warts';

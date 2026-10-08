@@ -296,3 +296,45 @@ describe('detectCondition — batch 6', () => {
     expect(detectCondition('cracked heels')).toBe('cracked_heels');
   });
 });
+
+describe('detectCondition — batch 7 (final 6)', () => {
+  it('routes every new batch 7 condition', () => {
+    expect(detectCondition('my hair is going grey so early')).toBe('premature_grey_hair');
+    expect(detectCondition('I have grey hair at 22')).toBe('premature_grey_hair');
+    expect(detectCondition('I think I have a cold')).toBe('common_cold');
+    expect(detectCondition('I have a bad cold')).toBe('common_cold');
+    expect(detectCondition('coming down with a cold')).toBe('common_cold');
+    expect(detectCondition('my legs are so tired after work')).toBe('tired_legs_feet');
+    expect(detectCondition('my feet are aching')).toBe('tired_legs_feet');
+    expect(detectCondition('my legs feel heavy')).toBe('tired_legs_feet');
+    expect(detectCondition('sore feet from standing all day')).toBe('tired_legs_feet');
+    expect(detectCondition('my nose is so dry')).toBe('dry_nose');
+    expect(detectCondition('dry nose at night')).toBe('dry_nose');
+    expect(detectCondition('crusty nose every morning')).toBe('dry_nose');
+    expect(detectCondition('I keep sneezing')).toBe('sneezing');
+    expect(detectCondition('sneezing fits every morning')).toBe('sneezing');
+    expect(detectCondition('I am hoarse')).toBe('hoarse_voice');
+    expect(detectCondition('I lost my voice')).toBe('hoarse_voice');
+    expect(detectCondition('my voice is gone')).toBe('hoarse_voice');
+  });
+
+  it('does not steal messages that belong to earlier conditions', () => {
+    expect(detectCondition('I have a cold sore')).toBe('cold_sores');
+    expect(detectCondition('I have cold hands and feet')).toBe('cold_hands_feet');
+    expect(detectCondition('I keep catching colds')).toBe('frequent_colds');
+    expect(detectCondition('swollen feet and ankles')).toBe('swollen_ankles_feet');
+    expect(detectCondition('leg cramps at night')).toBe('leg_cramps');
+    expect(detectCondition('restless legs at night')).toBe('restless_legs');
+    expect(detectCondition('cracked heels')).toBe('cracked_heels');
+    expect(detectCondition('athlete\'s foot is back')).toBe('athletes_foot');
+    expect(detectCondition('I am so tired all the time')).toBe('fatigue');
+    expect(detectCondition('my eyes feel tired from screens')).toBe('eye_strain');
+    expect(detectCondition('I leak when I sneeze')).toBe('pelvic_floor_weakness');
+    expect(detectCondition('hay fever and sneezing')).toBe('seasonal_allergies');
+    expect(detectCondition('sore throat and hoarse')).toBe('sore_throat');
+    expect(detectCondition('sneezing and a blocked nose')).toBe('stuffy_nose');
+    expect(detectCondition('dry skin on my legs')).toBe('dry_skin');
+    expect(detectCondition('legs sore after the gym')).not.toBe('tired_legs_feet');
+    expect(detectCondition('dry skin on my nose')).toBe('dry_skin');
+  });
+});
