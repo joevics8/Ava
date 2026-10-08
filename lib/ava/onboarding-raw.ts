@@ -258,6 +258,11 @@ async function sendWelcomeInsight(
     `📅 Last period: ${lastPeriodStr}\n\n` +
     `${phaseInfo}\n\n` +
     (tip ? `💡 ${tip}\n\n` : '') +
-    `Remember — you can just talk to me naturally. I'm here whenever you need me 🌸`
+    `You can ask me anything about your body, in your own words. For example:\n` +
+    `• "Why am I so tired this week?"\n` +
+    `• "Is this cramping normal?"\n` +
+    `• "When is my fertile window?"\n` +
+    `• "My period is late — what should I do?"\n\n` +
+    `I'll explain what's going on, what's normal, and when it's worth seeing a doctor. Send /help any time to see everything I can do 🌸`
   );
 }

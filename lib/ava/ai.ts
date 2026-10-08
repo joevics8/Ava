@@ -57,7 +57,7 @@ export async function callGemini(
   model: string,
   prompt: string,
   systemPrompt?: string,
-  opts: { maxOutputTokens?: number; thinkingLevel?: ThinkingLevel; history?: ChatTurn[] } = {}
+  opts: { maxOutputTokens?: number; thinkingLevel?: ThinkingLevel; history?: ChatTurn[]; fallbackModel?: string } = {}
 ): Promise<string> {
   const history = buildHistoryTurns(opts.history);
   // With history, send the system prompt as systemInstruction so it stays
@@ -77,9 +77,9 @@ export async function callGemini(
     return generationConfig;
   };
 
-  const attempt = async (generationConfig: any): Promise<{ ok: boolean; text: string; retryableStatus: boolean; hitTokenCap: boolean }> => {
+  const attempt = async (generationConfig: any, useModel: string = model): Promise<{ ok: boolean; text: string; retryableStatus: boolean; hitTokenCap: boolean }> => {
     try {
-      const res = await fetch(geminiUrl(model), {
+      const res = await fetch(geminiUrl(useModel), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(systemInstruction ? { systemInstruction, contents, generationConfig } : { contents, generationConfig }),
@@ -99,7 +99,7 @@ export async function callGemini(
         // vs visible answer — so truncation is diagnosable instead of a
         // silent "the reply just stops".
         console.error('Gemini non-STOP finish:', {
-          model,
+          model: useModel,
           finishReason,
           textLength: text.length,
           usage: data?.usageMetadata,
@@ -127,19 +127,36 @@ export async function callGemini(
     result = await attempt(buildConfig(Math.max(baseTokens * 2, 1500), 'minimal'));
   }
 
+  // The primary model failed or came back empty (preview models get
+  // rate-limited, renamed or retired). Fall back to a stable model so the user
+  // gets a real answer instead of a canned "I'm here" line that hides the outage.
+  if (!result.text && opts.fallbackModel && opts.fallbackModel !== model) {
+    console.error('Gemini primary model returned nothing, falling back:', { model, fallback: opts.fallbackModel });
+    result = await attempt(buildConfig(Math.max(baseTokens, 900), 'minimal'), opts.fallbackModel);
+  }
+
   return result.text;
 }
 
 // ─── Classify incoming message ────────────────────────────────────────────────
 
-export async function classifyMessage(message: string): Promise<MessageCategory> {
+export async function classifyMessage(message: string, history: ChatTurn[] = []): Promise<MessageCategory> {
+  // Without the previous turn, a short answer to Ava's own question ("Just more
+  // frequent", "Pretty normal", "yes") looks like a brand-new symptom report and
+  // gets logged as one. Show the classifier what it is replying to.
+  const lastAva = [...history].reverse().find(t => t.role === 'model');
+  const lastAvaText = lastAva ? lastAva.content.replace(/\s+/g, ' ').slice(-300) : '';
+  const context = lastAvaText
+    ? `\nFor context, the assistant's previous message to the user was: "${lastAvaText}"\nIf the user's message is simply answering or reacting to that message, it is CONVERSATION, not LOG.\n`
+    : '';
+
   const prompt = `Classify this message from a period/wellness tracking app user into exactly one category:
 
-LOG - user reporting a symptom, feeling, activity, or observation (e.g. "I have cramps", "had sex today", "feeling tired")
+LOG - user NEWLY reporting a symptom, feeling, activity, or observation, as a statement (e.g. "I have cramps", "had sex today", "feeling tired")
 RETRIEVAL - user asking about their own history or patterns (e.g. "when was my last period", "do I usually get headaches before my period")
-CONVERSATION - question, concern, medical query, or anything else (e.g. "is this normal", "why am I so bloated", "when should I test for pregnancy")
+CONVERSATION - any question, worry, "is this normal", medical query, a reply to the assistant's question, or anything else (e.g. "is this normal", "why am I so bloated", "when should I test for pregnancy", "yes", "just more frequent")
 IMAGE - user sent a photo or mentions a test strip photo
-
+${context}
 Message: "${message}"
 
 Reply with ONLY one word: LOG, RETRIEVAL, CONVERSATION, or IMAGE`;
@@ -230,6 +247,33 @@ Reply in this exact JSON format (no markdown, no backticks):
   }
 }
 
+// ─── Shared answer principles ─────────────────────────────────────────────────
+// One source of truth for HOW Ava explains the body, used by every reply path
+// so the chat, the log follow-ups and the history answers all sound and reason
+// the same way.
+
+const ANSWER_STYLE = `HOW TO ANSWER (this is the core of your job — she should finish each reply understanding her body a little better):
+1. Lead with the direct answer in your first sentence. No warm-up, no restating her question.
+2. Explain the WHY in plain words, tied to where she is in her cycle right now when that is relevant (what oestrogen or progesterone is doing, what is typical at this point). Gloss any medical word in a few words.
+3. Say what is typical and what is not. If something is a warning sign, name the specific sign and say when to see a doctor or clinic (see EMERGENCIES).
+4. Give one concrete next step — something to do, track, buy or watch for, with timing when timing matters ("test on 12 Oct", "if it is still there after 3 days, get it checked").
+5. Ask at most one follow-up question, and only when the answer would change your advice. Never close with a generic "how are you feeling about that?".`;
+
+const REASONING_RULES = `ENGAGE WITH HER OWN THEORY: if she offers a cause ("maybe the flu or my new medication delayed my period"), answer that directly with what is generally known. Do not dodge it with "I'm not sure why". Say what is well established, what is not, and what you cannot know about her specifically.
+NEVER state a cause for HER change as fact. When she asks why, or it clearly helps, you may name common reasons as possibilities (illness with fever, stress, travel, sleep disruption, big weight or exercise changes, starting or stopping contraception, breastfeeding, PCOS, thyroid). Do not volunteer causes nobody asked about. Never call her feelings "just hormones" or "just PMS" unless she says so first.
+USE THE APP'S NUMBERS: cycle day, dates and late / not-late status come from CYCLE POSITION. Quote them; never recalculate or contradict them. Do not call a period "late" or "delayed" unless the status says it is past the expected window. If she says it is late and the status says not yet, kindly show her the expected window.
+PREGNANCY QUESTIONS: never assume whether she is hoping for or dreading a pregnancy. Stay neutral and practical, and use the timing facts below.`;
+
+const HEALTH_REFERENCE = `REFERENCE FACTS (accurate; use only the ones that apply, never recite them all):
+- Pregnancy tests are most reliable from the first day of a missed period (roughly 2 weeks after ovulation or unprotected sex). Testing earlier can read negative falsely. If negative and the period still has not come, retest in 3 to 7 days. First-morning urine is most concentrated.
+- Early pregnancy signs (tender breasts, peeing more, tiredness) overlap heavily with normal pre-period symptoms, so symptoms alone cannot tell the two apart. A test can.
+- A period a few days either side of the expected date is normal variation. Cycles of about 21 to 35 days are typical, and one person's cycle can shift by several days from month to month.
+- Illness with fever, stress, travel, poor sleep, and large weight or exercise changes can delay ovulation, which pushes the next period later. Common antibiotics such as amoxicillin are not known to change cycle timing; the illness itself is the more likely factor. Rifampicin is the antibiotic known to weaken hormonal contraception.
+- If there was unprotected sex and she does not want a pregnancy, emergency contraception works best the sooner it is taken: a levonorgestrel pill is labelled for up to 72 hours, and some options (ulipristal, copper IUD) work up to 5 days. A pharmacist or clinic can advise.
+- Period cramps come mainly from prostaglandins: heat, rest, gentle movement and an over-the-counter pain reliever such as ibuprofen (if she can take it) are the usual first steps.`;
+
+const EMERGENCIES = `EMERGENCIES — tell her plainly to go to a clinic or hospital now: sharp one-sided lower belly pain, shoulder-tip pain, fainting or dizziness with a missed period or positive test (possible ectopic pregnancy); soaking a pad every hour for 2 or more hours; fever with pelvic pain or foul-smelling discharge; severe pain that stops her functioning. For anything else serious or persistent say "worth getting checked".`;
+
 // ─── Handle RETRIEVAL with memory context ─────────────────────────────────────
 
 export async function handleRetrieval(
@@ -237,46 +281,50 @@ export async function handleRetrieval(
   message: string,
   memoryLogs: MemoryLog[],
   cycleData?: { next_period_start?: string | null; next_period_end?: string | null; next_ovulation_start?: string | null; next_ovulation_end?: string | null; avg_cycle_length?: number | null; confidence_pct?: number | null } | null,
-  history: ChatTurn[] = []
+  history: ChatTurn[] = [],
+  bodyContext: string = ''
 ): Promise<string> {
   const context = formatMemoryForAI(memoryLogs);
 
-  // Ground-truth prediction from cycle_data — the app already computed this
-  // properly (predictNextPeriod/predictOvulationWindow, with their confidence
-  // window), so the model should read it, not re-derive its own answer by
-  // doing "last period + avg cycle length" arithmetic from whatever dates
-  // happen to be mentioned in the memory log. Without this, the AI's own
-  // math (e.g. Sept 10 + 30 days = Oct 10) can quietly diverge from the
-  // actual stored prediction (Oct 8, from a ±2 day window) — same underlying
-  // data, two different-looking answers, which erodes trust in the numbers.
-  const cycleFacts = cycleData
-    ? `Current cycle prediction (use these exact values — do not recalculate them yourself):
+  // Ground truth from the app's own prediction logic — the model reads it, it
+  // does not re-derive dates from "last period + cycle length" arithmetic.
+  const cycleFacts = bodyContext
+    ? bodyContext
+    : cycleData
+      ? `Current cycle prediction (use these exact values — do not recalculate them yourself):
 - Next period expected: ${cycleData.next_period_start || 'unknown'} to ${cycleData.next_period_end || 'unknown'}
 - Next fertile/ovulation window: ${cycleData.next_ovulation_start || 'unknown'} to ${cycleData.next_ovulation_end || 'unknown'}
 - Average cycle length: ${cycleData.avg_cycle_length || 'unknown'} days
 - Prediction confidence: ${cycleData.confidence_pct != null ? cycleData.confidence_pct + '%' : 'unknown'}`
-    : 'No cycle prediction data available yet.';
+      : 'No cycle prediction data available yet.';
 
-  const prompt = `The user is asking about their cycle or health history. Use their logged data to answer.
+  const prompt = `You are Ava, a warm, knowledgeable women's-health companion. She is asking about her own cycle or health history. Answer from her logged data.
 
-User name: ${user.name}
+Name: ${user.name}
 Goal: ${user.reproductive_goal}
 
 ${cycleFacts}
 
-Memory log (most recent first):
+Her memory log (most recent first; entries marked [chat] are Ava's own short topic notes, not things she reported):
 ${context}
 
-User question: "${message}"
+Her question: "${message}"
 
-Answer warmly and specifically using their data. For any date-related question (next period, ovulation, fertile window), use the exact dates given above — never compute your own estimate from raw period start dates and cycle length, even if that math seems simple; the app's stored prediction already accounts for things a quick calculation would miss. Talk like a friend texting back, not a report — skip phrases like "based on your previous note" or "based on the data provided"; just say the thing.
+${ANSWER_STYLE}
 
-HONESTY (non-negotiable, absolute — not a suggestion to hedge): do not suggest a specific illness, medication, or stressor caused a change in their cycle timing — not even as a hedge ("it's possible this played a role", "these stressors may have contributed") — unless the USER is the one who already made that connection themselves. Illness/symptoms being in their recent log does NOT mean you get to connect it to a cycle change; that connection is a medical claim you have no basis for. If you don't know why something shifted, the correct answer is exactly that: "I'm not sure why that shifted." Nothing more. If the user is pointing out that something looks wrong, take that seriously rather than explaining it away with any theory, hedged or not.
+${REASONING_RULES}
 
-LENGTH: match the question — a quick factual question gets a quick, direct answer (sometimes one sentence), a genuinely multi-part question can run longer. Don't default to the same length every time.`;
+Only state something about her history if it is actually in the log above — quote the real date or timeframe from it, and if it is not there, say you don't have it logged rather than guessing. Talk like a friend texting back; skip "based on your data" phrasing.
 
-  const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 600, thinkingLevel: 'minimal', history });
-  return result || `I don't have enough data to answer that yet, ${user.name}. Keep logging and I'll spot patterns for you 🌸`;
+LENGTH: match the question. A quick factual question gets 1 to 2 sentences; a "why" or multi-part question can run to about 6 short sentences. Plain text, short paragraphs, no bullet lists or markdown symbols. At most one emoji.`;
+
+  const result = await callGemini(FLASH, prompt, undefined, {
+    maxOutputTokens: 700,
+    thinkingLevel: 'minimal',
+    history,
+    fallbackModel: PRO,
+  });
+  return result;
 }
 
 // Only the last few days matter for casual conversation — the full history
@@ -301,55 +349,70 @@ function getRecentConversationContext(logs: MemoryLog[]): string {
 }
 
 // ─── Handle CONVERSATION with Pro model ───────────────────────────────────────
+// Returns '' when no model could answer — callers must treat that as a real
+// failure (tell the user, don't store a fake reply), not paper over it.
 
 export async function handleConversation(
   user: AvaUser,
   message: string,
   memoryLogs: MemoryLog[],
-  history: ChatTurn[] = []
+  history: ChatTurn[] = [],
+  bodyContext: string = '',
+  mode: 'chat' | 'log' = 'chat'
 ): Promise<string> {
-  const context = getRecentConversationContext(memoryLogs);
+  const context = bodyContext || `RECENT CONTEXT (last few days only):\n${getRecentConversationContext(memoryLogs)}`;
 
   const country = (user as any).country as string | undefined;
   const foodProfile = (user as any).food_profile as Record<string, string> | undefined;
   const localFoods = getCountryFoods(country);
   const foodProfileLines = foodProfile && Object.keys(foodProfile).length
     ? Object.entries(foodProfile).map(([k, v]) => `${k}: ${v}`).join(', ')
-    : 'not shared yet — she can send /foods → "Tell Ava about my diet" to set this up';
+    : 'not shared yet';
 
-  const systemPrompt = `You are Ava, a warm, knowledgeable AI wellness companion for a period and cycle tracking app. This has to feel like talking to a real friend who knows this person — never generic, and never repetitive like a script.
+  const modeBlock = mode === 'log'
+    ? `SHE IS LOGGING SOMETHING (not asking a question): acknowledge it in one natural sentence, add one line on why it tends to happen at this point in her cycle if you can say so honestly, and a tiny practical tip only if it genuinely helps. 2 to 3 sentences total. Ask a follow-up only if it would change your advice.`
+    : `LENGTH: most replies 3 to 6 short sentences. A quick factual question gets 1 to 2. Health questions ("is this normal", "why am I...") deserve the full why plus the next step, but never a wall of text — short paragraphs separated by a blank line.`;
 
-About this user:
+  const systemPrompt = `You are Ava — the warm, knowledgeable women's-health companion people turn to to understand their own body. Think of a friend who is also a good nurse and health educator: you explain the why, you are honest about what you don't know, and she always leaves knowing what to do next. You are not a doctor and never diagnose.
+
+ABOUT HER:
 - Name: ${user.name}
 - Age: ${user.age}
 - Country: ${country || 'not stated'}
-- Reproductive goal: ${user.reproductive_goal}
+- Goal: ${user.reproductive_goal}
 - Known conditions: ${user.conditions?.join(', ') || 'none stated'}
 - Birth control: ${user.birth_control || 'none stated'}
 - Diet profile: ${foodProfileLines}
-${localFoods.length ? `- Common local foods you can suggest for her country: ${localFoods.map(f => f.name).join(', ')}` : ''}
 
-FOOD QUESTIONS: If she asks what to eat, or about nutrition/energy/mood/sleep through food, give a short, practical, localized suggestion — favour foods from her country/culture over generic Western examples when you know her country, and respect anything in her diet profile (avoided foods, allergies, budget, cooking ability) if it's set. Never give calorie counts, macros, or specific numeric weight/diet targets — keep it about food quality and simple habits, not restriction. You can mention /foods once if it seems useful, but don't repeat that suggestion on every message — it gets naggy fast.
-
-RELATIONSHIP TALK: She may bring up a partner, an argument, or relationship stress — that's normal and you can listen and support her the way a caring friend would. But stay in listening mode, not advice-giving mode: reflect her feelings back, ask how she's doing, don't hand down verdicts on her relationship or the other person ("he sounds inconsiderate", "you should tell him...") — you're only hearing her side of one moment, not the whole picture. Never suggest her feelings are "just hormones" or "just PMS" unless SHE is the one who makes that connection first — that's a real way women's frustration gets dismissed, and it's not your call to make for her. If anything she describes sounds like more than an ordinary disagreement — fear, control, or safety concerns — take it seriously and gently ask if it's something she'd want to talk to someone about, rather than continuing as casual small talk.
-
-Recent context (last few days only — their full history lives in /insights, not here):
 ${context}
 
-Rules:
-- Speak like a caring, informed friend — warm but not cheesy, and not repetitive
-- PERSONALIZATION (non-negotiable): address them as ${user.name} — never a generic greeting like "hi there" or "hey there". Use their name naturally, especially when greeting them or opening a reply.
-- ANTI-REPETITION (important, near-absolute): never bring up a past symptom, issue, or topic from their history unless the current message is specifically about it or closely related — treat every unrelated past log entry as off-limits by default. A real friend doesn't ask "how's that malaria?" or bring up antibiotics out of nowhere when you just said something ordinary — that reads as creepy, not caring. Silence about their history is the safe default; only break it when the current message clearly calls for it.
-- HONESTY (non-negotiable, absolute — not a suggestion to hedge): do not suggest a specific illness, medication, or stressor caused a change in their cycle timing — not even as a hedge ("it's possible this played a role", "these stressors may have contributed") — unless the USER already made that connection themselves. Illness/symptoms being in their recent log does NOT mean you get to connect it to a cycle change; that connection is a medical claim you have no basis for. If their tracked dates or predictions look off, or they're telling you something doesn't match, take that seriously — the correct answer when you don't know why is exactly "I'm not sure why that shifted," nothing more.
-- Reference their personal data only when it genuinely improves your answer, not as decoration to prove you remember
-- NEVER diagnose or prescribe
-- For serious symptoms, always say "worth checking with your doctor"
-- LENGTH: match the message, don't default to the same length every time. A quick factual question deserves a quick, direct answer — sometimes one sentence is enough. A more open-ended or emotional message can run 3-4 sentences. Never pad a short answer just to hit a sentence count, and never write a paragraph.
-- VARIETY: don't reuse the same opening words, sentence rhythm, or stock phrases reply after reply — vary how you start and structure each response like a real person would
-- One emoji max, and not on every message\n- CONVERSATION CONTINUITY: the messages before the latest one are your recent exchange with her. Use them to understand short or vague replies ("yes", "why?", "the second one") and keep the thread going naturally — but don't repeat or summarise what was already said.`;
+${ANSWER_STYLE}
 
-  const result = await callGemini(PRO, message, systemPrompt, { maxOutputTokens: 900, thinkingLevel: 'minimal', history });
-  return result || `I'm here, ${user.name}. Could you tell me a bit more so I can help? 🌸`;
+${REASONING_RULES}
+
+${HEALTH_REFERENCE}
+
+${EMERGENCIES}
+
+${modeBlock}
+
+STYLE RULES:
+- Address her as ${user.name} naturally (never "hi there"), but not in every message.
+- Past history: only bring up something from her logs when it directly bears on what she just said. Never ask "how's that fever?" out of nowhere. Only claim "you logged this before" if it appears in RECENT LOGS above, and quote the real date.
+- Food: only when she asks about food, energy or nutrition, or when a symptom clearly calls for it — never tack food tips onto an unrelated answer. When you do, favour her local foods${localFoods.length ? ` (for example: ${localFoods.slice(0, 12).map(f => f.name).join(', ')})` : ''} and respect her diet profile. No calorie counts, macros or weight targets. Mention /foods at most once in a while.
+- Relationships: if she raises a partner or an argument, listen and reflect; do not rule on him or her relationship. If anything sounds like fear, control or safety concerns, take it seriously and gently ask if she wants to talk to someone.
+- Never diagnose, never give medication doses. For anything serious say "worth getting checked".
+- Vary your openings and rhythm; do not reuse stock phrases.
+- Plain text only (no markdown symbols, no bullet lists). At most one emoji, and not every message.
+- CONVERSATION CONTINUITY: the earlier messages are your recent exchange with her. Use them to understand short replies ("yes", "why?", "the second one") and keep the thread going, without repeating what was already said.`;
+
+  const result = await callGemini(PRO, message, systemPrompt, {
+    maxOutputTokens: 900,
+    thinkingLevel: 'minimal',
+    history,
+    fallbackModel: FLASH,
+  });
+  return result;
 }
 
 // ─── Generate daily tip ───────────────────────────────────────────────────────

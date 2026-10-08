@@ -1,5 +1,5 @@
 import { getCycleData, getMemoryContext } from './db';
-import { getCurrentPhase, phaseEmoji, predictNextPeriod, predictOvulationWindow } from './cycle';
+import { getCycleStatus, phaseEmoji, predictNextPeriod, predictOvulationWindow } from './cycle';
 import { upsertCycleData } from './db';
 import { getDayData } from './cycle-lookup';
 import { getPersonalInsight, hasMonthOfHistory } from './morning';
@@ -31,17 +31,22 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
   const lastStart = new Date(sortedDates[sortedDates.length - 1]);
   const today = new Date();
 
-  // Recalculate if next period prediction is stale
+  const status = getCycleStatus(lastStart, avg, duration, today);
+
+  // Only (re)build the stored prediction when it is missing, or when the last
+  // logged period is so old she has evidently stopped logging (stale). A
+  // merely LATE period must NOT roll forward to next month's window — that hid
+  // the lateness and, via the old wrapped day count, told a late user she was
+  // "on day 3, menstrual phase".
   const nextPeriodStored = cycleData.next_period_start ? new Date(cycleData.next_period_start) : null;
-  if (!nextPeriodStored || nextPeriodStored < today) {
-    let candidateStart = new Date(lastStart);
-    while (candidateStart <= today) {
-      candidateStart = new Date(candidateStart);
-      candidateStart.setDate(candidateStart.getDate() + avg);
+  if (!nextPeriodStored || (status.stale && nextPeriodStored < today)) {
+    let anchor = new Date(lastStart);
+    if (status.stale) {
+      while (anchor.getTime() + avg * 24 * 60 * 60 * 1000 <= today.getTime()) {
+        anchor = new Date(anchor.getTime() + avg * 24 * 60 * 60 * 1000);
+      }
     }
-    const { start: ns, end: ne } = predictNextPeriod(
-      new Date(candidateStart.getTime() - avg * 24 * 60 * 60 * 1000), avg
-    );
+    const { start: ns, end: ne } = predictNextPeriod(anchor, avg);
     const { start: os, end: oe } = predictOvulationWindow(ns, avg);
     await upsertCycleData(user.id, {
       next_period_start: ns.toISOString().split('T')[0],
@@ -52,7 +57,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
     cycleData = await getCycleData(user.id);
   }
 
-  const { phase, day } = getCurrentPhase(lastStart, avg, duration);
+  const { phase, day } = status;
 
   // ── Research-based lookup ─────────────────────────────────────────────────
   const dayData = getDayData(day, avg, duration);
@@ -80,9 +85,17 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
     : null;
 
   let periodLine = '';
-  if (nextStart && nextEnd) {
+  const expectedDate = new Date(lastStart.getTime() + avg * 24 * 60 * 60 * 1000);
+  if (status.stale) {
+    periodLine = `📅 I may be out of date — the last period I have is ${formatDate(lastStart)}. When did your latest one start? Send me the date and I'll catch up.`;
+  } else if (status.isLate) {
+    periodLine =
+      `⏳ Your period is ${status.daysPastExpected} day${status.daysPastExpected === 1 ? '' : 's'} past your expected date (${formatDate(expectedDate)}). ` +
+      `Illness, stress, travel and poor sleep can all push it later. Tell me the moment it starts and I'll update your cycle. ` +
+      `If a pregnancy is possible, a home test is reliable from the first day of a missed period.`;
+  } else if (nextStart && nextEnd) {
     periodLine = daysUntilPeriod !== null && daysUntilPeriod <= 5
-      ? `📅 Period in ~${daysUntilPeriod} days (${formatDate(nextStart)} – ${formatDate(nextEnd)})`
+      ? `📅 Period in ~${Math.max(0, daysUntilPeriod)} days (${formatDate(nextStart)} – ${formatDate(nextEnd)})`
       : `📅 Next period: ${formatDate(nextStart)} – ${formatDate(nextEnd)}`;
   }
 
@@ -96,7 +109,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
 
   return (
     `${getGreeting()}, ${user.name}! 🌸\n\n` +
-    `${phaseEmoji[phase]} *${dayData.phaseLabel}* — Day ${day} of ${avg}\n\n` +
+    `${phaseEmoji[phase]} *${dayData.phaseLabel}* — Day ${day} of ~${avg}\n\n` +
     `${dayData.fertilityEmoji} *Fertility possibility: ${dayData.fertilityLabel}*\n\n` +
     `${periodLine}\n` +
     `${ovLine}\n\n` +

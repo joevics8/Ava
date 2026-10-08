@@ -1,6 +1,6 @@
 import type { AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
-import { getCurrentPhase, phaseEmoji } from './cycle';
+import { getCycleStatus, phaseEmoji } from './cycle';
 import { getDayData } from './cycle-lookup';
 import { localizeEatTip } from './food-data';
 
@@ -150,7 +150,8 @@ export async function buildMorningDigest(
   const avg = Number(cycleData.avg_cycle_length) || 28;
   const duration = cycleData.period_duration || 5;
   const lastStart = new Date(cycleData.period_start_dates[cycleData.period_start_dates.length - 1]);
-  const { phase, day } = getCurrentPhase(lastStart, avg, duration);
+  const cycleStatus = getCycleStatus(lastStart, avg, duration);
+  const { phase, day } = cycleStatus;
 
   // ── Research-based lookup — no AI, no estimation ──────────────────────────
   const dayData = getDayData(day, avg, duration);
@@ -198,7 +199,11 @@ export async function buildMorningDigest(
 
   // ── Next period line ──────────────────────────────────────────────────────
   let nextLine = '';
-  if (cycleData.next_period_start) {
+  if (cycleStatus.stale) {
+    nextLine = '📅 I may be out of date on your last period — when did it last start? Send me the date.';
+  } else if (cycleStatus.isLate) {
+    nextLine = '⏳ Your period is ' + cycleStatus.daysPastExpected + ' day' + (cycleStatus.daysPastExpected === 1 ? '' : 's') + ' past your expected date. Tell me the moment it starts, and I will update your cycle.';
+  } else if (cycleData.next_period_start) {
     const next = new Date(cycleData.next_period_start);
     const daysUntil = Math.ceil((next.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     if (daysUntil === 0) nextLine = '📅 Period expected around now';

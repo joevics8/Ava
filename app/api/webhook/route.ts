@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage } from '@/lib/ava/db';
+import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage, getCycleData } from '@/lib/ava/db';
+import { describeBodyContext, notYetReply, periodStartedReply } from '@/lib/ava/body-context';
 import {
   classifyMessage,
   extractLogSummary,
@@ -13,6 +14,13 @@ import {
 } from '@/lib/ava/ai';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+
+// A single message can fan out to several sequential Gemini calls (classify,
+// premium check, reply, log summary, insight) plus DB writes, all running in
+// waitUntil() after the 200 has gone back to Telegram. Without an explicit
+// limit the platform default can cut that work off mid-way, which looks like
+// "Ava stopped replying". 60s is the Hobby-plan ceiling.
+export const maxDuration = 60;
 
 // Default is the 'Boss' account since that's the one that's been running
 // premium — override with ADMIN_TELEGRAM_ID in env if that's not actually you.
@@ -53,6 +61,15 @@ function getContextualFollowUp(recentLog: string, mood: string): string {
     return 'Anything on your mind today?';
   }
   return '';
+}
+
+// "yes", "Yes!", "yeah it did", "it started" — people don't type the exact
+// canned words, and an exact-match list silently missed most real replies.
+function isYes(t: string): boolean {
+  return /^(yes|yeah|yep|yup|it did|it has|it started|started|came|it came)\b/.test(t.replace(/[.!]+$/, ''));
+}
+function isNo(t: string): boolean {
+  return /^(no|nope|not yet|nothing yet|not started|not really|still waiting)\b/.test(t.replace(/[.!]+$/, ''));
 }
 
 function cleanAiText(text: string): string {
@@ -375,7 +392,7 @@ async function processUpdate(update: any) {
       const startPayload = normalizedText.startsWith('/start ') ? text.slice(7).trim() : undefined;
       user = await createUser(telegramId, startPayload);
       await sendMessage(chatId,
-        `Hi, I'm *Ava* 🌸\n\nI'm your personal cycle & wellness companion. I can help you understand your cycle, track symptoms, and answer questions about your body.\n\nLet's get you set up — it only takes a minute.\n\nWhat's your name?`, true
+        `Hi, I'm *Ava* 🌸\n\nI'm here to help you understand your body — your cycle, symptoms, mood and energy — what's normal, what's worth watching, and what to do about it. Think of me as a knowledgeable friend (not a doctor).\n\nYour data is never sold or shared. Setup takes about a minute.\n\nWhat's your name?`, true
       );
       return NextResponse.json({ ok: true });
     }
@@ -520,28 +537,27 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     // major contributor to "doesn't respond well to normal conversation".
     const awaitingPeriodConfirmation = user.onboarding_step === 85;
 
-    if (awaitingPeriodConfirmation && ['yes', 'yes it did', 'it started', 'yep', 'yeah'].includes(normalizedText)) {
-      const { recordPeriodStart, getCycleData } = await import('@/lib/ava/db');
+    if (awaitingPeriodConfirmation && isYes(normalizedText)) {
+      const { recordPeriodStart } = await import('@/lib/ava/db');
       await recordPeriodStart(user.id, 0);
       await updateUser(telegramId, { onboarding_step: 0 } as any);
       const updated = await getCycleData(user.id);
-      const nextStr = updated?.next_period_start
-        ? new Date(updated.next_period_start).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
-        : 'soon';
-      await sendMessage(chatId,
-        `Got it, ${user.name} 🩸 I've noted today as your period start.
-
-Your next period is estimated around *${nextStr}*. How are you feeling?`
-      );
+      await sendMessage(chatId, periodStartedReply(user.name || 'there', updated?.next_period_start ?? null, updated?.next_period_end ?? null));
       return NextResponse.json({ ok: true });
     }
 
-    if (awaitingPeriodConfirmation && ['not yet', 'nope', 'no', 'not started', 'nothing yet'].includes(normalizedText)) {
+    if (awaitingPeriodConfirmation && isNo(normalizedText)) {
       await updateUser(telegramId, { onboarding_step: 0 } as any);
-      await sendMessage(chatId,
-        `No worries — cycles can vary a few days 🌸 I'll keep an eye on it. Let me know when it starts.`
-      );
+      const cd = await getCycleData(user.id);
+      await sendMessage(chatId, notYetReply(user.name || 'there', cd));
       return NextResponse.json({ ok: true });
+    }
+
+    // She didn't answer the question — she moved on to something else. Clear the
+    // flag now, otherwise a "yes" to some unrelated question days later would be
+    // silently logged as a period start.
+    if (awaitingPeriodConfirmation) {
+      await updateUser(telegramId, { onboarding_step: 0 } as any);
     }
 
     // ── "Tell Ava about my diet" flow ───────────────────────────────────────
@@ -562,12 +578,25 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
     await sendTyping(chatId);
     const memoryLogs = await getMemoryContext(user.id, user.plan);
 
-    // Check if this is a natural moment to suggest premium (free users only)
+    // Everything the reply needs to be about HER, fetched once: the last few
+    // turns (so a short reply is understood and classified in context) and her
+    // actual cycle position + dated recent logs (so Ava never has to guess
+    // whether a period is late or how long ago something happened).
+    const [history, cycleRow] = await Promise.all([
+      getRecentChatMessages(user.id, 4),
+      getCycleData(user.id),
+    ]);
+    const bodyContext = describeBodyContext(cycleRow, memoryLogs);
+
     if (user.plan === 'free') {
       const [category, upgradeSuggested] = await Promise.all([
-        classifyMessage(text),
+        classifyMessage(text, history),
         shouldSuggestPremium(text, user.plan),
       ]);
+
+      // Answer first. This used to REPLACE the answer with a sales pitch, so
+      // someone asking a real question got a pitch and nothing else.
+      await routeMessage(category, text, chatId, user, memoryLogs, history, bodyContext);
 
       if (upgradeSuggested) {
         const { createPaymentLink } = await import('@/lib/ava/paystack');
@@ -575,16 +604,16 @@ Your next period is estimated around *${nextStr}*. How are you feeling?`
           generatePremiumPitch(user.name || 'there', text),
           createPaymentLink(user.telegram_id, user.name || 'friend'),
         ]);
-        const linkText = link ? `\n\n[Upgrade to Premium](${link.url}) ✨` : '';
-        await sendMessage(chatId, pitch + linkText);
-        return NextResponse.json({ ok: true });
+        await sendMessage(chatId, pitch);
+        // A real button instead of a markdown link pasted into plain text (the
+        // plain-text sender strips underscores, which can corrupt a URL).
+        if (link) {
+          await sendWithKeyboard(chatId, 'Whenever you are ready 👇', [[{ text: 'Upgrade to Premium ✨', url: link.url }]]);
+        }
       }
-
-      // Route normally
-      await routeMessage(category, text, chatId, user, memoryLogs);
     } else {
-      const category = await classifyMessage(text);
-      await routeMessage(category, text, chatId, user, memoryLogs);
+      const category = await classifyMessage(text, history);
+      await routeMessage(category, text, chatId, user, memoryLogs, history, bodyContext);
     }
 
     return NextResponse.json({ ok: true });
@@ -612,7 +641,7 @@ async function handleCommand(
         return;
       }
       if (user.onboarding_complete) {
-        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\n/today — daily summary\n/foods — nutrition & meal ideas\n/affirmations — daily affirmations\n/meditate — short guided meditations\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
+        await send(chatId, "Hey " + (user.name || 'there') + " 🌸\n\nAsk me anything about your body — \"is this normal?\", \"why am I so tired?\", \"could I be pregnant?\" — or use:\n\n/today — daily summary\n/foods — nutrition & meal ideas\n/affirmations — daily affirmations\n/meditate — short guided meditations\n/remedies — natural remedies\n/insights — what Ava knows about you\n/settings — update your info\n/referral — earn ₦1,000 per friend\n/premium — upgrade\n/help — all commands\n\nOr just talk to me anytime.");
       } else {
         await send(chatId, "Hi, I'm *Ava* 🌸 Let's get you set up — what's your name?", true);
       }
@@ -874,12 +903,19 @@ async function routeMessage(
   text: string,
   chatId: number,
   user: any,
-  memoryLogs: any[]
+  memoryLogs: any[],
+  history: { role: 'user' | 'model'; content: string }[],
+  bodyContext: string
 ) {
-  // Short-term conversation context: the last 4 stored messages (2 from the
-  // user + 2 from Ava) — together with the incoming message that makes 5.
-  // Fetched before saving the new message so it isn't duplicated.
-  const history = await getRecentChatMessages(user.id, 4);
+  const name = user.name || 'there';
+
+  // Honest failure message. Previously every empty AI result was replaced with
+  // a cheerful canned line ("I'm here — tell me more") that was ALSO saved into
+  // the chat history as if Ava had said it — hiding outages from both the user
+  // and the logs. Now the user is told, and nothing fake is stored.
+  const sendFailure = async () => {
+    await sendMessage(chatId, `I couldn't put a proper answer together just now, ${name} — that's on my side, not yours. Please send that again in a minute 🌸`);
+  };
 
   // Check for remedy outcome update
   const { detectRemedyIntent, updateRemedyOutcome } = await import('@/lib/ava/remedy-engine');
@@ -896,56 +932,52 @@ async function routeMessage(
 
     // If this log is actually reporting a period start ("started today",
     // "came 2 days early") — not just a symptom mention — update cycle_data
-    // so /today and the morning digest reflect it immediately, instead of
-    // continuing to show the old predicted date while the AI "remembers"
-    // the new one only in chat.
+    // so /today and the morning digest reflect it immediately.
     let updatedPeriodNote = '';
+    let ctx = bodyContext;
     if (periodStart) {
-      const { recordPeriodStart, getCycleData } = await import('@/lib/ava/db');
+      const { recordPeriodStart } = await import('@/lib/ava/db');
       await recordPeriodStart(user.id, daysAgo);
       const updated = await getCycleData(user.id);
+      // The reply must reflect the period she just reported, not the stale
+      // "late / due soon" state captured before this message.
+      ctx = describeBodyContext(updated, memoryLogs);
       if (updated?.next_period_start) {
         const nextStr = new Date(updated.next_period_start).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
         updatedPeriodNote = ` I've updated your prediction — your next period is now estimated around ${nextStr}.`;
       }
     }
 
-    // The main real use of memory: when a symptom is logged, look up
-    // whether the SAME thing has happened before — a targeted lookup, not
-    // "here's everything recent, mention whatever." This is what makes
-    // "oh you had cramps around this same time last cycle" or "last time
-    // this happened, you'd also logged X — was that the case today?"
-    // possible, without dumping unrelated history into every reply.
+    // Targeted lookup: has the SAME thing been logged before? Only things she
+    // logged herself count, and the real prior entry (text + date) is passed so
+    // the reply quotes it rather than inventing "about a month ago".
     let patternNote = '';
     if (['symptom', 'mood', 'flow'].includes(logCat)) {
-      const { findSymptomPattern, getCycleData } = await import('@/lib/ava/db');
+      const { findSymptomPattern } = await import('@/lib/ava/db');
       const cycle = await getCycleData(user.id);
       const pattern = await findSymptomPattern(user.id, summary, cycle?.avg_cycle_length, user.plan);
       if (pattern) {
-        patternNote = `\n\nRelevant history lookup (only mention this if it genuinely fits — do not force it in): the user logged something similar ${pattern.daysSinceLast} day(s) ago.${pattern.sameTimeAsCycle ? ' That is roughly the same point in their cycle as now — worth noting as a possible pattern if it feels natural to.' : ''}${pattern.sameDayCompanion ? ` On that same day, they had also logged: "${pattern.sameDayCompanion}" — if relevant, you can ask (as a question, not a claim) whether something similar was true today.` : ''}`;
+        patternNote = `\n\n(Optional history note — mention it only if it genuinely fits, and never claim more than this: on ${pattern.priorDate} she logged "${pattern.priorSummary}", ${pattern.daysSinceLast} day(s) ago.${pattern.sameTimeAsCycle ? ' That is about one cycle ago, so it could be a pattern.' : ''}${pattern.sameDayCompanion ? ` That same day she also logged "${pattern.sameDayCompanion}" — you may ask, as a question, whether something similar was true today.` : ''})`;
       }
     }
 
-    const followUpPrompt = `The user just said: "${text}"
-${patternNote}
-Respond like a caring friend would to this specific message:
-- Acknowledge it warmly — briefly, don't over-explain
-- Never bring up a past topic, symptom, or issue unless it is directly relevant to what they just said — no exceptions. The "relevant history lookup" above (if present) is the ONLY history you should consider mentioning, and only if it genuinely fits naturally — otherwise ignore it entirely.
-- If it fits naturally, ask one caring follow-up question — but not every single time; sometimes a short acknowledgment is enough on its own
-
-Keep it short — 1-3 sentences depending on what the message actually needs. Don't pad it out.`;
+    const followUpPrompt = `She just told you: "${text}"${patternNote}`;
 
     await sendTyping(chatId);
-    const response = await handleConversation(user, followUpPrompt, memoryLogs, history);
-    const logReply = (response || `Aww — how are you feeling overall? 🌸`) + updatedPeriodNote;
+    const response = await handleConversation(user, followUpPrompt, memoryLogs, history, ctx, 'log');
+    // The log itself IS saved, so a plain confirmation is true even if the AI
+    // reply failed — unlike a fake "conversation" reply, this isn't a lie.
+    const logReply = (response || `Noted, ${name} — I've saved that 📝`) + updatedPeriodNote;
     await sendMessage(chatId, logReply, false);
     await addChatMessage(user.id, 'user', text);
     await addChatMessage(user.id, 'model', logReply);
-    const insight = await summarizeChatInsight(text, response);
-    if (insight) {
-      const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
-      if (!isDuplicateInsight(insight, recentChat)) {
-        await addMemoryLog(user.id, 'chat', insight);
+    if (response) {
+      const insight = await summarizeChatInsight(text, response);
+      if (insight) {
+        const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);
+        if (!isDuplicateInsight(insight, recentChat)) {
+          await addMemoryLog(user.id, 'chat', insight);
+        }
       }
     }
 
@@ -964,20 +996,25 @@ Keep it short — 1-3 sentences depending on what the message actually needs. Do
     }
 
   } else if (category === 'RETRIEVAL') {
-    const { getCycleData } = await import('@/lib/ava/db');
     const cycleData = await getCycleData(user.id);
-    const response = await handleRetrieval(user, text, memoryLogs, cycleData, history);
-    const retrievalReply = response || `I need a bit more data to spot that pattern — keep sharing and I'll connect the dots 🌸`;
-    await sendMessage(chatId, retrievalReply, false);
+    const response = await handleRetrieval(user, text, memoryLogs, cycleData, history, bodyContext);
+    if (!response) {
+      await sendFailure();
+      return;
+    }
+    await sendMessage(chatId, response, false);
     await addChatMessage(user.id, 'user', text);
-    await addChatMessage(user.id, 'model', retrievalReply);
+    await addChatMessage(user.id, 'model', response);
 
   } else {
-    const response = await handleConversation(user, text, memoryLogs, history);
-    const convoReply = response || `I'm here — tell me more 🌸`;
-    await sendMessage(chatId, convoReply, false);
+    const response = await handleConversation(user, text, memoryLogs, history, bodyContext, 'chat');
+    if (!response) {
+      await sendFailure();
+      return;
+    }
+    await sendMessage(chatId, response, false);
     await addChatMessage(user.id, 'user', text);
-    await addChatMessage(user.id, 'model', convoReply);
+    await addChatMessage(user.id, 'model', response);
     const insight = await summarizeChatInsight(text, response);
     if (insight) {
       const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);

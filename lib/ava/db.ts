@@ -268,23 +268,35 @@ export async function upsertCycleData(
 // never touched. That's why the digest kept showing the old predicted date
 // after an early/late period was mentioned in free text.
 export async function recordPeriodStart(userId: string, daysAgo: number = 0): Promise<void> {
-  const { predictNextPeriod, predictOvulationWindow } = await import('./cycle');
+  const { predictNextPeriod, predictOvulationWindow, learnCycleLength, predictionConfidence } = await import('./cycle');
 
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - daysAgo);
+  // Local (UTC+1) calendar date, so a period logged at 00:30 Lagos time is
+  // recorded on the right day instead of "yesterday" in UTC.
+  const startDate = new Date(Date.now() + 60 * 60 * 1000);
+  startDate.setUTCDate(startDate.getUTCDate() - daysAgo);
   const startDateStr = startDate.toISOString().split('T')[0];
 
   const existing = await getCycleData(userId);
-  const avg = Number(existing?.avg_cycle_length) || 28;
+  const stated = Number(existing?.avg_cycle_length) || 28;
   const existingDates: string[] = existing?.period_start_dates || [];
 
   if (existingDates.includes(startDateStr)) return; // already recorded
 
-  const { start: ns, end: ne } = predictNextPeriod(startDate, avg);
+  const allDates = [...existingDates, startDateStr];
+
+  // The average used to be whatever she typed at onboarding, forever. Learn it
+  // from the real gaps between her logged periods (ignoring gaps that look
+  // like a missed log), and widen the prediction window when her cycles vary.
+  const { avg, samples, variability } = learnCycleLength(allDates, stated);
+  const variation = Math.max(2, Math.min(5, Math.round(variability)));
+
+  const { start: ns, end: ne } = predictNextPeriod(startDate, avg, variation);
   const { start: os, end: oe } = predictOvulationWindow(ns, avg);
 
   await upsertCycleData(userId, {
-    period_start_dates: [...existingDates, startDateStr],
+    period_start_dates: allDates,
+    avg_cycle_length: avg,
+    confidence_pct: predictionConfidence(samples, variability),
     next_period_start: ns.toISOString().split('T')[0],
     next_period_end: ne.toISOString().split('T')[0],
     next_ovulation_start: os.toISOString().split('T')[0],
@@ -372,19 +384,18 @@ export async function addChatMessage(userId: string, role: 'user' | 'model', con
   }
 }
 
-const PATTERN_STOPWORDS = new Set([
-  'about', 'today', 'again', 'still', 'really', 'quite', 'started', 'feeling',
-  'cycle', 'cycles', 'menstrual', 'period', 'periods',
-]);
-
 // The main intended use of memory: not "here's everything recent, pick
 // something" but a targeted lookup triggered by a specific symptom — same
 // idea as a person checking their own notes. When someone mentions cramps,
-// this checks whether the SAME thing has happened before (across their full
-// history, not just a recent window), how long ago, whether it lines up with
-// roughly the same point in a previous cycle, and what else was logged on
-// that same day last time — a factual basis for Ava to ask "did you have
-// sugar today too?" rather than assert a cause.
+// this checks whether the SAME thing has happened before, how long ago,
+// whether it lines up with roughly the same point in a previous cycle, and
+// what else was logged that day — a factual basis for Ava to ask "did you
+// have sugar today too?" rather than assert a cause.
+//
+// Only things the USER logged count (see selectPriorMatch) — Ava's own chat
+// tags used to be matched here, which produced false "you logged this a month
+// ago" claims. The real prior entry (text + date) is returned so the reply can
+// quote it instead of inventing a time frame.
 export async function findSymptomPattern(
   userId: string,
   summary: string,
@@ -395,21 +406,15 @@ export async function findSymptomPattern(
   daysSinceLast: number;
   sameTimeAsCycle: boolean;
   sameDayCompanion: string | null;
+  priorSummary: string;
+  priorDate: string;
 } | null> {
-  const keywords = summary
-    .toLowerCase()
-    .split(/\W+/)
-    .filter(w => w.length >= 4 && !PATTERN_STOPWORDS.has(w));
-
+  const { patternKeywords, selectPriorMatch } = await import('./body-context');
+  const keywords = patternKeywords(summary);
   if (keywords.length === 0) return null;
 
-  // Look across full history (not just a recent window) for the same
-  // symptom/keyword — recurrence over months is exactly the kind of
-  // pattern a short recency window would miss entirely. BUT this must
-  // still respect the same free (14 day) / premium (150 day) retention
-  // window as getMemoryContext — without this filter, free users got the
-  // exact same unlimited-lookback pattern matching as premium, which
-  // directly undermines "5 months of memory" as a paid feature.
+  // Same free (14 day) / premium (150 day) retention window as
+  // getMemoryContext — otherwise free users would get premium's lookback.
   const daysBack = plan === 'premium' ? 150 : 14;
   const since = new Date();
   since.setDate(since.getDate() - daysBack);
@@ -422,39 +427,32 @@ export async function findSymptomPattern(
     .order('logged_at', { ascending: false })
     .limit(300);
 
-  if (!matches || matches.length < 2) return null;
+  if (!matches || matches.length === 0) return null;
 
-  // matches[0] is the entry just logged for the current message — skip it.
-  const prior = matches.slice(1).find(m =>
-    keywords.some(k => m.summary.toLowerCase().includes(k))
-  );
-  if (!prior) return null;
-
-  const daysSinceLast = Math.round(
-    (Date.now() - new Date(prior.logged_at).getTime()) / (1000 * 60 * 60 * 24)
-  );
+  const found = selectPriorMatch(matches as MemoryLog[], keywords);
+  if (!found) return null;
+  const { prior, daysSince } = found;
 
   const cycleLen = avgCycleLength || 28;
-  const sameTimeAsCycle = Math.abs(daysSinceLast - cycleLen) <= 3
-    || Math.abs(daysSinceLast - cycleLen * 2) <= 3;
+  const sameTimeAsCycle = Math.abs(daysSince - cycleLen) <= 3
+    || Math.abs(daysSince - cycleLen * 2) <= 3;
 
-  // What else was logged the same day as that prior occurrence — a
-  // concrete, checkable basis for a "did X happen again?" question,
-  // not an assertion.
+  // What else the user logged the same day as that prior occurrence.
   const priorDate = new Date(prior.logged_at).toDateString();
-  const companion = matches
-    .slice(1)
-    .find(m =>
-      m.id !== prior.id &&
-      new Date(m.logged_at).toDateString() === priorDate &&
-      !keywords.some(k => m.summary.toLowerCase().includes(k))
-    );
+  const companion = (matches as MemoryLog[]).find(m =>
+    m.id !== prior.id &&
+    ['symptom', 'mood', 'flow', 'sexual', 'cycle', 'test', 'bbt', 'mucus'].includes(m.category) &&
+    new Date(m.logged_at).toDateString() === priorDate &&
+    !keywords.some(k => m.summary.toLowerCase().includes(k))
+  );
 
   return {
     keyword: keywords[0],
-    daysSinceLast,
+    daysSinceLast: daysSince,
     sameTimeAsCycle,
     sameDayCompanion: companion?.summary || null,
+    priorSummary: prior.summary,
+    priorDate: new Date(prior.logged_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
   };
 }
 
