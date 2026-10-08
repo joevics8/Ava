@@ -32,6 +32,19 @@ export function detectCondition(message: string): string | null {
   if (/\bscars?\b/.test(lower) && (lower.includes('acne') || lower.includes('pimple') || lower.includes('breakout'))) {
     return 'acne_scars';
   }
+  // Batch 6 pre-checks. 'itchy' (vaginal_itching) and 'rash'/'chaf' would
+  // otherwise swallow these. Eye itch needs the word 'eye'; pad irritation
+  // needs a pad/liner word so ordinary rashes and chafing are unaffected.
+  if (/\beyes?\b/.test(lower) && /\bitch/.test(lower)) {
+    return 'itchy_eyes';
+  }
+  // 'bite/chew my nails' would otherwise hit 'stressed' or other generic words.
+  if (/\bnails?\b/.test(lower) && /\b(bite|bites|biting|bit|chew|chewing)\b/.test(lower)) {
+    return 'nail_biting';
+  }
+  if (/\b(pads?|sanitary|liners?)\b/.test(lower) && (/\bitch/.test(lower) || ['rash', 'irritat', 'sore', 'chaf'].some(w => lower.includes(w)))) {
+    return 'pad_irritation';
+  }
   if (lower.includes('chaf')) {
     return 'chafing';
   }
@@ -255,6 +268,31 @@ export function detectCondition(message: string): string | null {
     'sore muscle': 'sore_muscles', 'muscle soreness': 'sore_muscles', 'muscles are sore': 'sore_muscles', 'post-workout soreness': 'sore_muscles',
     'dry mouth': 'dry_mouth', 'mouth is dry': 'dry_mouth', 'mouth feels dry': 'dry_mouth',
     'self-esteem': 'low_self_esteem', 'self esteem': 'low_self_esteem', 'body image': 'low_self_esteem', 'hate my body': 'low_self_esteem',
+
+    // Batch 6 additions (25 new conditions). itchy_eyes and pad_irritation
+    // are pre-checks above; athlete's foot, warts and dry hands are
+    // whole-word/AND checks after this map. 'razor bump' already routes to
+    // ingrown_hairs, so only burn/rash wording is mapped here.
+    blister: 'friction_blisters',
+    'stiff neck': 'stiff_neck', 'crick in my neck': 'stiff_neck',
+    jittery: 'caffeine_jitters', 'caffeine jitter': 'caffeine_jitters', 'too much caffeine': 'caffeine_jitters', 'too much coffee': 'caffeine_jitters',
+    'jet lag': 'jet_lag', jetlag: 'jet_lag', 'jet-lag': 'jet_lag',
+    'phone addiction': 'phone_overuse', doomscroll: 'phone_overuse', 'scrolling too much': 'phone_overuse', 'on my phone too much': 'phone_overuse', 'screen time': 'phone_overuse',
+    homesick: 'homesickness',
+    'no motivation': 'low_motivation', unmotivated: 'low_motivation', 'lack of motivation': 'low_motivation', 'lost motivation': 'low_motivation', 'lost my motivation': 'low_motivation',
+    forgetful: 'forgetfulness', 'forgetting things': 'forgetfulness', 'keep forgetting': 'forgetfulness', 'memory lapse': 'forgetfulness',
+    'crying a lot': 'crying_spells', 'cry easily': 'crying_spells', 'crying for no reason': 'crying_spells', 'crying spell': 'crying_spells', 'crying all the time': 'crying_spells', 'keep crying': 'crying_spells',
+    'racing heart': 'racing_heart', 'heart racing': 'racing_heart', 'heart is racing': 'racing_heart', 'heart beating fast': 'racing_heart', 'heart beats fast': 'racing_heart', 'heart pounding': 'racing_heart', 'heart is pounding': 'racing_heart', palpitation: 'racing_heart',
+    'razor burn': 'razor_burn', 'shaving rash': 'razor_burn', 'shaving burn': 'razor_burn',
+    'ingrown toenail': 'ingrown_toenail', 'ingrown toe': 'ingrown_toenail', 'ingrown nail': 'ingrown_toenail',
+    'hair not growing': 'slow_hair_growth', 'hair wont grow': 'slow_hair_growth', "hair won't grow": 'slow_hair_growth', 'slow hair growth': 'slow_hair_growth', 'hair growing slowly': 'slow_hair_growth', 'grow my hair': 'slow_hair_growth',
+    'fine line': 'fine_lines', wrinkle: 'fine_lines', 'aging skin': 'fine_lines', 'ageing skin': 'fine_lines',
+    suntan: 'suntan', 'sun tan': 'suntan', 'tanned skin': 'suntan', 'tan removal': 'suntan', 'so tanned': 'suntan',
+    'dark lips': 'dark_lips', 'lips are dark': 'dark_lips', 'lip pigmentation': 'dark_lips', 'pigmented lips': 'dark_lips',
+    'dark knee': 'dark_knees_elbows', 'dark elbow': 'dark_knees_elbows', 'knees are dark': 'dark_knees_elbows', 'elbows are dark': 'dark_knees_elbows', 'dark knuckle': 'dark_knees_elbows',
+    hiccup: 'hiccups',
+    'bite my nails': 'nail_biting', 'biting my nails': 'nail_biting', 'bite my nail': 'nail_biting', 'nail biting': 'nail_biting', 'nail-biting': 'nail_biting',
+    'yellow teeth': 'stained_teeth', 'stained teeth': 'stained_teeth', 'teeth whitening': 'stained_teeth', 'whiten my teeth': 'stained_teeth', 'teeth are yellow': 'stained_teeth',
   };
 
   for (const [keyword, cond] of Object.entries(map)) {
@@ -267,6 +305,11 @@ export function detectCondition(message: string): string | null {
   // Word-order-independent 'nose ... blocked/stuffy'. Lives after the map so
   // earlier matches (hay fever, allergies) still win.
   if (lower.includes('nose') && /blocked|stuffy|stuffed|congest/.test(lower)) return 'stuffy_nose';
+  // Batch 6 post-map checks (earlier map matches still win).
+  if (/athlete.?s? ?foot/.test(lower) || (lower.includes('fungal') && lower.includes('foot'))) return 'athletes_foot';
+  if (/\bwarts?\b/.test(lower) || lower.includes('verruca')) return 'warts';
+  if (lower.includes('hair') && /not growing|isn.?t growing|won.?t grow|grow(ing)? slowly|slow growth|slow to grow/.test(lower)) return 'slow_hair_growth';
+  if (/\bhands?\b/.test(lower) && ['dry', 'crack', 'rough', 'peel', 'chap'].some(w => lower.includes(w))) return 'dry_hands';
   if (/\bpiles\b/.test(lower)) return 'hemorrhoids';
   if (/\bdoms\b/.test(lower)) return 'sore_muscles';
   if (/\bear ?(pain|ache)s?\b/.test(lower)) return 'earache';

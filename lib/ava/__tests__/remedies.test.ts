@@ -238,3 +238,61 @@ describe('detectCondition — batch 5 (everyday wellness)', () => {
     expect(detectCondition('I scarf down food and feel bloated')).toBe('bloating');
   });
 });
+
+describe('detectCondition — batch 6', () => {
+  it('routes every new batch 6 condition', () => {
+    expect(detectCondition('my eyes are so itchy')).toBe('itchy_eyes');
+    expect(detectCondition('itchy eyes every spring')).toBe('itchy_eyes');
+    expect(detectCondition('athlete\'s foot is back')).toBe('athletes_foot');
+    expect(detectCondition('I think I have athletes foot')).toBe('athletes_foot');
+    expect(detectCondition('I have a wart on my finger')).toBe('warts');
+    expect(detectCondition('verruca on my foot')).toBe('warts');
+    expect(detectCondition('blisters on my feet from new shoes')).toBe('friction_blisters');
+    expect(detectCondition('woke up with a stiff neck')).toBe('stiff_neck');
+    expect(detectCondition('so jittery after coffee')).toBe('caffeine_jitters');
+    expect(detectCondition('too much caffeine today')).toBe('caffeine_jitters');
+    expect(detectCondition('terrible jet lag')).toBe('jet_lag');
+    expect(detectCondition('I am on my phone too much')).toBe('phone_overuse');
+    expect(detectCondition('I keep doomscrolling')).toBe('phone_overuse');
+    expect(detectCondition('I am so homesick')).toBe('homesickness');
+    expect(detectCondition('I have no motivation')).toBe('low_motivation');
+    expect(detectCondition('I am so forgetful lately')).toBe('forgetfulness');
+    expect(detectCondition('I keep crying for no reason')).toBe('crying_spells');
+    expect(detectCondition('my heart is racing')).toBe('racing_heart');
+    expect(detectCondition('I get palpitations')).toBe('racing_heart');
+    expect(detectCondition('razor burn after shaving')).toBe('razor_burn');
+    expect(detectCondition('my hands are dry and cracked')).toBe('dry_hands');
+    expect(detectCondition('ingrown toenail hurts')).toBe('ingrown_toenail');
+    expect(detectCondition('my pad is causing a rash')).toBe('pad_irritation');
+    expect(detectCondition('pad irritation during my period')).toBe('pad_irritation');
+    expect(detectCondition('my hair is not growing')).toBe('slow_hair_growth');
+    expect(detectCondition('fine lines around my eyes')).toBe('fine_lines');
+    expect(detectCondition('I got a bad suntan')).toBe('suntan');
+    expect(detectCondition('my lips are dark')).toBe('dark_lips');
+    expect(detectCondition('dark knees and elbows')).toBe('dark_knees_elbows');
+    expect(detectCondition('I have the hiccups')).toBe('hiccups');
+    expect(detectCondition('I bite my nails when stressed')).toBe('nail_biting');
+    expect(detectCondition('I chew my nails all the time')).toBe('nail_biting');
+    expect(detectCondition('my pad itches and I have a rash')).toBe('pad_irritation');
+    expect(detectCondition('twitching eyelid')).toBe('eye_twitching');
+    expect(detectCondition('my teeth are yellow')).toBe('stained_teeth');
+  });
+
+  it('does not steal messages that belong to earlier conditions', () => {
+    expect(detectCondition('I have an itchy scalp')).toBe('itchy_scalp');
+    expect(detectCondition('vaginal itching')).toBe('vaginal_itching');
+    expect(detectCondition('I feel itchy down there')).toBe('vaginal_itching');
+    expect(detectCondition('eye twitching')).toBe('eye_twitching');
+    expect(detectCondition('razor bumps on my bikini line')).toBe('ingrown_hairs');
+    expect(detectCondition('fever blister on my lip')).toBe('cold_sores');
+    expect(detectCondition('my lips are dry and cracked')).toBe('chapped_lips');
+    expect(detectCondition('wrist and hand pain')).toBe('wrist_hand_pain');
+    expect(detectCondition('my hands are sweaty')).toBe('sweaty_palms');
+    expect(detectCondition('my teeth hurt')).toBe('sensitive_teeth');
+    expect(detectCondition('I wake up feeling anxious')).toBe('anxiety');
+    expect(detectCondition('burning thigh chafing')).toBe('chafing');
+    expect(detectCondition('nails are brittle and peeling')).toBe('brittle_nails');
+    expect(detectCondition('I feel anxious and my heart is racing')).toBe('anxiety');
+    expect(detectCondition('cracked heels')).toBe('cracked_heels');
+  });
+});
