@@ -3,16 +3,27 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Send } from 'lucide-react';
+import { CycleRing } from '@/components/site/CycleRing';
+import { BottomNav } from '@/components/site/BottomNav';
+import { navItems } from '@/components/site/nav-items';
+import { PHASE_LABEL, cycleDayFrom, cyclePhases, phaseOfDay } from '@/lib/cycle-ring';
 
 interface DashboardData { user: any; cycle: any; logs: any[]; }
 
-const categoryColor: Record<string, string> = {
-  symptom: 'bg-red-50 text-red-600', mood: 'bg-yellow-50 text-yellow-700',
-  cycle: 'bg-pink-50 text-pink-600', sexual: 'bg-purple-50 text-purple-600',
-  chat: 'bg-blue-50 text-blue-600', flow: 'bg-rose-50 text-rose-600',
-  bbt: 'bg-green-50 text-green-600', mucus: 'bg-teal-50 text-teal-600',
-  insight: 'bg-gray-50 text-gray-600', test: 'bg-orange-50 text-orange-600',
+// Each log category gets a colour dot; the label itself stays in dark ink so it
+// is readable. Colours reuse the cycle-phase palette.
+const categoryDot: Record<string, string> = {
+  symptom: 'bg-phase-period', flow: 'bg-phase-period', mood: 'bg-marigold', cycle: 'bg-phase-luteal',
+  sexual: 'bg-phase-luteal', chat: 'bg-primary', bbt: 'bg-phase-follicular', mucus: 'bg-phase-follicular',
+  insight: 'bg-muted-ink', test: 'bg-marigold',
 };
+
+const BOT_NAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot';
+const BOT_URL = `https://t.me/${BOT_NAME}`;
+
+const card = 'rounded-2xl border border-line bg-white p-5';
+const field = 'mt-1 h-11 w-full rounded-xl border border-input bg-white px-3 text-base text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -22,6 +33,7 @@ export default function DashboardPage() {
   const [cycleForm, setCycleForm] = useState({ last_period: '', cycle_length: '', period_duration: '' });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'log' | 'settings'>('overview');
 
   useEffect(() => {
@@ -58,9 +70,11 @@ export default function DashboardPage() {
     router.push('/');
   }
 
+  const nav = <BottomNav items={navItems('en')} label="Main navigation" />;
+
   if (loading) return (
-    <div className="min-h-screen bg-[#FFF5F7] flex items-center justify-center">
-      <div className="text-4xl animate-pulse">🌸</div>
+    <div className="flex min-h-screen items-center justify-center bg-paper" role="status" aria-label="Loading your dashboard">
+      <CycleRing tone="light" animate className="h-24 w-24" label="Loading" />
     </div>
   );
 
@@ -75,214 +89,243 @@ export default function DashboardPage() {
   const siteUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const referralLink = user.referral_code ? `${siteUrl}?ref=${user.referral_code}` : '';
 
+  const cycleLength = Number(cycle?.avg_cycle_length) || 28;
+  const periodLength = Number(cycle?.period_duration) || 5;
+  const lastPeriod: string | undefined = cycle?.period_start_dates?.slice(-1)[0];
+  const rawDay = cycleDayFrom(lastPeriod);
+  const spans = cyclePhases(cycleLength, periodLength);
+  const day = rawDay != null && rawDay <= cycleLength ? rawDay : null;
+  const phase = day != null ? phaseOfDay(day, spans) : null;
+  const lateBy = rawDay != null && rawDay > cycleLength ? rawDay - cycleLength : 0;
+
+  async function copyReferral() {
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked: the link is still visible in the field */ }
+  }
+
   return (
-    <main className="min-h-screen bg-[#FFF5F7]">
+    <div className="min-h-screen bg-paper pb-[5.5rem] text-ink md:pb-10">
       {/* Header */}
-      <div className="bg-[#E91E63] text-white px-5 py-4 flex items-center justify-between">
-        <div>
-          <div className="text-xs opacity-75">Dashboard</div>
-          <div className="text-lg font-bold">{user.name} 🌸</div>
+      <header className="on-deep bg-deep text-paper">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-5">
+          <div>
+            <p className="text-sm text-paper/75">Dashboard</p>
+            <h1 className="font-display text-2xl font-bold leading-tight">{user.name}</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isPremium ? 'bg-marigold text-ink' : 'bg-paper/15 text-paper'}`}>
+              {isPremium ? 'Premium' : 'Free'}
+            </span>
+            <a href="/api/auth/logout" className="inline-flex h-9 items-center rounded-full border border-paper/40 px-4 text-sm font-medium hover:border-paper hover:bg-paper/10">Log out</a>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-1 rounded-full font-semibold ${isPremium ? 'bg-yellow-400 text-yellow-900' : 'bg-white/20 text-white'}`}>
-            {isPremium ? '✨ Premium' : 'Free'}
-          </span>
-          <a href="/api/auth/logout" className="text-xs bg-white/20 px-3 py-1 rounded-full hover:bg-white/30">Logout</a>
-        </div>
-      </div>
+      </header>
 
       {/* Tabs */}
-      <div className="flex border-b border-pink-100 bg-white">
-        {(['overview', 'log', 'settings'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-medium capitalize transition-colors ${activeTab === tab ? 'text-[#E91E63] border-b-2 border-[#E91E63]' : 'text-gray-400'}`}>
-            {tab}
-          </button>
-        ))}
+      <div role="tablist" aria-label="Dashboard sections" className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
+        <div className="mx-auto flex max-w-2xl">
+          {([['overview', 'Overview'], ['log', 'Health log'], ['settings', 'Settings']] as const).map(([tab, label]) => (
+            <button key={tab} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
+              className={`h-12 flex-1 border-b-[3px] text-[0.95rem] font-semibold transition-colors ${activeTab === tab ? 'border-marigold text-primary' : 'border-transparent text-muted-ink hover:text-primary'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+      <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">
 
         {/* ── Overview Tab ── */}
         {activeTab === 'overview' && (
           <>
-            <div className="bg-white rounded-2xl p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-gray-800">Your Cycle</h2>
-                <button onClick={() => setEditing(!editing)} className="text-xs text-[#E91E63] font-medium">
+            <section className="on-deep rounded-2xl bg-deep p-5 text-paper sm:p-6">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="font-display text-xl font-semibold">Your cycle</h2>
+                <button onClick={() => setEditing(!editing)} className="h-9 rounded-full border border-paper/40 px-4 text-sm font-medium hover:border-paper hover:bg-paper/10">
                   {editing ? 'Cancel' : 'Edit'}
                 </button>
               </div>
 
               {editing ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-500">Last period start</label>
+                <div className="space-y-3 pt-2">
+                  <label className="block text-sm font-medium text-paper/90">Last period start
                     <input type="date" value={cycleForm.last_period}
                       onChange={e => setCycleForm(f => ({ ...f, last_period: e.target.value }))}
-                      className="w-full border border-pink-100 rounded-xl px-3 py-2 text-sm mt-1" />
-                  </div>
+                      className={`${field} text-ink`} />
+                  </label>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-gray-500">Cycle length (days)</label>
-                      <input type="number" value={cycleForm.cycle_length}
+                    <label className="block text-sm font-medium text-paper/90">Cycle length (days)
+                      <input type="number" inputMode="numeric" value={cycleForm.cycle_length}
                         onChange={e => setCycleForm(f => ({ ...f, cycle_length: e.target.value }))}
-                        className="w-full border border-pink-100 rounded-xl px-3 py-2 text-sm mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Period duration (days)</label>
-                      <input type="number" value={cycleForm.period_duration}
+                        className={`${field} text-ink`} />
+                    </label>
+                    <label className="block text-sm font-medium text-paper/90">Period length (days)
+                      <input type="number" inputMode="numeric" value={cycleForm.period_duration}
                         onChange={e => setCycleForm(f => ({ ...f, period_duration: e.target.value }))}
-                        className="w-full border border-pink-100 rounded-xl px-3 py-2 text-sm mt-1" />
-                    </div>
+                        className={`${field} text-ink`} />
+                    </label>
                   </div>
                   <button onClick={saveCycle} disabled={saving}
-                    className="w-full bg-[#E91E63] text-white py-2 rounded-xl text-sm font-semibold disabled:opacity-50">
-                    {saving ? 'Saving...' : 'Save Changes'}
+                    className="h-12 w-full rounded-full bg-marigold font-semibold text-ink hover:bg-[hsl(39_92%_52%)] disabled:opacity-60">
+                    {saving ? 'Saving…' : 'Save changes'}
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Cycle length', value: cycle?.avg_cycle_length ? `${cycle.avg_cycle_length} days` : '—' },
-                    { label: 'Period duration', value: cycle?.period_duration ? `${cycle.period_duration} days` : '—' },
-                    { label: 'Next period', value: fmt(cycle?.next_period_start) },
-                    { label: 'Ovulation', value: fmt(cycle?.next_ovulation_start) },
-                  ].map(item => (
-                    <div key={item.label} className="bg-[#FFF5F7] rounded-xl p-3">
-                      <div className="text-xs text-gray-400">{item.label}</div>
-                      <div className="text-sm font-semibold text-[#E91E63]">{item.value}</div>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="mx-auto my-4 w-full max-w-[16rem]">
+                    <CycleRing
+                      cycleLength={cycleLength} periodLength={periodLength} day={day} tone="deep" animate
+                      top={day != null ? 'Cycle day' : lateBy ? 'Past due by' : undefined}
+                      main={day != null ? String(day) : lateBy ? `${lateBy}d` : undefined}
+                      bottom={phase ? PHASE_LABEL[phase] : lateBy ? 'Log your period in chat' : undefined}
+                      className="h-auto w-full"
+                    />
+                  </div>
+                  {day == null && !lateBy && (
+                    <p className="pb-2 text-center text-sm text-paper/80">Add the first day of your last period to see where you are in your cycle.</p>
+                  )}
+                  <dl className="mt-2 grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Cycle length', value: cycle?.avg_cycle_length ? `${cycle.avg_cycle_length} days` : '—' },
+                      { label: 'Period length', value: cycle?.period_duration ? `${cycle.period_duration} days` : '—' },
+                      { label: 'Next period', value: fmt(cycle?.next_period_start) },
+                      { label: 'Ovulation', value: fmt(cycle?.next_ovulation_start) },
+                    ].map(item => (
+                      <div key={item.label} className="rounded-xl bg-paper/10 p-3">
+                        <dt className="text-sm text-paper/75">{item.label}</dt>
+                        <dd className="font-display text-lg font-semibold">{item.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
               )}
-            </div>
+            </section>
 
             {/* Premium card */}
             {!isPremium ? (
-              <div className="bg-[#FCE4EC] rounded-2xl p-5 border-2 border-[#E91E63] space-y-3">
-                <div className="font-bold text-[#E91E63]">✨ Upgrade — ₦2,000/month</div>
-                <ul className="text-sm text-gray-700 space-y-1">
-                  <li>• 5 months of memory</li>
-                  <li>• Morning digest at 8am</li>
-                  <li>• Monthly cycle PDF</li>
-                  <li>• Ovulation strip reading</li>
+              <section className={`${card} space-y-3 border-marigold`}>
+                <h2 className="font-display text-xl font-semibold">Upgrade to Premium: ₦2,000/month</h2>
+                <ul className="space-y-1 text-muted-ink">
+                  <li>5 months of memory</li>
+                  <li>Morning digest at 8am</li>
+                  <li>Monthly cycle PDF</li>
+                  <li>Ovulation strip reading</li>
                 </ul>
-                <a href={`https://t.me/Ava_care_bot`} target="_blank"
-                  className="inline-block bg-[#E91E63] text-white px-5 py-2 rounded-xl text-sm font-semibold">
-                  Upgrade via Telegram
+                <a href={BOT_URL} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex h-11 items-center gap-2 rounded-full bg-marigold px-6 font-semibold text-ink hover:bg-[hsl(39_92%_52%)]">
+                  <Send className="h-4 w-4" aria-hidden="true" />
+                  Upgrade on Telegram
                 </a>
-              </div>
+              </section>
             ) : (
-              <div className="bg-yellow-50 rounded-2xl p-4 border border-yellow-200 space-y-2">
-                <div className="text-sm font-semibold text-yellow-800">✨ Premium active{expiresAt ? ` until ${expiresAt}` : ''}</div>
-                <button onClick={() => setActiveTab('settings')}
-                  className="text-xs text-yellow-700 underline">Manage subscription</button>
-              </div>
+              <section className={`${card} bg-wash`}>
+                <h2 className="font-display text-lg font-semibold">Premium is active{expiresAt ? ` until ${expiresAt}` : ''}</h2>
+                <button onClick={() => setActiveTab('settings')} className="mt-1 font-medium text-primary underline underline-offset-4">Manage subscription</button>
+              </section>
             )}
 
             {/* Refer & Earn card */}
             {user.referral_code && (
-              <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-bold text-gray-800">💸 Refer & Earn</h2>
-                  <span className="text-xs text-gray-400">₦1,000 per friend</span>
+              <section className={`${card} space-y-3`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 className="font-display text-xl font-semibold">Refer and earn</h2>
+                  <span className="text-sm font-medium text-muted-ink">₦1,000 per friend</span>
                 </div>
-                <p className="text-sm text-gray-500">Share your link — you earn ₦1,000 for every friend who joins Premium.</p>
+                <p className="text-muted-ink">Share your link. You earn ₦1,000 for every friend who joins Premium.</p>
                 <div className="flex items-center gap-2">
-                  <input readOnly value={referralLink}
-                    className="flex-1 border border-pink-100 rounded-xl px-3 py-2 text-xs text-gray-600 bg-[#FFF5F7]" />
-                  <button
-                    onClick={() => navigator.clipboard.writeText(referralLink)}
-                    className="bg-[#E91E63] text-white px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap">
-                    Copy
+                  <input readOnly value={referralLink} aria-label="Your referral link"
+                    className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-wash px-3 text-sm text-ink" />
+                  <button onClick={copyReferral}
+                    className="h-11 shrink-0 rounded-full bg-primary px-5 font-semibold text-paper hover:bg-deep">
+                    {copied ? 'Copied' : 'Copy'}
                   </button>
                 </div>
-              </div>
+              </section>
             )}
           </>
         )}
 
         {/* ── Log Tab ── */}
         {activeTab === 'log' && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-gray-800">Health Log</h2>
-              <span className="text-xs text-gray-400">{isPremium ? 'Last 5 months' : 'Last 14 days'}</span>
+          <section className={`${card} space-y-3`}>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-display text-xl font-semibold">Health log</h2>
+              <span className="text-sm text-muted-ink">{isPremium ? 'Last 5 months' : 'Last 14 days'}</span>
             </div>
             {logs.length === 0 ? (
-              <p className="text-gray-400 text-sm">No entries yet — chat with Ava to build your log.</p>
+              <p className="text-muted-ink">No entries yet. Chat with Ava on Telegram and your symptoms, moods and notes will appear here.</p>
             ) : (
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              <ul className="max-h-[60vh] overflow-y-auto">
                 {logs.map((log: any) => (
-                  <div key={log.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium mt-0.5 whitespace-nowrap ${categoryColor[log.category] || 'bg-gray-50 text-gray-500'}`}>
+                  <li key={log.id} className="flex items-start gap-3 border-b border-line py-3 last:border-0">
+                    <span className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-wash px-2.5 py-0.5 text-sm font-medium text-primary">
+                      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${categoryDot[log.category] || 'bg-muted-ink'}`} />
                       {log.category}
                     </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-gray-700">{log.summary}</div>
-                      <div className="text-xs text-gray-400">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-ink">{log.summary}</p>
+                      <p className="text-sm text-muted-ink">
                         {new Date(log.logged_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </div>
+                      </p>
                     </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
-          </div>
+          </section>
         )}
 
         {/* ── Settings Tab ── */}
         {activeTab === 'settings' && (
           <div className="space-y-4">
             {isPremium && (
-              <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
-                <h2 className="font-bold text-gray-800">Subscription</h2>
-                <div className="text-sm text-gray-600">
-                  Status: <span className="text-yellow-600 font-semibold">✨ Premium</span>
-                  {expiresAt && <span className="text-gray-400"> · expires {expiresAt}</span>}
-                </div>
-                <p className="text-xs text-gray-400">To cancel, send <span className="font-mono bg-gray-100 px-1 rounded">CANCEL PREMIUM</span> to Ava on Telegram.</p>
-                <a href="https://t.me/Ava_care_bot" target="_blank"
-                  className="inline-block text-sm text-[#E91E63] font-medium">Open Telegram →</a>
-              </div>
+              <section className={`${card} space-y-3`}>
+                <h2 className="font-display text-xl font-semibold">Subscription</h2>
+                <p className="text-ink">
+                  Status: <span className="font-semibold">Premium</span>
+                  {expiresAt && <span className="text-muted-ink"> · expires {expiresAt}</span>}
+                </p>
+                <p className="text-sm text-muted-ink">To cancel, send <span className="rounded bg-wash px-1.5 py-0.5 font-mono text-ink">CANCEL PREMIUM</span> to Ava on Telegram.</p>
+                <a href={BOT_URL} target="_blank" rel="noopener noreferrer" className="inline-block font-medium text-primary underline underline-offset-4">Open Telegram</a>
+              </section>
             )}
 
-            <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
-              <h2 className="font-bold text-gray-800">Account</h2>
-              <div className="text-sm text-gray-500">Telegram ID: <span className="font-mono">{user.telegram_id}</span></div>
-              <div className="text-sm text-gray-500">Plan: <span className="font-semibold">{user.plan}</span></div>
-              <div className="pt-2 border-t border-gray-100">
+            <section className={`${card} space-y-3`}>
+              <h2 className="font-display text-xl font-semibold">Account</h2>
+              <p className="text-muted-ink">Telegram ID: <span className="font-mono text-ink">{user.telegram_id}</span></p>
+              <p className="text-muted-ink">Plan: <span className="font-semibold text-ink">{user.plan}</span></p>
+              <div className="border-t border-line pt-4">
                 {!deleteConfirm ? (
-                  <button onClick={() => setDeleteConfirm(true)}
-                    className="text-sm text-red-500 hover:text-red-700 font-medium">
-                    Delete my account & data
+                  <button onClick={() => setDeleteConfirm(true)} className="font-semibold text-destructive underline underline-offset-4 hover:no-underline">
+                    Delete my account and data
                   </button>
                 ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-red-600 font-medium">Are you sure? This cannot be undone.</p>
-                    <div className="flex gap-3">
-                      <button onClick={deleteAccount}
-                        className="bg-red-500 text-white px-4 py-2 rounded-xl text-sm font-semibold">
+                  <div className="space-y-3" role="alertdialog" aria-label="Confirm account deletion">
+                    <p className="font-semibold text-destructive">This permanently deletes your account and everything Ava remembers. It cannot be undone.</p>
+                    <div className="flex flex-wrap gap-3">
+                      <button onClick={deleteAccount} className="h-11 rounded-full bg-destructive px-5 font-semibold text-destructive-foreground hover:opacity-90">
                         Yes, delete everything
                       </button>
-                      <button onClick={() => setDeleteConfirm(false)}
-                        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-xl text-sm">
-                        Cancel
+                      <button onClick={() => setDeleteConfirm(false)} className="h-11 rounded-full border border-primary px-5 font-medium text-primary hover:bg-wash">
+                        Keep my account
                       </button>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            </section>
           </div>
         )}
 
-        <div className="flex justify-center gap-6 pb-8 pt-2">
-          <Link href="/privacy" className="text-xs text-gray-400 hover:text-gray-600">Privacy</Link>
-          <Link href="/terms" className="text-xs text-gray-400 hover:text-gray-600">Terms</Link>
+        <div className="flex justify-center gap-6 pb-4 pt-2">
+          <Link href="/privacy" className="py-2 text-sm text-muted-ink hover:text-primary hover:underline">Privacy</Link>
+          <Link href="/terms" className="py-2 text-sm text-muted-ink hover:text-primary hover:underline">Terms</Link>
         </div>
-      </div>
-    </main>
+      </main>
+      {nav}
+    </div>
   );
 }

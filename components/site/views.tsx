@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ChevronDown } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { HUB_MIN_PAGES, Lang, absolute, blogPath, homePath, hubPath, toolPath } from '@/lib/site';
@@ -45,18 +46,24 @@ export function ToolPage({ lang, slug }: { lang: Lang; slug: string }) {
     <PageShell lang={lang} alternates={toolAlternates(tool)}>
       <JsonLd data={ld} />
       <Breadcrumbs items={[{ name: t.home, href: homePath(lang) }, { name: t.tools, href: hubPath(lang, 'tools') }, { name: text.h1 }]} />
-      <h1 className="mb-3 text-3xl font-bold">{text.h1}</h1>
-      <p className="mb-6 text-gray-700">{text.intro}</p>
+      <h1 className="font-display text-4xl font-bold leading-tight tracking-tight sm:text-5xl">{text.h1}</h1>
+      <p className="mb-8 mt-4 max-w-2xl text-lg leading-relaxed text-muted-ink">{text.intro}</p>
       <ToolClient toolId={tool.id} lang={lang} />
       <TelegramCta line={text.cta} button={t.startOnTelegram} />
       <AdUnit slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_TOOL} className="my-6" />
-      <section className="my-10">
-        <h2 className="mb-4 text-xl font-semibold">{t.faq}</h2>
-        <dl className="space-y-4">
+      <section className="my-12">
+        <h2 className="mb-4 font-display text-2xl font-bold tracking-tight">{t.faq}</h2>
+        <div className="border-t border-line">
           {text.faqs.map(f => (
-            <div key={f.q}><dt className="font-medium">{f.q}</dt><dd className="mt-1 text-gray-700">{f.a}</dd></div>
+            <details key={f.q} className="group border-b border-line">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-display text-lg font-semibold [&::-webkit-details-marker]:hidden">
+                {f.q}
+                <ChevronDown className="h-5 w-5 shrink-0 text-primary transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <p className="max-w-2xl pb-5 leading-relaxed text-muted-ink">{f.a}</p>
+            </details>
           ))}
-        </dl>
+        </div>
       </section>
       <RelatedTools lang={lang} ids={tool.related} />
     </PageShell>
@@ -81,13 +88,13 @@ export function ToolsHub({ lang }: { lang: Lang }) {
   return (
     <PageShell lang={lang}>
       <Breadcrumbs items={[{ name: t.home, href: homePath(lang) }, { name: t.tools }]} />
-      <h1 className="mb-6 text-3xl font-bold">{t.tools}</h1>
+      <h1 className="mb-8 font-display text-4xl font-bold tracking-tight sm:text-5xl">{t.tools}</h1>
       <ul className="grid gap-4 sm:grid-cols-2">
         {items.map(({ text }) => (
           <li key={text.slug}>
-            <Link href={toolPath(lang, text.slug)} prefetch={false} className="block h-full rounded-2xl border border-pink-100 p-5 hover:border-[#E91E63]">
-              <h2 className="font-semibold">{text.h1}</h2>
-              <p className="mt-1 text-sm text-gray-600">{text.description}</p>
+            <Link href={toolPath(lang, text.slug)} prefetch={false} className="group block h-full rounded-2xl border border-line bg-white p-5 transition-colors hover:border-primary">
+              <h2 className="font-display text-lg font-semibold group-hover:text-primary">{text.h1}</h2>
+              <p className="mt-1 text-muted-ink">{text.description}</p>
             </Link>
           </li>
         ))}
@@ -112,15 +119,15 @@ export async function BlogHub({ lang }: { lang: Lang }) {
   return (
     <PageShell lang={lang}>
       <Breadcrumbs items={[{ name: t.home, href: homePath(lang) }, { name: t.blog }]} />
-      <h1 className="mb-6 text-3xl font-bold">{t.latestPosts}</h1>
-      {posts.length === 0 ? <p className="text-gray-600">{t.noPosts}</p> : (
+      <h1 className="mb-8 font-display text-4xl font-bold tracking-tight sm:text-5xl">{t.latestPosts}</h1>
+      {posts.length === 0 ? <p className="text-muted-ink">{t.noPosts}</p> : (
         <ul className="space-y-6">
           {posts.map(p => (
             <li key={p.slug}>
-              <Link href={blogPath(lang, p.slug)} prefetch={false} className="block rounded-2xl border border-pink-100 p-5 hover:border-[#E91E63]">
-                <h2 className="text-lg font-semibold">{p.title}</h2>
-                {p.excerpt && <p className="mt-1 text-gray-600">{p.excerpt}</p>}
-                {p.read_time && <p className="mt-2 text-xs text-gray-400">{p.read_time} {t.minRead}</p>}
+              <Link href={blogPath(lang, p.slug)} prefetch={false} className="group block rounded-2xl border border-line bg-white p-5 transition-colors hover:border-primary">
+                <h2 className="font-display text-xl font-semibold leading-snug group-hover:text-primary">{p.title}</h2>
+                {p.excerpt && <p className="mt-1 text-muted-ink">{p.excerpt}</p>}
+                {p.read_time && <p className="mt-3 text-sm text-muted-ink">{p.read_time} {t.minRead}</p>}
               </Link>
             </li>
           ))}
@@ -167,14 +174,14 @@ export async function BlogPostPage({ lang, slug }: { lang: Lang; slug: string })
       <JsonLd data={ld} />
       <Breadcrumbs items={[{ name: t.home, href: homePath(lang) }, { name: t.blog, href: hubPath(lang, 'blog') }, { name: post.title }]} />
       <article>
-        <h1 className="mb-2 text-3xl font-bold">{post.title}</h1>
-        {post.read_time && <p className="mb-6 text-sm text-gray-500">{post.read_time} {t.minRead}</p>}
-        <div className="blog-body space-y-4 leading-relaxed text-gray-800 [&_h2]:mt-8 [&_h2]:text-2xl [&_h2]:font-semibold [&_h3]:mt-6 [&_h3]:text-xl [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc [&_a]:text-[#E91E63] [&_a]:underline"
+        <h1 className="font-display text-4xl font-bold leading-tight tracking-tight sm:text-5xl">{post.title}</h1>
+        {post.read_time && <p className="mb-8 mt-3 text-sm text-muted-ink">{post.read_time} {t.minRead}</p>}
+        <div className="prose-ava"
           dangerouslySetInnerHTML={{ __html: html }} />
       </article>
       <AdUnit slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BLOG} className="my-8" />
       <TelegramCta line={lang === 'es' ? '¿Quieres respuestas sobre tu propio ciclo? Habla con Ava.' : 'Want answers about your own cycle? Talk to Ava.'} button={t.startOnTelegram} />
-      <p className="text-xs text-gray-500">{t.notMedical}</p>
+      <p className="text-sm text-muted-ink">{t.notMedical}</p>
     </PageShell>
   );
 }
@@ -187,9 +194,9 @@ export function LocalHome({ lang }: { lang: Lang }) {
   const es = lang === 'es';
   return (
     <PageShell lang={lang}>
-      <section className="py-6 text-center">
-        <h1 className="mb-3 text-4xl font-bold text-[#E91E63]">{es ? 'Ava: tu ciclo y tu cuerpo, explicados' : 'Ava'}</h1>
-        <p className="mx-auto mb-6 max-w-xl text-gray-700">{es ? 'Una compañera en Telegram que aprende tu ciclo, recuerda tus síntomas y responde tus dudas con claridad.' : ''}</p>
+      <section className="py-6">
+        <h1 className="mb-4 font-display text-4xl font-bold leading-tight tracking-tight text-primary sm:text-5xl">{es ? 'Ava: tu ciclo y tu cuerpo, explicados' : 'Ava'}</h1>
+        <p className="mb-8 max-w-xl text-lg leading-relaxed text-muted-ink">{es ? 'Una compañera en Telegram que aprende tu ciclo, recuerda tus síntomas y responde tus dudas con claridad.' : ''}</p>
       </section>
       <ToolsListInline lang={lang} />
       <TelegramCta line={es ? 'Gratis para empezar. Sin descargar nada.' : ''} button={t.startOnTelegram} />
@@ -203,9 +210,9 @@ function ToolsListInline({ lang }: { lang: Lang }) {
     <ul className="grid gap-4 sm:grid-cols-2">
       {items.map(({ text }) => (
         <li key={text.slug}>
-          <Link href={toolPath(lang, text.slug)} prefetch={false} className="block h-full rounded-2xl border border-pink-100 p-5 hover:border-[#E91E63]">
-            <h2 className="font-semibold">{text.h1}</h2>
-            <p className="mt-1 text-sm text-gray-600">{text.description}</p>
+          <Link href={toolPath(lang, text.slug)} prefetch={false} className="group block h-full rounded-2xl border border-line bg-white p-5 transition-colors hover:border-primary">
+            <h2 className="font-display text-lg font-semibold group-hover:text-primary">{text.h1}</h2>
+            <p className="mt-1 text-muted-ink">{text.description}</p>
           </Link>
         </li>
       ))}

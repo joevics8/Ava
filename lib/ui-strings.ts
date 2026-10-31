@@ -5,6 +5,7 @@ export interface UiStrings {
   home: string; allTools: string; relatedTools: string; faq: string; readMore: string; minRead: string;
   latestPosts: string; noPosts: string; notMedical: string; privacyNote: string; footerTag: string;
   privacy: string; terms: string; languages: string;
+  chatShort: string; explore: string; legal: string; skip: string; mainNav: string;
   lastPeriod: string; cycleLength: string; periodLength: string; days: string; calculate: string; invalidDate: string;
   invalidCycle: string; nextPeriods: string; likelyWindow: string; mostLikely: string; ovulationDay: string; fertileWindow: string;
   testFrom: string; dueDate: string; pregnantNow: string; weeks: string; trimesterStarts: string; secondTri: string; thirdTri: string; lmp: string;
@@ -17,6 +18,7 @@ export const UI: Partial<Record<Lang, UiStrings>> & { en: UiStrings } = {
     home: 'Home', allTools: 'All tools', relatedTools: 'More free tools', faq: 'Frequently asked questions', readMore: 'Read more', minRead: 'min read',
     latestPosts: 'Latest articles', noPosts: 'Articles are on the way.', notMedical: 'Ava shares general wellness information, not medical advice. See a clinician for medical concerns.',
     privacyNote: 'Private: calculated in your browser, nothing is saved.', footerTag: 'Your cycle and body, explained.', privacy: 'Privacy', terms: 'Terms', languages: 'Languages',
+    chatShort: 'Chat on Telegram', explore: 'Explore', legal: 'Legal', skip: 'Skip to content', mainNav: 'Main navigation',
     lastPeriod: 'First day of your last period', cycleLength: 'Average cycle length', periodLength: 'Period length', days: 'days', calculate: 'Calculate',
     invalidDate: 'Please enter a valid date.', invalidCycle: 'Cycle length should be between 21 and 45 days.', nextPeriods: 'Your next periods', likelyWindow: 'Likely window',
     mostLikely: 'Most likely', ovulationDay: 'Estimated ovulation day', fertileWindow: 'Fertile window', testFrom: 'Pregnancy test reliable from', dueDate: 'Estimated due date',
@@ -28,6 +30,7 @@ export const UI: Partial<Record<Lang, UiStrings>> & { en: UiStrings } = {
     home: 'Inicio', allTools: 'Todas las herramientas', relatedTools: 'Más herramientas gratis', faq: 'Preguntas frecuentes', readMore: 'Leer más', minRead: 'min de lectura',
     latestPosts: 'Últimos artículos', noPosts: 'Pronto habrá artículos.', notMedical: 'Ava ofrece información general de bienestar, no consejo médico. Consulta con un profesional ante cualquier duda médica.',
     privacyNote: 'Privado: se calcula en tu navegador, no se guarda nada.', footerTag: 'Tu ciclo y tu cuerpo, explicados.', privacy: 'Privacidad', terms: 'Términos', languages: 'Idiomas',
+    chatShort: 'Chatea en Telegram', explore: 'Explorar', legal: 'Legal', skip: 'Ir al contenido', mainNav: 'Navegación principal',
     lastPeriod: 'Primer día de tu última regla', cycleLength: 'Duración media del ciclo', periodLength: 'Duración de la regla', days: 'días', calculate: 'Calcular',
     invalidDate: 'Introduce una fecha válida.', invalidCycle: 'La duración del ciclo debe estar entre 21 y 45 días.', nextPeriods: 'Tus próximas reglas', likelyWindow: 'Ventana probable',
     mostLikely: 'Fecha más probable', ovulationDay: 'Día estimado de ovulación', fertileWindow: 'Ventana fértil', testFrom: 'Prueba de embarazo fiable desde', dueDate: 'Fecha probable de parto',

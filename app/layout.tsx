@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
+import { display, reading } from '@/lib/fonts';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://avacare-alpha.vercel.app'),
@@ -11,7 +9,7 @@ export const metadata: Metadata = {
     template: '%s | Ava',
   },
   description: 'Ava is an AI-powered period and fertility tracker that learns your unique cycle, remembers your patterns, and talks to you like a friend who gets it.',
-  themeColor: '#E91E63',
+  themeColor: '#151a42',
   openGraph: {
     type: 'website',
     siteName: 'Ava',
@@ -23,8 +21,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="en" className={`${display.variable} ${reading.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

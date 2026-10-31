@@ -50,12 +50,12 @@ export function ConsentAndAds({ lang }: { lang: Lang }) {
           src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}`} />
       )}
       {!asked && (
-        <div role="dialog" aria-label="Cookies" className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white p-4 shadow-lg">
-          <div className="mx-auto flex max-w-4xl flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-gray-700">{t.cookieText}</p>
+        <div role="dialog" aria-label="Cookies" className="fixed inset-x-0 bottom-[3.75rem] z-50 border-t border-line bg-paper p-4 shadow-[0_-8px_24px_-12px_hsl(var(--ink)/0.25)] md:bottom-0">
+          <div className="mx-auto flex max-w-5xl flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-ink">{t.cookieText}</p>
             <div className="flex shrink-0 gap-2">
-              <button onClick={() => choose('denied')} className="rounded-lg border border-gray-300 px-4 py-2">{t.decline}</button>
-              <button onClick={() => choose('granted')} className="rounded-lg bg-[#E91E63] px-4 py-2 text-white">{t.accept}</button>
+              <button onClick={() => choose('denied')} className="h-10 rounded-full border border-primary px-5 font-medium text-primary hover:bg-wash">{t.decline}</button>
+              <button onClick={() => choose('granted')} className="h-10 rounded-full bg-primary px-5 font-medium text-paper hover:bg-deep">{t.accept}</button>
             </div>
           </div>
         </div>

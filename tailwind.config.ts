@@ -1,4 +1,7 @@
 import type { Config } from 'tailwindcss';
+import defaultTheme from 'tailwindcss/defaultTheme';
+
+const hsl = (name: string) => `hsl(var(--${name}) / <alpha-value>)`;
 
 const config: Config = {
   darkMode: ['class'],
@@ -9,6 +12,11 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-display)', ...defaultTheme.fontFamily.sans],
+        display: ['var(--font-display)', ...defaultTheme.fontFamily.sans],
+        reading: ['var(--font-reading)', 'Georgia', 'Times New Roman', 'serif'],
+      },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic':
@@ -20,50 +28,67 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       colors: {
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
+        // Palette
+        ink: hsl('ink'),
+        paper: hsl('paper'),
+        deep: hsl('deep'),
+        wash: hsl('wash'),
+        line: hsl('line'),
+        'muted-ink': hsl('muted-ink'),
+        marigold: hsl('marigold'),
+        phase: {
+          period: hsl('phase-period'),
+          follicular: hsl('phase-follicular'),
+          ovulation: hsl('phase-ovulation'),
+          luteal: hsl('phase-luteal'),
+          'period-on-deep': hsl('phase-period-on-deep'),
+          'follicular-on-deep': hsl('phase-follicular-on-deep'),
+        },
+        // shadcn/ui semantic tokens
+        background: hsl('background'),
+        foreground: hsl('foreground'),
         card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+          DEFAULT: hsl('card'),
+          foreground: hsl('card-foreground'),
         },
         popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
+          DEFAULT: hsl('popover'),
+          foreground: hsl('popover-foreground'),
         },
         primary: {
-          DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
-          foreground: 'hsl(var(--primary-foreground))',
+          DEFAULT: hsl('primary'),
+          foreground: hsl('primary-foreground'),
         },
         secondary: {
-          DEFAULT: 'hsl(var(--secondary) / <alpha-value>)',
-          foreground: 'hsl(var(--secondary-foreground))',
+          DEFAULT: hsl('secondary'),
+          foreground: hsl('secondary-foreground'),
         },
         muted: {
-          DEFAULT: 'hsl(var(--muted) / <alpha-value>)',
-          foreground: 'hsl(var(--muted-foreground))',
+          DEFAULT: hsl('muted'),
+          foreground: hsl('muted-foreground'),
         },
         accent: {
-          DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
-          foreground: 'hsl(var(--accent-foreground))',
+          DEFAULT: hsl('accent'),
+          foreground: hsl('accent-foreground'),
         },
         destructive: {
-          DEFAULT: 'hsl(var(--destructive) / <alpha-value>)',
-          foreground: 'hsl(var(--destructive-foreground))',
+          DEFAULT: hsl('destructive'),
+          foreground: hsl('destructive-foreground'),
         },
-        border: 'hsl(var(--border) / <alpha-value>)',
-        input: 'hsl(var(--input) / <alpha-value>)',
-        ring: 'hsl(var(--ring) / <alpha-value>)',
+        border: hsl('border'),
+        input: hsl('input'),
+        ring: hsl('ring'),
         brand: {
-          DEFAULT: 'hsl(var(--brand))',
-          dark: 'hsl(var(--brand-dark))',
-          light: 'hsl(var(--brand-light))',
+          DEFAULT: hsl('brand'),
+          dark: hsl('brand-dark'),
+          light: hsl('brand-light'),
         },
         chart: {
-          '1': 'hsl(var(--chart-1))',
-          '2': 'hsl(var(--chart-2))',
-          '3': 'hsl(var(--chart-3))',
-          '4': 'hsl(var(--chart-4))',
-          '5': 'hsl(var(--chart-5))',
+          '1': hsl('phase-period'),
+          '2': hsl('phase-follicular'),
+          '3': hsl('phase-ovulation'),
+          '4': hsl('phase-luteal'),
+          '5': hsl('primary'),
         },
       },
       keyframes: {

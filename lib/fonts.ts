@@ -1,23 +1,21 @@
-import { Fraunces, Inter, IBM_Plex_Mono } from 'next/font/google';
+import { Bricolage_Grotesque, Literata } from 'next/font/google';
 
-export const fraunces = Fraunces({
+// Two families with distinct jobs:
+//  - Bricolage Grotesque: headlines and all interface text. It has an optical-size
+//    axis, so big headlines get tighter, more characterful shapes automatically.
+//  - Literata: long-form reading only (blog articles, legal pages). Designed for
+//    sustained reading on phone screens. Not preloaded, so pages that don't use
+//    it never pay for it.
+export const display = Bricolage_Grotesque({
   subsets: ['latin'],
-  variable: '--font-fraunces',
-  weight: ['500', '600', '700'],
-  style: ['normal', 'italic'],
+  variable: '--font-display',
+  axes: ['opsz'],
   display: 'swap',
 });
 
-export const inter = Inter({
+export const reading = Literata({
   subsets: ['latin'],
-  variable: '--font-inter',
-  weight: ['400', '500', '600', '700'],
+  variable: '--font-reading',
   display: 'swap',
-});
-
-export const plexMono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  variable: '--font-plex-mono',
-  weight: ['400', '500', '600'],
-  display: 'swap',
+  preload: false,
 });
