@@ -20,9 +20,19 @@ export default function LoginPage({
     <main className="min-h-screen bg-[#FFF5F7] flex flex-col items-center justify-center px-4 text-center space-y-8">
       <div className="text-5xl">🌸</div>
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-[#E91E63]">Welcome back</h1>
-        <p className="text-gray-500">Sign in with your Telegram account to access your dashboard.</p>
+        <h1 className="text-3xl font-bold text-[#E91E63]">Your Ava dashboard</h1>
+        <p className="text-gray-500">The dashboard shows what Ava knows about your cycle. It connects to your Telegram chat with her.</p>
       </div>
+
+      <ol className="text-left text-sm text-gray-700 space-y-4 max-w-xs">
+        <li>
+          <span className="font-semibold">1. Start Ava on Telegram</span>
+          <a href={`https://t.me/${BOT_NAME}`} rel="noopener" className="mt-2 block text-center bg-[#E91E63] text-white px-6 py-3 rounded-2xl font-semibold hover:bg-[#C2185B] transition-colors">
+            Open Ava on Telegram
+          </a>
+        </li>
+        <li><span className="font-semibold">2. Then sign in here</span> with the same Telegram account:</li>
+      </ol>
 
       {searchParams.error && (
         <div className="bg-red-50 border border-red-200 text-red-600 px-6 py-3 rounded-xl text-sm">

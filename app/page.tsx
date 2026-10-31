@@ -100,7 +100,10 @@ export default function HomePage({
       </div>
 
       {/* Footer */}
-      <footer className="mt-20 text-sm text-gray-400 flex gap-6">
+      <footer className="mt-20 text-sm text-gray-400 flex flex-wrap justify-center gap-6">
+        <Link href="/tools" className="hover:text-gray-600">Free tools</Link>
+        <Link href="/blog" className="hover:text-gray-600">Blog</Link>
+        <Link href="/dashboard" className="hover:text-gray-600">Dashboard</Link>
         <Link href="/privacy" className="hover:text-gray-600">Privacy</Link>
         <Link href="/terms" className="hover:text-gray-600">Terms</Link>
       </footer>
