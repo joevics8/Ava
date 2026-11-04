@@ -4,7 +4,7 @@ import { Logo } from '@/components/site/Logo';
 import { BottomNav } from '@/components/site/BottomNav';
 import { navItems } from '@/components/site/nav-items';
 
-export const metadata: Metadata = { title: 'Log in — Ava' };
+export const metadata: Metadata = { title: 'Log in', robots: { index: false, follow: false } };
 
 const BOT_NAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://avacare-alpha.vercel.app';

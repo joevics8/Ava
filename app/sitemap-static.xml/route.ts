@@ -1,29 +1,34 @@
 import { ENABLED_LANGS, HUB_MIN_PAGES, absolute, homePath, hubPath, toolPath } from '@/lib/site';
 import { TOOLS, toolAlternates, toolsFor } from '@/lib/tools/registry';
+import { homeGroup, isIndexableHome } from '@/lib/seo';
 export const revalidate = 86400;
 
-// Hub-withholding rule (from naira.autos): a non-English language's home and
-// tools hub only enter the sitemap once it has HUB_MIN_PAGES tools.
+type Entry = { loc: string; alt?: Record<string, string> };
+
+/** xhtml:link alternates for a hreflang group, plus x-default → English. Empty unless the group has 2+ members. */
+function alternates(group: Partial<Record<string, string>> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!group || Object.keys(group).length < 2) return out;
+  for (const l of ENABLED_LANGS) if (group[l]) out[l] = absolute(group[l]!);
+  if (group.en) out['x-default'] = absolute(group.en);
+  return out;
+}
+
+// Hub-withholding rule (CLAUDE.md): a non-English home or tools hub only enters
+// the sitemap once it has HUB_MIN_PAGES tools. This uses the same predicate that
+// sets noindex on those pages, so the sitemap and the robots meta never disagree.
 export function GET() {
-  const urls: { loc: string; alt?: Record<string, string> }[] = [{ loc: absolute('/') }, { loc: absolute('/privacy') }, { loc: absolute('/terms') }];
+  const urls: Entry[] = [{ loc: absolute('/'), alt: alternates(homeGroup()) }, { loc: absolute('/privacy') }, { loc: absolute('/terms') }];
 
   for (const lang of ENABLED_LANGS) {
-    if (lang !== 'en' && toolsFor(lang).length < HUB_MIN_PAGES) continue;
-    if (lang !== 'en') urls.push({ loc: absolute(homePath(lang)) });
-    urls.push({ loc: absolute(hubPath(lang, 'tools')) });
+    if (lang !== 'en' && isIndexableHome(lang)) urls.push({ loc: absolute(homePath(lang)), alt: alternates(homeGroup()) });
+    if (lang === 'en' || toolsFor(lang).length >= HUB_MIN_PAGES) urls.push({ loc: absolute(hubPath(lang, 'tools')), alt: alternatesForHub() });
   }
   for (const tool of TOOLS) {
-    const group = toolAlternates(tool);
-    const multi = Object.keys(group).length > 1;
+    const alt = alternates(toolAlternates(tool));
     for (const lang of ENABLED_LANGS) {
       const t = tool.text[lang];
-      if (!t) continue;
-      const alt: Record<string, string> = {};
-      if (multi) {
-        for (const l of ENABLED_LANGS) if (group[l]) alt[l] = absolute(group[l]!);
-        if (group.en) alt['x-default'] = absolute(group.en);
-      }
-      urls.push({ loc: absolute(toolPath(lang, t.slug)), alt });
+      if (t) urls.push({ loc: absolute(toolPath(lang, t.slug)), alt });
     }
   }
   const body = urls.map(u => `  <url><loc>${u.loc}</loc>${Object.entries(u.alt ?? {}).map(([l, h]) => `<xhtml:link rel="alternate" hreflang="${l}" href="${h}"/>`).join('')}</url>`).join('\n');
@@ -32,4 +37,9 @@ export function GET() {
 ${body}
 </urlset>`;
   return new Response(xml, { headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate' } });
+}
+
+function alternatesForHub() {
+  const live = ENABLED_LANGS.filter(l => (l === 'en' ? toolsFor(l).length > 0 : toolsFor(l).length >= HUB_MIN_PAGES));
+  return alternates(live.length > 1 ? Object.fromEntries(live.map(l => [l, hubPath(l, 'tools')])) : undefined);
 }

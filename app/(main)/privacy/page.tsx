@@ -1,11 +1,22 @@
 import { Metadata } from 'next';
-import { PageShell } from '@/components/site/PageShell';
+import { Breadcrumbs, JsonLd, PageShell } from '@/components/site/PageShell';
+import { breadcrumbLd, graphLd, pageMetadata, webPageLd } from '@/lib/seo';
 
-export const metadata: Metadata = { title: 'Privacy Policy — Ava' };
+const TITLE = 'Privacy Policy';
+const DESCRIPTION = 'What Ava collects, why, and what she never does: your health data is never sold or shared with advertisers. Delete everything any time.';
+
+export const revalidate = 86400;
+export const metadata: Metadata = pageMetadata({ lang: 'en', path: '/privacy', title: TITLE, description: DESCRIPTION });
 
 export default function PrivacyPage() {
+  const ld = graphLd([
+    webPageLd('/privacy', TITLE, DESCRIPTION, 'en'),
+    breadcrumbLd([{ name: 'Home', path: '/' }, { name: TITLE, path: '/privacy' }]),
+  ]);
   return (
     <PageShell lang="en">
+      <JsonLd data={ld} />
+      <Breadcrumbs items={[{ name: 'Home', href: '/' }, { name: TITLE }]} />
       <article className="prose-ava">
         <h1 className="font-display text-4xl font-bold tracking-tight">Privacy Policy</h1>
         <p>Last updated: August 2026</p>

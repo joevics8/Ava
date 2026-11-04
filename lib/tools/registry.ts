@@ -113,7 +113,7 @@ export const TOOLS: Tool[] = [
       },
       es: {
         slug: 'calculadora-fecha-de-parto',
-        title: 'Calculadora de Fecha de Parto: Estima tu Fecha Probable',
+        title: 'Calculadora de Fecha de Parto: Cuándo Nace tu Bebé',
         h1: 'Calculadora de Fecha de Parto',
         description: 'Introduce el primer día de tu última regla para estimar tu fecha probable de parto, tus semanas de embarazo y cuándo empieza cada trimestre.',
         intro: 'Usa el método estándar: tu fecha probable de parto es 280 días (40 semanas) después del primer día de tu última regla.',

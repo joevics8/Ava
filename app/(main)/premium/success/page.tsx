@@ -3,7 +3,7 @@ import { Metadata } from 'next';
 import { Send } from 'lucide-react';
 import { CycleRing } from '@/components/site/CycleRing';
 
-export const metadata: Metadata = { title: 'Payment successful — Ava' };
+export const metadata: Metadata = { title: 'Payment successful', robots: { index: false, follow: false } };
 
 const BOT_URL = `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot'}`;
 

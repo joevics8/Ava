@@ -1,11 +1,22 @@
 import { Metadata } from 'next';
-import { PageShell } from '@/components/site/PageShell';
+import { Breadcrumbs, JsonLd, PageShell } from '@/components/site/PageShell';
+import { breadcrumbLd, graphLd, pageMetadata, webPageLd } from '@/lib/seo';
 
-export const metadata: Metadata = { title: 'Terms of Service — Ava' };
+const TITLE = 'Terms of Service';
+const DESCRIPTION = 'The terms for using Ava: wellness information only (not medical advice), your Telegram account, Premium billing and acceptable use.';
+
+export const revalidate = 86400;
+export const metadata: Metadata = pageMetadata({ lang: 'en', path: '/terms', title: TITLE, description: DESCRIPTION });
 
 export default function TermsPage() {
+  const ld = graphLd([
+    webPageLd('/terms', TITLE, DESCRIPTION, 'en'),
+    breadcrumbLd([{ name: 'Home', path: '/' }, { name: TITLE, path: '/terms' }]),
+  ]);
   return (
     <PageShell lang="en">
+      <JsonLd data={ld} />
+      <Breadcrumbs items={[{ name: 'Home', href: '/' }, { name: TITLE }]} />
       <article className="prose-ava">
         <h1 className="font-display text-4xl font-bold tracking-tight">Terms of Service</h1>
         <p>Last updated: August 2026</p>

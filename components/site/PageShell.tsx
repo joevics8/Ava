@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Lang, RTL_LANGS } from '@/lib/site';
+import type { Lang } from '@/lib/site';
 import { ui } from '@/lib/ui-strings';
 import type { LangPaths } from '@/lib/seo';
 import { SiteHeader } from './SiteHeader';
@@ -17,7 +17,7 @@ export function PageShell({ lang, alternates, children, wide = false, flush = fa
 }) {
   const t = ui(lang);
   return (
-    <div lang={lang} dir={RTL_LANGS.includes(lang) ? 'rtl' : 'ltr'} className="min-h-screen bg-paper pb-[3.75rem] text-ink md:pb-0">
+    <div className="min-h-screen bg-paper pb-[3.75rem] text-ink md:pb-0">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-marigold focus:px-4 focus:py-2 focus:font-semibold focus:text-ink">
         {t.skip}
       </a>

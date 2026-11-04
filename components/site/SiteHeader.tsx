@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { BOT_URL, Lang, homePath } from '@/lib/site';
+import { Lang, homePath } from '@/lib/site';
 import { ui } from '@/lib/ui-strings';
 import { Logo } from './Logo';
+import { TelegramLink } from './TelegramLink';
 import { navItems } from './nav-items';
 
 export function SiteHeader({ lang }: { lang: Lang }) {
@@ -20,10 +21,9 @@ export function SiteHeader({ lang }: { lang: Lang }) {
               </Link>
             ))}
           </nav>
-          <a href={BOT_URL} rel="noopener"
-            className="ml-1 inline-flex h-10 items-center rounded-full bg-marigold px-4 text-sm font-semibold text-ink transition-colors hover:bg-[hsl(39_92%_52%)]">
+          <TelegramLink className="ml-1 inline-flex h-10 items-center rounded-full bg-marigold px-4 text-sm font-semibold text-ink transition-colors hover:bg-[hsl(39_92%_52%)]">
             {t.chatShort}
-          </a>
+          </TelegramLink>
         </div>
       </div>
     </header>

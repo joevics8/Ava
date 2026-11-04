@@ -36,3 +36,16 @@ export async function getTranslations(group: string | null): Promise<{ language:
     return (data ?? []) as { language: Lang; slug: string }[];
   } catch { return []; }
 }
+
+/** A few other published posts in the same language, same category first, newest first. Used for internal links. */
+export async function relatedPosts(lang: Lang, excludeSlug: string, category: string | null, limit = 3): Promise<BlogPost[]> {
+  try {
+    const { data, error } = await supabase.from('blog_posts').select(COLS).eq('published', true).eq('language', lang)
+      .neq('slug', excludeSlug).order('published_at', { ascending: false }).limit(24);
+    if (error) { console.error('relatedPosts', error.message); return []; }
+    const rows = (data ?? []) as BlogPost[];
+    const same = rows.filter(r => category && r.category === category);
+    const rest = rows.filter(r => !(category && r.category === category));
+    return [...same, ...rest].slice(0, limit);
+  } catch (e) { console.error('relatedPosts', e); return []; }
+}

@@ -5,21 +5,24 @@ import { blogPath, hubPath, toolPath, SITE } from '@/lib/site';
 import { listPosts } from '@/lib/blog';
 import { toolsFor } from '@/lib/tools/registry';
 import { cyclePhases } from '@/lib/cycle-ring';
-import { faqLd, graphLd, pageMetadata, webPageLd } from '@/lib/seo';
+import { faqLd, graphLd, homeGroup, pageMetadata, webPageLd } from '@/lib/seo';
 import { CycleRing } from '@/components/site/CycleRing';
 import { JsonLd, PageShell } from '@/components/site/PageShell';
 import { TelegramCta } from '@/components/site/TelegramCta';
+import { TelegramLink } from '@/components/site/TelegramLink';
 
 const TITLE = 'Ava: AI Period Tracker & Cycle Companion on Telegram';
 const DESCRIPTION = 'Track your period, ovulation and symptoms by chatting on Telegram. Ava learns your cycle, remembers your patterns and answers questions. Free to start.';
 
 export const metadata: Metadata = {
-  ...pageMetadata({ lang: 'en', path: '/', title: TITLE, description: DESCRIPTION }),
+  ...pageMetadata({ lang: 'en', path: '/', title: TITLE, description: DESCRIPTION, group: homeGroup() }),
   // The root layout adds " | Ava" to titles; this one already starts with the brand.
   title: { absolute: TITLE },
 };
 
-const BOT_NAME = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot';
+// Static page, regenerated hourly so the latest-articles row stays fresh. The referral
+// code (?ref=) is applied in the browser by <TelegramLink>, which is what lets this page be cached.
+export const revalidate = 3600;
 
 const FEATURES = [
   {
@@ -128,22 +131,13 @@ function SectionHead({ title, intro }: { title: string; intro?: string }) {
   );
 }
 
-export default async function HomePage({ searchParams }: { searchParams: { ref?: string } }) {
-  // A referral link (avacare.app?ref=CODE) needs to survive the click through
-  // to Telegram, since that's the only place an account actually gets
-  // created — Telegram's own deep-link payload (?start=CODE) is what
-  // carries it the rest of the way, so we just forward the code into it.
-  const ref = searchParams.ref?.trim();
-  const botUrl = ref
-    ? `https://t.me/${BOT_NAME}?start=${encodeURIComponent(ref)}`
-    : `https://t.me/${BOT_NAME}`;
-
+export default async function HomePage() {
   const tools = toolsFor('en');
   const posts = await listPosts('en', 3);
   const spans = cyclePhases(28, 5);
 
   const ld = graphLd([
-    webPageLd('/', TITLE, DESCRIPTION, 'en'),
+    webPageLd('/', TITLE, DESCRIPTION, 'en', { breadcrumb: false }),
     {
       '@type': 'SoftwareApplication', name: 'Ava', applicationCategory: 'HealthApplication', operatingSystem: 'Telegram',
       description: DESCRIPTION, url: SITE, inLanguage: 'en',
@@ -172,10 +166,10 @@ export default async function HomePage({ searchParams }: { searchParams: { ref?:
               Tell Ava how you feel. She tracks your cycle, remembers your symptoms and explains what is happening in your body in plain language.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <a href={botUrl} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
+              <TelegramLink target="_blank" className={primaryBtn}>
                 <Send className="h-5 w-5" aria-hidden="true" />
                 Start free on Telegram
-              </a>
+              </TelegramLink>
               <Link href={hubPath('en', 'tools')} prefetch={false}
                 className="inline-flex h-14 items-center justify-center whitespace-nowrap rounded-full border border-paper/40 px-7 text-lg font-medium text-paper hover:border-paper hover:bg-paper/10 lg:px-6 lg:text-base">
                 Try the free calculators
@@ -229,10 +223,10 @@ export default async function HomePage({ searchParams }: { searchParams: { ref?:
             </li>
           ))}
         </ol>
-        <a href={botUrl} target="_blank" rel="noopener noreferrer" className={`${primaryBtn} mt-12`}>
+        <TelegramLink target="_blank" className={`${primaryBtn} mt-12`}>
           <Send className="h-5 w-5" aria-hidden="true" />
           Open Ava on Telegram
-        </a>
+        </TelegramLink>
       </Section>
 
       {/* The four phases */}
@@ -305,10 +299,10 @@ export default async function HomePage({ searchParams }: { searchParams: { ref?:
                 </li>
               ))}
             </ul>
-            <a href={botUrl} target="_blank" rel="noopener noreferrer"
+            <TelegramLink target="_blank"
               className="mt-8 inline-flex h-12 items-center justify-center rounded-full border border-primary font-semibold text-primary hover:bg-wash">
               Start free
-            </a>
+            </TelegramLink>
           </div>
 
           <div className="on-deep flex flex-col rounded-2xl bg-deep p-7 text-paper sm:p-8">
@@ -324,10 +318,10 @@ export default async function HomePage({ searchParams }: { searchParams: { ref?:
                 </li>
               ))}
             </ul>
-            <a href={botUrl} target="_blank" rel="noopener noreferrer"
+            <TelegramLink target="_blank"
               className="mt-8 inline-flex h-12 items-center justify-center rounded-full bg-marigold font-semibold text-ink hover:bg-[hsl(39_92%_52%)]">
               Get Premium
-            </a>
+            </TelegramLink>
           </div>
         </div>
         <p className="mt-5 text-sm text-muted-ink">Cancel any time from Telegram.</p>
@@ -372,7 +366,7 @@ export default async function HomePage({ searchParams }: { searchParams: { ref?:
       </Section>
 
       <div className="mx-auto max-w-5xl px-4 pt-6">
-        <TelegramCta line="Ready to understand your cycle? Say hello to Ava." button="Start free on Telegram" href={botUrl} />
+        <TelegramCta line="Ready to understand your cycle? Say hello to Ava." button="Start free on Telegram" />
         <p className="pb-2 text-sm text-muted-ink">
           Ava shares general wellness information, not medical advice. See a clinician for medical concerns.
         </p>

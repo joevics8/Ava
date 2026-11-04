@@ -14,6 +14,8 @@ process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'test-anon-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'test-service-role-key';
 
 export default defineConfig({
+  // Next compiles JSX with the automatic runtime (no `import React`); tests that render components need the same.
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
