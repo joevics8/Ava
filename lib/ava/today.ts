@@ -1,4 +1,5 @@
 import { getCycleData, getMemoryContext } from './db';
+import { latestPeriodStart } from './period';
 import { getCycleStatus, phaseEmoji, predictNextPeriod, predictOvulationWindow } from './cycle';
 import { upsertCycleData } from './db';
 import { getDayData } from './cycle-lookup';
@@ -27,8 +28,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
 
   const avg = Number(cycleData.avg_cycle_length) || 28;
   const duration = cycleData.period_duration || 5;
-  const sortedDates = [...cycleData.period_start_dates].sort();
-  const lastStart = new Date(sortedDates[sortedDates.length - 1]);
+  const lastStart = latestPeriodStart(cycleData)!;
   const today = new Date();
 
   const status = getCycleStatus(lastStart, avg, duration, today);

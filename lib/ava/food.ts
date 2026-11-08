@@ -9,6 +9,7 @@
 //    handleConversation in ai.ts).
 
 import { updateUser, getCycleData, addMemoryLog, getMemoryContext } from './db';
+import { latestPeriodStart } from './period';
 import { getCurrentPhase } from './cycle';
 import { getDayData } from './cycle-lookup';
 import { getCountryFoods } from './food-data';
@@ -87,8 +88,7 @@ export async function generateFoodSuggestion(
       if (cycleData?.period_start_dates?.length) {
         const avg = Number(cycleData.avg_cycle_length) || 28;
         const duration = cycleData.period_duration || 5;
-        const sorted = [...cycleData.period_start_dates].sort();
-        const lastStart = new Date(sorted[sorted.length - 1]);
+        const lastStart = latestPeriodStart(cycleData)!;
         const { phase, day } = getCurrentPhase(lastStart, avg, duration);
         const dayData = getDayData(day, avg, duration);
         phaseContext = `She is currently in the ${dayData.phaseLabel} (day ${day} of ${avg}). Nutrient focus for this phase: ${dayData.nutrientTags.join(', ')}.`;

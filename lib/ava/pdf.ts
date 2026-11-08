@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { latestPeriodStartStr } from './period';
 import type { AvaUser } from '@/types';
 import type { MemoryLog } from '@/types';
 
@@ -38,9 +39,9 @@ export async function generateCycleReport(
 
     const avg = cycleData?.avg_cycle_length || 28;
     const duration = cycleData?.period_duration || 5;
-    const lastPeriodDates = cycleData?.period_start_dates || [];
-    const lastPeriod = lastPeriodDates.length
-      ? new Date(lastPeriodDates[lastPeriodDates.length - 1])
+    const latestStr = latestPeriodStartStr(cycleData);
+    const lastPeriod = latestStr
+      ? new Date(latestStr)
         .toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })
       : 'Not recorded';
 

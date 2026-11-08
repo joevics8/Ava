@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { latestPeriodStartStr } from '@/lib/ava/period';
 import { waitUntil } from '@vercel/functions';
 import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage, getCycleData } from '@/lib/ava/db';
 import { describeBodyContext, notYetReply, periodStartedReply } from '@/lib/ava/body-context';
@@ -209,6 +210,38 @@ async function processUpdate(update: any) {
 
       const cbUser = await getUser(cbTelegramId);
       if (!cbUser) return;
+
+      // ── "Is your period out?" Yes / No buttons (sent in place of the morning digest) ──
+      if (cbData.startsWith('pc_')) {
+        try {
+          const [kind, date = ''] = cbData.split(':');
+          const { localDateStr, daysBetweenStr, latestPeriodStartStr: latestStr, periodCheckFor, periodCheckNoReply, PERIOD_CHECK_DAYS } = await import('@/lib/ava/period');
+          const name = cbUser.name || 'there';
+          const cycle = await getCycleData(cbUser.id);
+          const daysAgo = /^\d{4}-\d{2}-\d{2}$/.test(date) ? daysBetweenStr(date, localDateStr()) : -1;
+          const latest = latestStr(cycle);
+          if (daysAgo < 0 || daysAgo >= PERIOD_CHECK_DAYS) {
+            await sendMessage(cbChatId, `That question has expired 🌸 Tell me the date your period started and I'll update your cycle.`);
+          } else if (latest && latest >= date) {
+            await updateUser(cbTelegramId, { onboarding_step: 0 } as any);
+            await sendMessage(cbChatId, `Already updated 🌸`);
+          } else if (kind === 'pc_yes') {
+            const { recordPeriodStart } = await import('@/lib/ava/db');
+            await recordPeriodStart(cbUser.id, daysAgo);
+            await updateUser(cbTelegramId, { onboarding_step: 0 } as any);
+            const updated = await getCycleData(cbUser.id);
+            await sendMessage(cbChatId, periodStartedReply(name, updated?.next_period_start ?? null, updated?.next_period_end ?? null));
+          } else {
+            await updateUser(cbTelegramId, { onboarding_step: 0 } as any);
+            const check = periodCheckFor(cycle) ?? { date, askNumber: daysAgo + 1, isLastAsk: daysAgo + 1 >= PERIOD_CHECK_DAYS };
+            await sendMessage(cbChatId, periodCheckNoReply(name, check));
+          }
+        } catch (err) {
+          console.error('Period check callback error:', err);
+          await sendMessage(cbChatId, 'Something went wrong. Please tell me the date your period started 🌸');
+        }
+        return;
+      }
 
       // ── Remedy button callbacks ──────────────────────────────────────────
       if (cbData.startsWith('rem_')) {
@@ -489,7 +522,7 @@ ${response}`);
     if (normalizedText === 'switch to pregnancy mode' || normalizedText === 'pregnancy mode') {
       if (!user) return NextResponse.json({ ok: true });
       const existing = await import('@/lib/ava/db').then(m => m.getCycleData(user!.id));
-      const lastPeriod = existing?.period_start_dates?.slice(-1)[0] || new Date().toISOString().split('T')[0];
+      const lastPeriod = latestPeriodStartStr(existing) || new Date().toISOString().split('T')[0];
       const { activatePregnancyMode } = await import('@/lib/ava/pregnancy');
       await activatePregnancyMode(telegramId, lastPeriod, sendMessage, chatId, user!.name || 'there');
       return NextResponse.json({ ok: true });
@@ -539,7 +572,11 @@ You're now on the free plan. If you change your mind, /premium is always there.`
 
     if (awaitingPeriodConfirmation && isYes(normalizedText)) {
       const { recordPeriodStart } = await import('@/lib/ava/db');
-      await recordPeriodStart(user.id, 0);
+      // If this "yes" answers the morning question, it is about the date Ava
+      // named (which may be 1-2 days ago), not necessarily today.
+      const { periodCheckFor, daysBetweenStr, localDateStr } = await import('@/lib/ava/period');
+      const pending = periodCheckFor(await getCycleData(user.id));
+      await recordPeriodStart(user.id, pending ? daysBetweenStr(pending.date, localDateStr()) : 0);
       await updateUser(telegramId, { onboarding_step: 0 } as any);
       const updated = await getCycleData(user.id);
       await sendMessage(chatId, periodStartedReply(user.name || 'there', updated?.next_period_start ?? null, updated?.next_period_end ?? null));
@@ -549,7 +586,9 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     if (awaitingPeriodConfirmation && isNo(normalizedText)) {
       await updateUser(telegramId, { onboarding_step: 0 } as any);
       const cd = await getCycleData(user.id);
-      await sendMessage(chatId, notYetReply(user.name || 'there', cd));
+      const { periodCheckFor, periodCheckNoReply } = await import('@/lib/ava/period');
+      const pending = periodCheckFor(cd);
+      await sendMessage(chatId, pending ? periodCheckNoReply(user.name || 'there', pending) : notYetReply(user.name || 'there', cd));
       return NextResponse.json({ ok: true });
     }
 

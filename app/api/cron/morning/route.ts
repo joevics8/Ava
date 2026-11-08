@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { buildMorningDigest, moodButtons } from '@/lib/ava/morning';
+import { periodCheckFor, periodCheckButtons, periodCheckMessage } from '@/lib/ava/period';
 import type { AvaUser } from '@/types';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
-async function sendMorning(chatId: number, text: string, showButtons: boolean) {
+async function sendMorning(chatId: number, text: string, showButtons: boolean, keyboard?: unknown) {
   const body: any = {
     chat_id: chatId,
     text,
     parse_mode: 'Markdown',
   };
 
-  if (showButtons) {
+  if (keyboard) {
+    body.reply_markup = { inline_keyboard: keyboard };
+  } else if (showButtons) {
     body.reply_markup = { inline_keyboard: moodButtons };
   }
 
@@ -59,6 +62,22 @@ export async function GET(req: NextRequest) {
     try {
       const { data: cycle } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
+
+      // On the expected day (and the next two mornings) ask "is your period
+      // out?" INSTEAD of the digest. The digest would otherwise start counting
+      // days past the expected date before she has had a chance to answer.
+      // Pregnant users never get this. After 3 unanswered mornings the check
+      // lapses, the digest resumes, and the old date stays in use.
+      const check = (user as any).mode === 'pregnant' ? null : periodCheckFor(cycle);
+      if (check) {
+        const hour = new Date().getUTCHours() + 1;
+        const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+        await sendMorning(user.telegram_id, periodCheckMessage(user.name || 'there', check, greeting), false, periodCheckButtons(check.date));
+        // Lets a typed "yes"/"no" answer the question too (webhook only honours those when this is set).
+        await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
+        sent++;
+        continue;
+      }
 
       // Free users get 14 days of logs, premium get 5 months
       const since = new Date();

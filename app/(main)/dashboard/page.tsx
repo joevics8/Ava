@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { latestPeriodStartStr } from '@/lib/ava/period';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Send } from 'lucide-react';
@@ -43,7 +44,7 @@ export default function DashboardPage() {
         if (d) {
           setData(d);
           setCycleForm({
-            last_period: d.cycle?.period_start_dates?.slice(-1)[0] || '',
+            last_period: latestPeriodStartStr(d.cycle) || '',
             cycle_length: String(d.cycle?.avg_cycle_length || 28),
             period_duration: String(d.cycle?.period_duration || 5),
           });
@@ -91,7 +92,7 @@ export default function DashboardPage() {
 
   const cycleLength = Number(cycle?.avg_cycle_length) || 28;
   const periodLength = Number(cycle?.period_duration) || 5;
-  const lastPeriod: string | undefined = cycle?.period_start_dates?.slice(-1)[0];
+  const lastPeriod: string | undefined = latestPeriodStartStr(cycle) ?? undefined;
   const rawDay = cycleDayFrom(lastPeriod);
   const spans = cyclePhases(cycleLength, periodLength);
   const day = rawDay != null && rawDay <= cycleLength ? rawDay : null;

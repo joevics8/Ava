@@ -1,4 +1,5 @@
 import { updateUser, upsertCycleData, getCycleData } from './db';
+import { latestPeriodStartStr } from './period';
 import { calcAverageCycleLength, predictNextPeriod, predictOvulationWindow } from './cycle';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { AvaUser } from '@/types';
@@ -180,7 +181,7 @@ export async function handleSettingsStep(
       } else {
         const { getCycleData } = await import('./db');
         const existing = await getCycleData(user.id);
-        const lastPeriod = existing?.period_start_dates?.slice(-1)[0] || new Date().toISOString().split('T')[0];
+        const lastPeriod = latestPeriodStartStr(existing) || new Date().toISOString().split('T')[0];
         const { activatePregnancyMode } = await import('./pregnancy');
         await updateUser(telegramId, { onboarding_step: 0 } as any);
         await activatePregnancyMode(telegramId, lastPeriod, send, chatId, user.name || 'there');

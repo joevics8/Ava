@@ -1,4 +1,5 @@
 import type { AvaUser } from '@/types';
+import { latestPeriodStartStr } from './period';
 import type { MemoryLog } from '@/types';
 
 // NOTE: this used to point at 'gemini-1.5-flash', a model that was shut down
@@ -207,7 +208,7 @@ User: ${user.name}, age ${user.age}
 Conditions: ${user.conditions?.join(', ') || 'none stated'}
 Birth control: ${user.birth_control || 'none'}
 Cycle: ${cycleData?.avg_cycle_length || 28} days average, ${cycleData?.period_duration || 5} days long
-Last period: ${cycleData?.period_start_dates?.slice(-1)[0] || 'unknown'}
+Last period: ${latestPeriodStartStr(cycleData) || 'unknown'}
 
 Recent health log:
 ${formatLogs(logs.slice(0, 40))}
@@ -251,7 +252,7 @@ This week's log:
 ${formatLogs(thisWeek)}
 
 Next period estimated: ${nextPeriod}
-Cycle day: roughly day ${Math.floor((Date.now() - new Date(cycleData?.period_start_dates?.slice(-1)[0] || Date.now()).getTime()) / (1000 * 60 * 60 * 24)) + 1}
+Cycle day: roughly day ${Math.floor((Date.now() - new Date(latestPeriodStartStr(cycleData) || Date.now()).getTime()) / (1000 * 60 * 60 * 24)) + 1}
 
 Write a 3-paragraph weekly briefing:
 1. What stood out this week (based on actual log entries)

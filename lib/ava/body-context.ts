@@ -1,4 +1,5 @@
 import type { CycleData, MemoryLog } from '@/types';
+import { latestPeriodStart } from './period';
 import { getCycleStatus, wholeDaysBetween } from './cycle';
 import { getDayData } from './cycle-lookup';
 
@@ -55,8 +56,7 @@ export function describeCycleContext(cycle: CycleData | null | undefined, now: D
 
   const avg = Number(cycle.avg_cycle_length) || 28;
   const duration = cycle.period_duration || 5;
-  const sorted = [...dates].sort();
-  const lastStart = new Date(sorted[sorted.length - 1]);
+  const lastStart = latestPeriodStart(cycle)!;
   const status = getCycleStatus(lastStart, avg, duration, now);
   const today = localNow(now);
 
@@ -188,8 +188,7 @@ export function notYetReply(name: string, cycle: CycleData | null | undefined, n
     return `No worries, ${name} 🌸 Cycles can vary by a few days. Tell me the moment it starts and I'll update your cycle.`;
   }
   const avg = Number(cycle.avg_cycle_length) || 28;
-  const sorted = [...dates].sort();
-  const lastStart = new Date(sorted[sorted.length - 1]);
+  const lastStart = latestPeriodStart(cycle)!;
   const status = getCycleStatus(lastStart, avg, cycle.period_duration || 5, now);
   const windowEnd = fmt(addDays(addDays(lastStart, avg), 2));
 

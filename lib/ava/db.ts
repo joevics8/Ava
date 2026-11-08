@@ -272,17 +272,24 @@ export async function recordPeriodStart(userId: string, daysAgo: number = 0): Pr
 
   // Local (UTC+1) calendar date, so a period logged at 00:30 Lagos time is
   // recorded on the right day instead of "yesterday" in UTC.
-  const startDate = new Date(Date.now() + 60 * 60 * 1000);
-  startDate.setUTCDate(startDate.getUTCDate() - daysAgo);
-  const startDateStr = startDate.toISOString().split('T')[0];
+  const { localDateStr, addDaysStr, mergePeriodStart, latestPeriodStartStr } = await import('./period');
+  const startDateStr = addDaysStr(localDateStr(), -daysAgo);
 
   const existing = await getCycleData(userId);
   const stated = Number(existing?.avg_cycle_length) || 28;
   const existingDates: string[] = existing?.period_start_dates || [];
 
-  if (existingDates.includes(startDateStr)) return; // already recorded
+  if (existingDates.map((d) => String(d).slice(0, 10)).includes(startDateStr)) return; // already recorded
 
-  const allDates = [...existingDates, startDateStr];
+  // A date within ~2 weeks of an existing one is a correction of that period
+  // ("it was actually the 2nd"), so it replaces it rather than becoming a second
+  // period. Without this the old date stayed on file beside the new one.
+  const allDates = mergePeriodStart(existingDates, startDateStr);
+
+  // Predictions always run from the NEWEST period on file, so a correction to an
+  // older date can never drag the prediction backwards.
+  const latestStr = latestPeriodStartStr({ period_start_dates: allDates })!;
+  const latest = new Date(latestStr);
 
   // The average used to be whatever she typed at onboarding, forever. Learn it
   // from the real gaps between her logged periods (ignoring gaps that look
@@ -290,7 +297,7 @@ export async function recordPeriodStart(userId: string, daysAgo: number = 0): Pr
   const { avg, samples, variability } = learnCycleLength(allDates, stated);
   const variation = Math.max(2, Math.min(5, Math.round(variability)));
 
-  const { start: ns, end: ne } = predictNextPeriod(startDate, avg, variation);
+  const { start: ns, end: ne } = predictNextPeriod(latest, avg, variation);
   const { start: os, end: oe } = predictOvulationWindow(ns, avg);
 
   await upsertCycleData(userId, {

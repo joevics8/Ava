@@ -1,4 +1,5 @@
 import type { AvaUser } from '@/types';
+import { latestPeriodStart } from './period';
 import type { MemoryLog } from '@/types';
 import { getCycleStatus, phaseEmoji } from './cycle';
 import { getDayData } from './cycle-lookup';
@@ -149,7 +150,7 @@ export async function buildMorningDigest(
 
   const avg = Number(cycleData.avg_cycle_length) || 28;
   const duration = cycleData.period_duration || 5;
-  const lastStart = new Date(cycleData.period_start_dates[cycleData.period_start_dates.length - 1]);
+  const lastStart = latestPeriodStart(cycleData)!;
   const cycleStatus = getCycleStatus(lastStart, avg, duration);
   const { phase, day } = cycleStatus;
 

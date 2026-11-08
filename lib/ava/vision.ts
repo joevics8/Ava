@@ -1,6 +1,7 @@
 const GEMINI_PRO_VISION = 'gemini-3-flash-preview';
 
 import { getCycleData } from './db';
+import { latestPeriodStart } from './period';
 import { getCurrentPhase } from './cycle';
 import { getDayData } from './cycle-lookup';
 import type { AvaUser } from '@/types';
@@ -212,8 +213,7 @@ export async function analyseGenericImage(
     if (cycleData?.period_start_dates?.length) {
       const avg = Number(cycleData.avg_cycle_length) || 28;
       const duration = cycleData.period_duration || 5;
-      const sorted = [...cycleData.period_start_dates].sort();
-      const lastStart = new Date(sorted[sorted.length - 1]);
+      const lastStart = latestPeriodStart(cycleData)!;
       const { day } = getCurrentPhase(lastStart, avg, duration);
       const dayData = getDayData(day, avg, duration);
       phaseNote = `she is currently in her ${dayData.phaseLabel}`;

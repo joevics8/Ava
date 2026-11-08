@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getCycleStatus } from '@/lib/ava/cycle';
+import { sortedPeriodDates } from '@/lib/ava/period';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
@@ -84,18 +85,8 @@ export async function GET(req: NextRequest) {
         results.period_soon++;
       }
 
-      // ── 2. Period confirmation (on predicted start date) ────────────────
-      if (daysUntil === 0) {
-        await sendMessage(chatId,
-          `Hey ${name} — today is around when your period was expected 🩸\n\nDid it start? Just reply *yes* or *not yet* and I'll update your cycle.`
-        );
-        // Flag that we're expecting a yes/no reply specifically about this —
-        // the webhook only treats "yes"/"no" as a period confirmation when
-        // this is set, so it doesn't hijack normal conversation elsewhere.
-        await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
-        results.confirm++;
-      }
-
+      // The on-the-day "is your period out?" question now goes out in place of
+      // the morning digest (see app/api/cron/morning), for up to 3 mornings.
     }
 
     // ── 3. Late-period check-ins ────────────────────────────────────────────
@@ -104,7 +95,7 @@ export async function GET(req: NextRequest) {
     // days after the window OPENED — i.e. only ~1 day past the most likely
     // date and still inside the normal window — telling people they were late
     // when they were not.
-    const startDates: string[] = [...(cycle.period_start_dates || [])].sort();
+    const startDates: string[] = sortedPeriodDates(cycle.period_start_dates);
     if (startDates.length > 0) {
       const st = getCycleStatus(
         new Date(startDates[startDates.length - 1]),

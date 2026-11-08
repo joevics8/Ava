@@ -1,4 +1,5 @@
 import type { Context } from 'grammy';
+import { latestPeriodStart } from './period';
 import { InlineKeyboard } from 'grammy';
 import { updateUser, upsertCycleData, addMemoryLog } from './db';
 import {
@@ -225,7 +226,7 @@ async function sendWelcomeInsight(ctx: Context, user: AvaUser): Promise<void> {
   let nextPeriodInfo = '';
 
   if (cycleData?.period_start_dates?.length) {
-    const lastStart = new Date(cycleData.period_start_dates[cycleData.period_start_dates.length - 1]);
+    const lastStart = latestPeriodStart(cycleData)!;
     const avg = cycleData.avg_cycle_length || 28;
     const { phase } = getCurrentPhase(lastStart, avg, cycleData.period_duration || 5);
     phaseInfo = `${phaseEmoji[phase]} You're currently in your *${phase} phase*.`;
