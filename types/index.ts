@@ -43,6 +43,11 @@ export interface CycleData {
   next_ovulation_start: string | null;
   next_ovulation_end: string | null;
   confidence_pct: number | null;
+  // Daily "is your period out?" check state (see lib/ava/period.ts)
+  period_check_for?: string | null;
+  period_check_last_asked?: string | null;
+  period_check_unanswered?: number | null;
+  period_check_answered_on?: string | null;
   updated_at: string;
 }
 

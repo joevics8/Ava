@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { buildMorningDigest, moodButtons } from '@/lib/ava/morning';
-import { periodCheckFor, periodCheckButtons, periodCheckMessage } from '@/lib/ava/period';
+import { getCycleStatus } from '@/lib/ava/cycle';
+import { latestPeriodStart, localDateStr, periodCheckButtons, periodCheckMessage, periodCheckNote, planPeriodCheck } from '@/lib/ava/period';
 import type { AvaUser } from '@/types';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
@@ -63,18 +64,37 @@ export async function GET(req: NextRequest) {
       const { data: cycle } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
 
-      // On the expected day (and the next two mornings) ask "is your period
-      // out?" INSTEAD of the digest. The digest would otherwise start counting
-      // days past the expected date before she has had a chance to answer.
-      // Pregnant users never get this. After 3 unanswered mornings the check
-      // lapses, the digest resumes, and the old date stays in use.
-      const check = (user as any).mode === 'pregnant' ? null : periodCheckFor(cycle);
-      if (check) {
+      // "Is your period out?" For the first 3 mornings it REPLACES the digest, which
+      // would otherwise start counting days past the expected date before she has
+      // answered. From morning 4 the digest comes back and the question follows it.
+      // Asking continues for as long as she keeps answering (Yes or No); it stops
+      // after 3 asked mornings in a row go unanswered. Pregnant users are skipped.
+      const plan = (user as any).mode === 'pregnant' ? null : planPeriodCheck(cycle);
+      const askPeriodCheck = async () => {
+        if (!plan) return;
+        const last = latestPeriodStart(cycle);
+        const status = last ? getCycleStatus(last, Number(cycle.avg_cycle_length) || 28, cycle.period_duration || 5) : null;
+        const note = status ? periodCheckNote(status.daysPastExpected) : '';
         const hour = new Date().getUTCHours() + 1;
         const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-        await sendMorning(user.telegram_id, periodCheckMessage(user.name || 'there', check, greeting), false, periodCheckButtons(check.date));
+        await sendMorning(
+          user.telegram_id,
+          periodCheckMessage(user.name || 'there', plan.check, greeting, note, plan.replaceDigest),
+          false,
+          periodCheckButtons(plan.check.date),
+        );
+        const { error: stateErr } = await supabaseAdmin.from('cycle_data').update({
+          period_check_for: plan.check.date,
+          period_check_last_asked: localDateStr(),
+          period_check_unanswered: plan.unansweredAfter,
+        }).eq('user_id', user.id);
+        // If this fails the migration 20261108100000_period_check_state.sql has not been run.
+        if (stateErr) console.error('Period check state not saved (run the migration):', stateErr.message);
         // Lets a typed "yes"/"no" answer the question too (webhook only honours those when this is set).
         await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
+      };
+      if (plan?.replaceDigest) {
+        await askPeriodCheck();
         sent++;
         continue;
       }
@@ -90,6 +110,7 @@ export async function GET(req: NextRequest) {
 
       const { text, showMoodButtons } = await buildMorningDigest(user, cycle, logs || []);
       await sendMorning(user.telegram_id, text, showMoodButtons);
+      await askPeriodCheck();
       sent++;
     } catch (err) {
       console.error(`Morning digest failed for ${user.telegram_id}:`, err);

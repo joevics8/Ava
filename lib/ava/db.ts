@@ -311,6 +311,15 @@ export async function recordPeriodStart(userId: string, daysAgo: number = 0): Pr
   } as any);
 }
 
+/** She answered the "is your period out?" question (Yes or No): restart the unresponsive count. */
+export async function markPeriodCheckAnswered(userId: string): Promise<void> {
+  const { localDateStr } = await import('./period');
+  await supabaseAdmin
+    .from('cycle_data')
+    .update({ period_check_answered_on: localDateStr(), period_check_unanswered: 0 })
+    .eq('user_id', userId);
+}
+
 // ─── Memory Log ───────────────────────────────────────────────────────────────
 
 export async function addMemoryLog(

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { getCycleStatus } from '@/lib/ava/cycle';
-import { sortedPeriodDates } from '@/lib/ava/period';
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
@@ -89,35 +87,8 @@ export async function GET(req: NextRequest) {
       // the morning digest (see app/api/cron/morning), for up to 3 mornings.
     }
 
-    // ── 3. Late-period check-ins ────────────────────────────────────────────
-    // Anchored to the most likely date (last period + cycle length), NOT the
-    // start of the prediction window. The old check fired "3 days late" three
-    // days after the window OPENED — i.e. only ~1 day past the most likely
-    // date and still inside the normal window — telling people they were late
-    // when they were not.
-    const startDates: string[] = sortedPeriodDates(cycle.period_start_dates);
-    if (startDates.length > 0) {
-      const st = getCycleStatus(
-        new Date(startDates[startDates.length - 1]),
-        Number(cycle.avg_cycle_length) || 28,
-        cycle.period_duration || 5
-      );
-
-      if (st.daysPastExpected === 3) {
-        await sendMessage(chatId,
-          `Hey ${name} 🌸 Your period is about 3 days past your expected date. That's common — illness, stress, travel and poor sleep can all shift it, so there's no need to worry yet.\n\nIf there's any chance you could be pregnant, a home test is reliable from the first day of a missed period (first-morning urine works best).\n\nHas it started? Reply *yes* or *not yet* and I'll update your cycle.`
-        );
-        // Same hook as the on-time prompt, so "yes" logs the period start.
-        await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
-      }
-
-      if (st.daysPastExpected === 7) {
-        await sendMessage(chatId,
-          `Hey ${name} 🌸 It's been about a week past your expected date. If you haven't tested yet and there's any chance of pregnancy, now is a good time. If a test is negative and nothing has come after another few days, or you have strong pain, dizziness or heavy bleeding, it's worth getting checked at a clinic.\n\nHas it started? Reply *yes* or *not yet*.`
-        );
-        await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
-      }
-    }
+    // Late-period nudges (home-test and clinic notes) now ride along with the
+    // daily "is your period out?" question in app/api/cron/morning.
 
     // ── 4. Fertile window alert ─────────────────────────────────────────────
     if (cycle.next_ovulation_start && cycle.next_ovulation_end) {
