@@ -265,8 +265,8 @@ export default async function HomePage() {
       {/* Free tools */}
       <Section id="tools" tone="wash">
         <SectionHead
-          title="Free cycle calculators"
-          intro="Work out your next period, your fertile window or your due date in seconds. They run in your browser, so nothing you enter is saved." />
+          title="Free health calculators and tools"
+          intro="Work out your next period, your fertile window or your due date in seconds, with more health tools on the way. They run in your browser, so nothing you enter is saved." />
         <ul className="grid gap-4 md:grid-cols-3">
           {tools.map(({ text }) => (
             <li key={text.slug}>
@@ -330,7 +330,7 @@ export default async function HomePage() {
       {/* Latest articles (only when there are published posts) */}
       {posts.length > 0 && (
         <Section id="blog" tone="wash">
-          <SectionHead title="Guides to your cycle and body" intro="Clear, practical reading on periods, ovulation, symptoms and wellbeing." />
+          <SectionHead title="Health guides in plain language" intro="Clear, practical reading on symptoms, checkups, women's health, nutrition and everyday wellbeing." />
           <ul className="grid gap-4 md:grid-cols-3">
             {posts.map(p => (
               <li key={p.slug}>

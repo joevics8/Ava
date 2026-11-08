@@ -84,7 +84,7 @@ export function organizationLd() {
     '@type': 'Organization', '@id': ORG_ID, name: BRAND, url: SITE,
     logo: { '@type': 'ImageObject', url: absolute(LOGO_PATH), width: 512, height: 512 },
     image: absolute(OG_IMAGE),
-    description: 'Ava is an AI period and cycle companion on Telegram, with free cycle calculators and plain-language guides.',
+    description: 'Ava is an AI health companion on Telegram that tracks your cycle and answers health questions, with free health tools and plain-language guides.',
     sameAs: [BOT_URL],
   };
 }
