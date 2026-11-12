@@ -5,25 +5,11 @@ import { ENABLED_LANGS, Lang, toolPath } from '@/lib/site';
 // be written natively per language (not machine-pasted) before the language is
 // added to ENABLED_LANGS.
 
-export type ToolId = 'period-calculator' | 'ovulation-calculator' | 'due-date-calculator';
+export type { ToolId, ToolText, Tool } from './types';
+import type { ToolId, ToolText, Tool } from './types';
+import { NEW_TOOLS } from './defs';
 
-export interface ToolText {
-  slug: string;          // ASCII, translated per language
-  title: string;         // <title>, ≤ 60 chars
-  h1: string;
-  description: string;   // meta description, ≤ 155 chars
-  intro: string;
-  faqs: { q: string; a: string }[];
-  /** Short line shown above the Telegram button after the result. */
-  cta: string;
-}
-
-export interface Tool {
-  id: ToolId;
-  related: ToolId[];
-  text: Partial<Record<Lang, ToolText>>;
-}
-
+/* (types live in ./types so tool definitions in ./defs can import them without a cycle) */
 export const TOOLS: Tool[] = [
   {
     id: 'period-calculator',
@@ -127,9 +113,10 @@ export const TOOLS: Tool[] = [
       },
     },
   },
+  ...NEW_TOOLS,
 ];
 
-export const toolById = (id: ToolId) => TOOLS.find(t => t.id === id)!;
+export const toolById = (id: ToolId) => TOOLS.find(t => t.id === id);
 
 export function findTool(lang: Lang, slug: string): { tool: Tool; text: ToolText } | null {
   for (const tool of TOOLS) {

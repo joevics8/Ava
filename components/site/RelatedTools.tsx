@@ -4,7 +4,7 @@ import { ToolId, toolById } from '@/lib/tools/registry';
 import { ui } from '@/lib/ui-strings';
 
 export function RelatedTools({ lang, ids }: { lang: Lang; ids: ToolId[] }) {
-  const items = ids.flatMap(id => { const x = toolById(id).text[lang]; return x ? [x] : []; });
+  const items = ids.flatMap(id => { const x = toolById(id)?.text[lang]; return x ? [x] : []; });
   if (!items.length) return null;
   return (
     <section className="my-12">

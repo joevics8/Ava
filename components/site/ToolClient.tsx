@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Lang } from '@/lib/site';
 import { ui } from '@/lib/ui-strings';
 import type { ToolId } from '@/lib/tools/registry';
+import { TOOL_UI } from '@/components/tools';
 import {
   addDays, forecastDueDate, forecastOvulation, forecastPeriods, parseDate, validCycleLength, validPeriodLength,
 } from '@/lib/tools/calculators';
@@ -18,6 +19,12 @@ function fmt(d: Date, lang: Lang) {
 const input = 'h-12 w-full rounded-xl border border-input bg-white px-3 text-base text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30';
 
 export function ToolClient({ toolId, lang }: { toolId: ToolId; lang: Lang }) {
+  const Custom = TOOL_UI[toolId];
+  if (Custom) return <Custom />;
+  return <CycleTool toolId={toolId} lang={lang} />;
+}
+
+function CycleTool({ toolId, lang }: { toolId: ToolId; lang: Lang }) {
   const t = ui(lang);
   const [date, setDate] = useState('');
   const [cycle, setCycle] = useState('28');

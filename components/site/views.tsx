@@ -75,6 +75,11 @@ export function ToolPage({ lang, slug }: { lang: Lang; slug: string }) {
       <p className="mb-8 mt-4 max-w-2xl text-lg leading-relaxed text-muted-ink">{text.intro}</p>
       <ToolClient toolId={tool.id} lang={lang} />
       <TelegramCta line={text.cta} button={t.startOnTelegram} />
+      {text.article && (
+        <section className="mt-12" aria-label={text.h1}>
+          <Markdown>{text.article}</Markdown>
+        </section>
+      )}
       <AdUnit slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_TOOL} className="my-6" />
       <Faq title={t.faq} items={text.faqs} />
       <RelatedTools lang={lang} ids={tool.related} />
