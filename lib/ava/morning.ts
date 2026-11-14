@@ -1,5 +1,5 @@
 import type { AvaUser } from '@/types';
-import { latestPeriodStart } from './period';
+import { latestPeriodStart, isLastPeriodConfirmed } from './period';
 import type { MemoryLog } from '@/types';
 import { getCycleStatus, phaseEmoji } from './cycle';
 import { getDayData } from './cycle-lookup';
@@ -201,7 +201,10 @@ export async function buildMorningDigest(
   // ── Next period line ──────────────────────────────────────────────────────
   let nextLine = '';
   if (cycleStatus.stale) {
-    nextLine = '📅 I may be out of date on your last period — when did it last start? Send me the date.';
+    // Once she has confirmed this date is still her latest, stop asking.
+    if (!isLastPeriodConfirmed(cycleData)) {
+      nextLine = '📅 I may be out of date on your last period — when did it last start? Send me the date.';
+    }
   } else if (cycleStatus.isLate) {
     nextLine = '⏳ Your period is ' + cycleStatus.daysPastExpected + ' day' + (cycleStatus.daysPastExpected === 1 ? '' : 's') + ' past your expected date. Tell me the moment it starts, and I will update your cycle.';
   } else if (cycleData.next_period_start) {

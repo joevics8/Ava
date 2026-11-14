@@ -1,5 +1,5 @@
 import { getCycleData, getMemoryContext } from './db';
-import { latestPeriodStart } from './period';
+import { latestPeriodStart, isLastPeriodConfirmed } from './period';
 import { getCycleStatus, phaseEmoji, predictNextPeriod, predictOvulationWindow } from './cycle';
 import { upsertCycleData } from './db';
 import { getDayData } from './cycle-lookup';
@@ -87,7 +87,9 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
   let periodLine = '';
   const expectedDate = new Date(lastStart.getTime() + avg * 24 * 60 * 60 * 1000);
   if (status.stale) {
-    periodLine = `📅 I may be out of date — the last period I have is ${formatDate(lastStart)}. When did your latest one start? Send me the date and I'll catch up.`;
+    if (!isLastPeriodConfirmed(cycleData)) {
+      periodLine = `📅 I may be out of date — the last period I have is ${formatDate(lastStart)}. When did your latest one start? Send me the date and I'll catch up.`;
+    }
   } else if (status.isLate) {
     periodLine =
       `⏳ Your period is ${status.daysPastExpected} day${status.daysPastExpected === 1 ? '' : 's'} past your expected date (${formatDate(expectedDate)}). ` +

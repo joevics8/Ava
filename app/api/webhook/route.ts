@@ -234,8 +234,10 @@ async function processUpdate(update: any) {
             const updated = await getCycleData(cbUser.id);
             await sendMessage(cbChatId, periodStartedReply(name, updated?.next_period_start ?? null, updated?.next_period_end ?? null));
           } else {
-            const { markPeriodCheckAnswered } = await import('@/lib/ava/db');
+            const { markPeriodCheckAnswered, confirmLastPeriodDate } = await import('@/lib/ava/db');
             await markPeriodCheckAnswered(cbUser.id);
+            // "No" = her last date is still the latest: stop the "may be out of date" line.
+            await confirmLastPeriodDate(cbUser.id);
             await updateUser(cbTelegramId, { onboarding_step: 0 } as any);
             const check = periodCheckFor(cycle) ?? { date, askNumber: daysAgo + 1, isLastAsk: daysAgo + 1 >= PERIOD_CHECK_MAX_DAYS };
             await sendMessage(cbChatId, periodCheckNoReply(name, check));
@@ -594,6 +596,9 @@ You're now on the free plan. If you change your mind, /premium is always there.`
       const { periodCheckFor, periodCheckNoReply } = await import('@/lib/ava/period');
       const pending = periodCheckFor(cd);
       if (pending) { const { markPeriodCheckAnswered } = await import('@/lib/ava/db'); await markPeriodCheckAnswered(user.id); }
+      // "No" = her last date is still the latest: stop the "may be out of date" line.
+      const { confirmLastPeriodDate } = await import('@/lib/ava/db');
+      await confirmLastPeriodDate(user.id);
       await sendMessage(chatId, pending ? periodCheckNoReply(user.name || 'there', pending) : notYetReply(user.name || 'there', cd));
       return NextResponse.json({ ok: true });
     }

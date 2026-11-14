@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  latestPeriodStartStr, mergePeriodStart, periodCheckFor, periodCheckMessage, periodCheckNoReply, periodCheckNote, planPeriodCheck, sortedPeriodDates,
+  isLastPeriodConfirmed, latestPeriodStartStr, mergePeriodStart, periodCheckFor, periodCheckMessage, periodCheckNoReply, periodCheckNote, planPeriodCheck, sortedPeriodDates,
 } from '../period';
 
 // 08:00 UTC = 09:00 in Lagos, so the local date equals the UTC date.
@@ -15,6 +15,19 @@ describe('latest period date (single source of truth)', () => {
     expect(latestPeriodStartStr(null)).toBeNull();
     expect(latestPeriodStartStr({ period_start_dates: [] })).toBeNull();
     expect(sortedPeriodDates(['garbage', '2026-10-02', '2026-10-02'])).toEqual(['2026-10-02']);
+  });
+});
+
+describe('isLastPeriodConfirmed', () => {
+  it('is true only when the confirmed date is the newest period on file', () => {
+    expect(isLastPeriodConfirmed({ period_start_dates: ['2026-09-04', '2026-10-02'], last_period_confirmed_for: '2026-10-02' })).toBe(true);
+    expect(isLastPeriodConfirmed({ period_start_dates: ['2026-10-02'], last_period_confirmed_for: '2026-10-02T00:00:00Z' })).toBe(true);
+  });
+  it('is false when never confirmed, or when a newer period was logged since', () => {
+    expect(isLastPeriodConfirmed({ period_start_dates: ['2026-10-02'] })).toBe(false);
+    expect(isLastPeriodConfirmed({ period_start_dates: ['2026-10-02', '2026-11-01'], last_period_confirmed_for: '2026-10-02' })).toBe(false);
+    expect(isLastPeriodConfirmed(null)).toBe(false);
+    expect(isLastPeriodConfirmed({ period_start_dates: [], last_period_confirmed_for: '2026-10-02' })).toBe(false);
   });
 });
 

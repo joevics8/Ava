@@ -48,6 +48,8 @@ export interface CycleData {
   period_check_last_asked?: string | null;
   period_check_unanswered?: number | null;
   period_check_answered_on?: string | null;
+  // The period start date she confirmed is still her latest (silences the "may be out of date" line)
+  last_period_confirmed_for?: string | null;
   updated_at: string;
 }
 

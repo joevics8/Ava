@@ -279,7 +279,12 @@ export async function recordPeriodStart(userId: string, daysAgo: number = 0): Pr
   const stated = Number(existing?.avg_cycle_length) || 28;
   const existingDates: string[] = existing?.period_start_dates || [];
 
-  if (existingDates.map((d) => String(d).slice(0, 10)).includes(startDateStr)) return; // already recorded
+  if (existingDates.map((d) => String(d).slice(0, 10)).includes(startDateStr)) {
+    // She re-sent a date we already have: that is her confirming it, so the
+    // "I may be out of date" line should stop if this is her latest period.
+    await confirmLastPeriodDate(userId);
+    return; // already recorded
+  }
 
   // A date within ~2 weeks of an existing one is a correction of that period
   // ("it was actually the 2nd"), so it replaces it rather than becoming a second
@@ -309,6 +314,20 @@ export async function recordPeriodStart(userId: string, daysAgo: number = 0): Pr
     next_ovulation_start: os.toISOString().split('T')[0],
     next_ovulation_end: oe.toISOString().split('T')[0],
   } as any);
+}
+
+/** She confirmed her newest period date on file is still current: stop the "may be out of date" line for it. */
+export async function confirmLastPeriodDate(userId: string): Promise<void> {
+  const { latestPeriodStartStr } = await import('./period');
+  const cycle = await getCycleData(userId);
+  const latest = latestPeriodStartStr(cycle);
+  if (!latest) return;
+  const { error } = await supabaseAdmin
+    .from('cycle_data')
+    .update({ last_period_confirmed_for: latest })
+    .eq('user_id', userId);
+  // If this fails the migration 20261114190000_last_period_confirmed.sql has not been run.
+  if (error) console.error('Period date confirmation not saved (run the migration):', error.message);
 }
 
 /** She answered the "is your period out?" question (Yes or No): restart the unresponsive count. */

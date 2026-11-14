@@ -5,6 +5,19 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * True once she has confirmed the newest period start on file as still current
+ * (answered "No, not yet" or re-sent the same date). Keyed to that exact date, so
+ * logging a newer period automatically makes the confirmation moot.
+ */
+export function isLastPeriodConfirmed(
+  cycle: { period_start_dates?: readonly string[] | null; last_period_confirmed_for?: string | null } | null | undefined,
+): boolean {
+  const latest = latestPeriodStartStr(cycle);
+  const confirmed = cycle?.last_period_confirmed_for ? String(cycle.last_period_confirmed_for).slice(0, 10) : null;
+  return !!latest && latest === confirmed;
+}
+
 /** Period starts closer together than this are one period, not two. */
 export const MIN_CYCLE_GAP_DAYS = 15;
 
