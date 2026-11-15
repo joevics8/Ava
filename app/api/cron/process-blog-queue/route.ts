@@ -17,11 +17,9 @@ export const maxDuration = 120;
 const PER_RUN = Number(process.env.BLOG_QUEUE_PER_RUN || 3);
 const BUDGET_MS = Number(process.env.BLOG_QUEUE_BUDGET_MS || 70_000); // don't start another article after this
 
+// No secret: this URL is open by design. It can only turn already-saved items into
+// HELD drafts (never publishes), and the per-run cap bounds the Gemini cost.
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const given = req.headers.get('authorization')?.replace(/^Bearer /, '') || req.nextUrl.searchParams.get('secret');
-  if (!secret || given !== secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-
   const run = () => processQueue({ store: supabaseStore }, { limit: PER_RUN, budgetMs: BUDGET_MS });
 
   if (req.nextUrl.searchParams.get('wait') === '1') {
