@@ -19,6 +19,7 @@ const lang = z.enum(ENABLED_LANGS as unknown as [string, ...string[]]);
  *  - published: live now.
  */
 const Upsert = z.object({
+  create: z.boolean().default(false), // new post: refuse to overwrite an existing slug
   slug: z.string().min(1).max(100),
   language: lang,
   title: z.string().min(1).max(200),
@@ -69,6 +70,8 @@ export async function POST(req: NextRequest) {
 
   const { data: existing, error: eErr } = await supabaseAdmin.from('blog_posts').select('id,published,published_at').eq('slug', slug).eq('language', d.language).maybeSingle();
   if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
+
+  if (d.create && existing) return NextResponse.json({ error: `A post with the slug “${slug}” already exists. Change the slug.` }, { status: 409 });
 
   const publishing = d.state === 'published';
   const row = {

@@ -4,6 +4,7 @@ import { Markdown } from '@/components/site/Markdown';
 import { TOOLS } from '@/lib/tools/registry';
 import { countWords, readTimeMinutes, slugify, type Faq } from '@/lib/admin/content-ai';
 import { AiPanel, type AiResponse } from './AiPanel';
+import { ContentQueue } from './ContentQueue';
 import { Btn, Counter, Field, FaqEditor, Notice, api, inputCls } from './ui';
 
 type State = 'hold' | 'queued' | 'published';
@@ -72,6 +73,18 @@ export function BlogAdmin() {
     });
   }
 
+  function pasteFromQueue(content: string, language: string) {
+    if (form) {
+      if (form.content.trim() && !confirm('Replace the text in the Content box with the saved content?')) return;
+      setUndo(form); setTab('edit');
+      setForm({ ...form, content, language: form.isNew ? language : form.language });
+    } else {
+      setUndo(null); setTab('edit');
+      setForm({ ...EMPTY, content, language });
+    }
+    setMsg({ tone: 'ok', text: 'Pasted into Content. Use “Parse & clean”, then save.' });
+  }
+
   async function save(state: State) {
     if (!form) return;
     if (state === 'published' && !confirm('Publish this post now? It goes live immediately.')) return;
@@ -81,6 +94,7 @@ export function BlogAdmin() {
       await api('/api/admin/blog', {
         method: 'POST',
         body: JSON.stringify({
+          create: form.isNew,
           slug, language: form.language, title: form.title, excerpt: form.excerpt || null, meta_description: form.meta_description || null,
           content: form.content, category: form.category || null, read_time: form.read_time ?? readTimeMinutes(words),
           faqs: form.faqs.filter(f => f.q.trim() && f.a.trim()), related_tool_ids: form.related_tool_ids, state,
@@ -127,6 +141,7 @@ export function BlogAdmin() {
       <div className="space-y-5">
         {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
         {!form && <Notice>Pick a post, or start a new one. To clean an existing draft: New post, paste it into Content, add a title if you have one, then “Parse &amp; clean”.</Notice>}
+        {!form && <ContentQueue onPaste={pasteFromQueue} onProcessed={load} />}
         {form && (
           <>
             <AiPanel
@@ -172,6 +187,8 @@ export function BlogAdmin() {
                 ? <textarea className={`${inputCls} min-h-[420px] font-mono`} value={form.content} onChange={e => set({ content: e.target.value })} spellCheck />
                 : <div className="min-h-[420px] rounded-xl border border-line bg-white p-5"><Markdown>{form.content || '*Nothing to preview yet.*'}</Markdown></div>}
             </div>
+
+            <ContentQueue defaultLanguage={form.language} onPaste={pasteFromQueue} onProcessed={load} />
 
             <div>
               <span className="mb-2 block text-sm font-semibold text-ink">FAQs <span className="font-normal text-muted-ink">(shown under the article and in structured data)</span></span>
