@@ -18,6 +18,12 @@ export interface ToolText {
    * of original, accurate, plain-language content that answers what people search.
    */
   article?: string;
+  /**
+   * Fill in ONLY when a real, named, licensed clinician has actually reviewed this
+   * page. Shows a visible byline and adds reviewedBy to the page's structured data.
+   * Never add a name that has not genuinely reviewed the content.
+   */
+  reviewedBy?: { name: string; credentials: string; url?: string; date: string };
 }
 
 export type ToolCategory = 'cycle' | 'pregnancy' | 'baby' | 'sexual-health' | 'contraception' | 'labs';

@@ -5,7 +5,8 @@ import { ChevronDown } from 'lucide-react';
 import { ENABLED_LANGS, HUB_MIN_PAGES, Lang, absolute, blogPath, homePath, hubPath, toolPath } from '@/lib/site';
 import { ui } from '@/lib/ui-strings';
 import { BlogPost, getPost, getTranslations, listPosts, relatedPosts } from '@/lib/blog';
-import { findTool, toolAlternates, toolsFor } from '@/lib/tools/registry';
+import { toolAlternates, toolsFor } from '@/lib/tools/registry';
+import { resolveTool } from '@/lib/tools/content';
 import {
   LangPaths, articleLd, breadcrumbLd, collectionLd, faqLd, graphLd, homeGroup, isIndexableHome, pageMetadata, softwareAppLd, webPageLd,
 } from '@/lib/seo';
@@ -44,14 +45,14 @@ function Faq({ title, items }: { title: string; items: { q: string; a: string }[
 }
 
 // ── Tool page ────────────────────────────────────────────────────────
-export function toolMetadata(lang: Lang, slug: string): Metadata {
-  const hit = findTool(lang, slug);
+export async function toolMetadata(lang: Lang, slug: string): Promise<Metadata> {
+  const hit = await resolveTool(lang, slug);
   if (!hit) return {};
   return pageMetadata({ lang, path: toolPath(lang, slug), title: hit.text.title, description: hit.text.description, group: toolAlternates(hit.tool) });
 }
 
-export function ToolPage({ lang, slug }: { lang: Lang; slug: string }) {
-  const hit = findTool(lang, slug);
+export async function ToolPage({ lang, slug }: { lang: Lang; slug: string }) {
+  const hit = await resolveTool(lang, slug);
   if (!hit) notFound();
   const { tool, text } = hit;
   const t = ui(lang);
@@ -62,7 +63,7 @@ export function ToolPage({ lang, slug }: { lang: Lang; slug: string }) {
     { name: text.h1, path },
   ];
   const ld = graphLd([
-    webPageLd(path, text.title, text.description, lang),
+    webPageLd(path, text.title, text.description, lang, { reviewedBy: text.reviewedBy }),
     breadcrumbLd(crumbs),
     faqLd(text.faqs),
     softwareAppLd({ lang, path, name: text.h1, description: text.description }),
@@ -80,6 +81,17 @@ export function ToolPage({ lang, slug }: { lang: Lang; slug: string }) {
           <Markdown>{text.article}</Markdown>
         </section>
       )}
+      <aside className="mt-8 rounded-2xl border border-line bg-white p-5 text-sm leading-relaxed text-muted-ink" aria-labelledby="tool-disclaimer">
+        <h2 id="tool-disclaimer" className="mb-2 font-display text-base font-bold text-ink">{t.disclaimerTitle}</h2>
+        <p>{t.toolDisclaimer}</p>
+        {text.reviewedBy && (
+          <p className="mt-3 text-ink">
+            {t.reviewedByLabel}{' '}
+            {text.reviewedBy.url ? <a className="underline" href={text.reviewedBy.url} rel="noopener">{text.reviewedBy.name}</a> : <strong>{text.reviewedBy.name}</strong>}
+            , {text.reviewedBy.credentials}. {t.reviewedOnLabel} {text.reviewedBy.date}.
+          </p>
+        )}
+      </aside>
       <AdUnit slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_TOOL} className="my-6" />
       <Faq title={t.faq} items={text.faqs} />
       <RelatedTools lang={lang} ids={tool.related} />

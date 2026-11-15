@@ -6,7 +6,7 @@ const SCRAPERS = ['AhrefsBot', 'SemrushBot', 'MJ12bot', 'DotBot', 'PetalBot', 'B
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: '*', allow: '/', disallow: ['/api/', '/dashboard', '/login', '/premium/'] },
+      { userAgent: '*', allow: '/', disallow: ['/api/', '/admin', '/dashboard', '/login', '/premium/'] },
       ...SCRAPERS.map(userAgent => ({ userAgent, disallow: '/' })),
     ],
     sitemap: `${SITE}/sitemap.xml`,

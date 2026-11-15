@@ -13,6 +13,7 @@ export interface UiStrings {
   invalidCycle: string; nextPeriods: string; likelyWindow: string; mostLikely: string; ovulationDay: string; fertileWindow: string;
   testFrom: string; dueDate: string; pregnantNow: string; weeks: string; trimesterStarts: string; secondTri: string; thirdTri: string; lmp: string;
   cookieText: string; accept: string; decline: string;
+  disclaimerTitle: string; toolDisclaimer: string; reviewedByLabel: string; reviewedOnLabel: string;
 }
 
 export const UI: Partial<Record<Lang, UiStrings>> & { en: UiStrings } = {
@@ -37,6 +38,7 @@ export const UI: Partial<Record<Lang, UiStrings>> & { en: UiStrings } = {
     mostLikely: 'Most likely', ovulationDay: 'Estimated ovulation day', fertileWindow: 'Fertile window', testFrom: 'Pregnancy test reliable from', dueDate: 'Estimated due date',
     pregnantNow: 'You are about', weeks: 'weeks', trimesterStarts: 'Trimesters', secondTri: 'Second trimester starts', thirdTri: 'Third trimester starts', lmp: 'First day of your last period',
     cookieText: 'We use cookies for ads and to measure traffic. You can accept or decline non-essential cookies.', accept: 'Accept', decline: 'Decline',
+    disclaimerTitle: 'Medical disclaimer', toolDisclaimer: 'This tool and article give general health information for education only. They are not medical advice, a diagnosis or a treatment plan, and they do not replace a consultation with a doctor, midwife, pharmacist or other qualified clinician. Results are estimates based on typical patterns, and your body may differ. If you have symptoms, are worried, or think you may need urgent care, contact a healthcare professional or your local emergency number straight away.', reviewedByLabel: 'Medically reviewed by', reviewedOnLabel: 'Reviewed',
   },
   es: {
     tools: 'Herramientas', blog: 'Blog', dashboard: 'Panel', openTelegram: 'Abrir Ava en Telegram', startOnTelegram: 'Habla con Ava en Telegram',
@@ -59,6 +61,7 @@ export const UI: Partial<Record<Lang, UiStrings>> & { en: UiStrings } = {
     mostLikely: 'Fecha más probable', ovulationDay: 'Día estimado de ovulación', fertileWindow: 'Ventana fértil', testFrom: 'Prueba de embarazo fiable desde', dueDate: 'Fecha probable de parto',
     pregnantNow: 'Estás de aproximadamente', weeks: 'semanas', trimesterStarts: 'Trimestres', secondTri: 'El segundo trimestre empieza', thirdTri: 'El tercer trimestre empieza', lmp: 'Primer día de tu última regla',
     cookieText: 'Usamos cookies para anuncios y para medir el tráfico. Puedes aceptar o rechazar las cookies no esenciales.', accept: 'Aceptar', decline: 'Rechazar',
+    disclaimerTitle: 'Aviso médico', toolDisclaimer: 'Esta herramienta y este artículo ofrecen información general de salud con fines educativos. No son consejo médico, un diagnóstico ni un plan de tratamiento, y no sustituyen la consulta con un médico, matrona, farmacéutico u otro profesional sanitario cualificado. Los resultados son estimaciones basadas en patrones habituales y tu cuerpo puede ser distinto. Si tienes síntomas, te preocupas o crees que necesitas atención urgente, contacta con un profesional sanitario o con el número de emergencias de tu zona de inmediato.', reviewedByLabel: 'Revisado médicamente por', reviewedOnLabel: 'Revisado',
   },
 };
 

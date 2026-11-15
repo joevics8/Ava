@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (room <= 0) return NextResponse.json({ published: 0, reason: 'daily cap reached' });
 
   const { data: drafts, error } = await supabaseAdmin.from('blog_posts').select('id,slug,language')
-    .eq('published', false).order('created_at', { ascending: true }).limit(room);
+    .eq('published', false).eq('review_hold', false).order('created_at', { ascending: true }).limit(room);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!drafts?.length) return NextResponse.json({ published: 0, reason: 'no drafts queued' });
 

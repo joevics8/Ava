@@ -122,8 +122,9 @@ export function graphLd(parts: object[]) {
 
 export function webPageLd(path: string, name: string, description: string, lang: Lang, opts: {
   type?: 'WebPage' | 'CollectionPage' | 'AboutPage'; breadcrumb?: boolean; image?: string; datePublished?: string | null; dateModified?: string | null;
+  reviewedBy?: { name: string; credentials: string; url?: string; date: string };
 } = {}) {
-  const { type = 'WebPage', breadcrumb = true, image = OG_IMAGE, datePublished, dateModified } = opts;
+  const { type = 'WebPage', breadcrumb = true, image = OG_IMAGE, datePublished, dateModified, reviewedBy } = opts;
   const url = absolute(path);
   return {
     '@type': type, '@id': `${url}#webpage`, url, name, description, inLanguage: lang,
@@ -132,6 +133,7 @@ export function webPageLd(path: string, name: string, description: string, lang:
     ...(breadcrumb ? { breadcrumb: { '@id': `${url}#breadcrumb` } } : {}),
     ...(datePublished ? { datePublished } : {}),
     ...(dateModified ? { dateModified } : {}),
+    ...(reviewedBy ? { reviewedBy: { '@type': 'Person', name: reviewedBy.name, jobTitle: reviewedBy.credentials, ...(reviewedBy.url ? { url: reviewedBy.url } : {}) }, lastReviewed: reviewedBy.date } : {}),
   };
 }
 
