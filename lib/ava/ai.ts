@@ -526,3 +526,25 @@ Reply in this exact JSON format (no markdown, no backticks):
     return null;
   }
 }
+
+
+// ─── Lasting facts she states about herself ───────────────────────────────────
+
+/** Durable facts in THIS message (allergy, medication, routine, preference, goal), or []. */
+export async function extractFacts(message: string): Promise<{ key: string; value: string }[]> {
+  const { cleanFacts } = await import('./memory');
+  const prompt = `From this message, pull out LASTING facts the user states about herself: an allergy or intolerance, a condition she says she has, medication or supplements she takes, diet, routine, preference, or goal.
+Do NOT include: today's symptoms or mood, questions, anything Ava suggested, guesses, or the date of her period.
+Give each fact a short snake_case key (e.g. "allergy", "medication", "diet", "sleep_routine", "goal") and a value of at most 8 words in her own terms. At most 3 facts. If there are none, return an empty list.
+
+Message: "${message}"
+
+Reply in this exact JSON format (no markdown, no backticks):
+{"facts":[{"key":"allergy","value":"peanuts"}]}`;
+  try {
+    const parsed = JSON.parse((await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 150, thinkingLevel: 'minimal' })).trim());
+    return cleanFacts(parsed.facts);
+  } catch {
+    return [];
+  }
+}

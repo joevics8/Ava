@@ -76,4 +76,8 @@ export interface MemoryLog {
   category: LogCategory;
   summary: string;
   logged_at: string;
+  event_date?: string | null; // when it happened (YYYY-MM-DD)
+  cycle_day?: number | null;  // cycle day on event_date, when known
+  detail?: string | null;     // her own words (user-sourced rows)
+  source?: 'user' | 'ava';    // 'ava' = Ava's own note, not something she said
 }

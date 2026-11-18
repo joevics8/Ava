@@ -309,6 +309,17 @@ async function processUpdate(update: any) {
         return;
       }
 
+      // ── /memory: forget one saved item ───────────────────────────────────
+      if (cbData.startsWith('mf:') || cbData.startsWith('ml:')) {
+        const id = cbData.slice(3);
+        if (/^[0-9a-f-]{36}$/i.test(id)) {
+          const { deleteMemoryFact, deleteMemoryEvent } = await import('@/lib/ava/db');
+          const ok = cbData.startsWith('mf:') ? await deleteMemoryFact(cbUser.id, id) : await deleteMemoryEvent(cbUser.id, id);
+          await sendMessage(cbChatId, ok ? 'Done, I\'ve forgotten that 🌸 Send /memory to see what\'s left.' : 'That one is already gone 🌸');
+        }
+        return;
+      }
+
       // ── Mood button callbacks ────────────────────────────────────────────
       if (cbData.startsWith('mood_')) {
         const moodMap: Record<string, string> = {
@@ -645,8 +656,20 @@ You're now on the free plan. If you change your mind, /premium is always there.`
       await recordPeriodDateFromChat(user.id, text, lastAva, { extract: extractPeriodStartDaysAgo, record: recordPeriodStart });
     } catch (e) { console.error('period date from chat failed', e); }
 
-    const cycleRow = await getCycleData(user.id);
-    const bodyContext = describeBodyContext(cycleRow, memoryLogs);
+    // Lasting facts she states about herself ("I'm allergic to peanuts", "I take iron")
+    // are saved once, here, for every kind of message.
+    try {
+      const { mightStateFact } = await import('@/lib/ava/memory');
+      if (mightStateFact(text)) {
+        const { extractFacts } = await import('@/lib/ava/ai');
+        const { upsertMemoryFact } = await import('@/lib/ava/db');
+        for (const f of await extractFacts(text)) await upsertMemoryFact(user.id, f.key, f.value, 'user');
+      }
+    } catch (e) { console.error('fact extraction failed', e); }
+
+    const [cycleRow, facts] = await Promise.all([getCycleData(user.id), (await import('@/lib/ava/db')).getMemoryFacts(user.id)]);
+    const { describeFacts } = await import('@/lib/ava/memory');
+    const bodyContext = `${describeBodyContext(cycleRow, memoryLogs)}\n\n${describeFacts(facts)}`;
 
     if (user.plan === 'free') {
       const [category, upgradeSuggested] = await Promise.all([
@@ -873,6 +896,7 @@ async function handleCommand(
         "/meditate — short guided meditations\n" +
         "/remedies — natural remedies\n" +
         "/insights — what Ava has learned about you\n" +
+        "/memory — what Ava remembers (and forget things)\n" +
         "/changes — what changed recently\n" +
         "/patterns — recurring patterns\n" +
         "/docprep — doctor visit summary\n" +
@@ -884,6 +908,38 @@ async function handleCommand(
         "/report — monthly PDF (Premium)\n\n" +
         "Or just talk to me naturally 🌸"
       );
+      return;
+    }
+
+    case '/memory': {
+      if (!user) { await send(chatId, "Send /start to begin 🌸"); return; }
+      const { getMemoryFacts, getRecentEvents } = await import('@/lib/ava/db');
+      const { shortDate } = await import('@/lib/ava/memory');
+      const [facts, events] = await Promise.all([getMemoryFacts(user.id), getRecentEvents(user.id, 8)]);
+      if (!facts.length && !events.length) {
+        await send(chatId, "I don't have anything saved about you yet 🌸 Tell me how you're feeling, or things like allergies, medication and routines, and I'll remember them.");
+        return;
+      }
+      const rows: any[][] = [];
+      const lines: string[] = ["Here's what I remember about you 🌸\n"];
+      if (facts.length) {
+        lines.push('About you:');
+        for (const f of facts.slice(0, 8)) {
+          lines.push(`• ${f.key.replace(/_/g, ' ')}: ${f.value}`);
+          rows.push([{ text: `🗑 ${f.key.replace(/_/g, ' ')}: ${f.value}`.slice(0, 40), callback_data: `mf:${f.id}` }]);
+        }
+        lines.push('');
+      }
+      if (events.length) {
+        lines.push('Recently you told me:');
+        for (const e of events) {
+          const when = shortDate(String(e.event_date ?? e.logged_at).slice(0, 10));
+          lines.push(`• ${when}: ${e.summary}${e.cycle_day ? ` (cycle day ${e.cycle_day})` : ''}`);
+          rows.push([{ text: `🗑 ${when}: ${e.summary}`.slice(0, 40), callback_data: `ml:${e.id}` }]);
+        }
+      }
+      lines.push('\nTap 🗑 to make me forget something. Period dates are managed in /settings.');
+      await sendKb(chatId, lines.join('\n'), rows);
       return;
     }
 
@@ -988,7 +1044,17 @@ async function routeMessage(
 
   if (category === 'LOG') {
     const { category: logCat, summary, periodStart, daysAgo } = await extractLogSummary(text);
-    await addMemoryLog(user.id, logCat as any, summary);
+    // One event, one row. A period start is saved by recordPeriodStart (with its real
+    // date); anything else is saved here with the day, her cycle day and her own words.
+    let eventLogged = periodStart;
+    if (!periodStart) {
+      const { cycleDayOn } = await import('@/lib/ava/memory');
+      const { localDateStr, latestPeriodStartStr: latestStart } = await import('@/lib/ava/period');
+      const day = localDateStr();
+      eventLogged = await addMemoryLog(user.id, logCat as any, summary, {
+        eventDate: day, cycleDay: cycleDayOn(latestStart(await getCycleData(user.id)), day), detail: text, source: 'user',
+      });
+    }
 
     // If this log is actually reporting a period start ("started today",
     // "came 2 days early") — not just a symptom mention — update cycle_data
@@ -1031,7 +1097,9 @@ async function routeMessage(
     await sendMessage(chatId, logReply, false);
     await addChatMessage(user.id, 'user', text);
     await addChatMessage(user.id, 'model', logReply);
-    if (response) {
+    // The event row above IS the memory of this message, so no second "chat" tag.
+    // (That tag was a summary that included Ava's own reply, and made one event into two rows.)
+    if (response && !eventLogged) {
       const insight = await summarizeChatInsight(text, response);
       if (insight) {
         const recentChat = memoryLogs.filter(l => l.category === 'chat').slice(0, 5).map(l => l.summary);

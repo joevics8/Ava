@@ -205,6 +205,8 @@ export async function handleSettingsStep(
   if (step === 99) {
     if (text.toUpperCase() === 'YES DELETE') {
       await supabaseAdmin.from('memory_log').delete().eq('user_id', user.id);
+      await supabaseAdmin.from('memory_facts').delete().eq('user_id', user.id);
+      await supabaseAdmin.from('chat_history').delete().eq('user_id', user.id);
       await supabaseAdmin.from('cycle_data').delete().eq('user_id', user.id);
       await supabaseAdmin.from('users').delete().eq('telegram_id', telegramId);
       await send(chatId, `All your data has been deleted. Take care 🌸\n\nIf you ever want to start again, just send /start.`);

@@ -120,7 +120,7 @@ export function describeRecentLogs(logs: MemoryLog[], now: Date = new Date(), ma
     const agoText = ago <= 0 ? 'today' : ago === 1 ? 'yesterday' : `${ago} days ago`;
     return `- ${fmt(localNow(when))} (${agoText}) [${label}] ${l.summary}`;
   });
-  return `RECENT LOGS (her own words, summarised; newest first):\n${lines.join('\n')}`;
+  return `RECENT LOGS (newest first). Rows tagged symptom, mood, flow, cycle etc. are things she reported. Rows tagged "topic noted" are Ava's own notes about a conversation: they are NOT things she said, so never quote them back as her words:\n${lines.join('\n')}`;
 }
 
 export function describeBodyContext(

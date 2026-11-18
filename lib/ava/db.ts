@@ -282,6 +282,11 @@ export async function recordPeriodStart(userId: string, daysAgo: number = 0): Pr
   const { localDateStr, addDaysStr, mergePeriodStart, latestPeriodStartStr } = await import('./period');
   const startDateStr = addDaysStr(localDateStr(), -daysAgo);
 
+  // The ONE memory row for a period start, with the real date in it (it used to be
+  // a generic "Period start date" that said nothing about when).
+  const { shortDate } = await import('./memory');
+  await addMemoryLog(userId, 'cycle', `Period started ${shortDate(startDateStr)}`, { eventDate: startDateStr, cycleDay: 1, source: 'user' });
+
   const existing = await getCycleData(userId);
   const stated = Number(existing?.avg_cycle_length) || 28;
   const existingDates: string[] = existing?.period_start_dates || [];
@@ -348,17 +353,88 @@ export async function markPeriodCheckAnswered(userId: string): Promise<void> {
 
 // ─── Memory Log ───────────────────────────────────────────────────────────────
 
+export interface MemoryLogOptions {
+  /** When it happened (YYYY-MM-DD). Defaults to today (West Africa). */
+  eventDate?: string;
+  cycleDay?: number | null;
+  /** Her own words, trimmed. Only for things she said. */
+  detail?: string;
+  /** 'ava' for Ava's own notes. Defaults: chat/insight rows are Ava's, everything else is hers. */
+  source?: 'user' | 'ava';
+}
+
+/**
+ * Saves one memory event. Returns false when the same event is already on file
+ * (so one thing she says is one row, not five) or the save failed. Memory is
+ * best-effort: a failure is logged, never thrown into the chat.
+ */
 export async function addMemoryLog(
   userId: string,
   category: LogCategory,
-  summary: string
-): Promise<void> {
-  await supabaseAdmin.from('memory_log').insert({
+  summary: string,
+  opts: MemoryLogOptions = {}
+): Promise<boolean> {
+  const { isDuplicateEvent } = await import('./memory');
+  const { localDateStr } = await import('./period');
+  const eventDate = opts.eventDate ?? localDateStr();
+
+  const since = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString();
+  const { data: recent } = await supabaseAdmin
+    .from('memory_log')
+    .select('summary,event_date,logged_at')
+    .eq('user_id', userId)
+    .eq('category', category)
+    .gte('logged_at', since)
+    .order('logged_at', { ascending: false })
+    .limit(15);
+  if (recent && isDuplicateEvent(summary, eventDate, recent, new Date(), category === 'mood')) return false;
+
+  const { error } = await supabaseAdmin.from('memory_log').insert({
     user_id: userId,
     category,
     summary,
     logged_at: new Date().toISOString(),
+    event_date: eventDate,
+    cycle_day: opts.cycleDay ?? null,
+    detail: opts.detail ? opts.detail.slice(0, 300) : null,
+    source: opts.source ?? (category === 'chat' || category === 'insight' ? 'ava' : 'user'),
   });
+  if (error) { console.error('memory_log save failed:', error.message); return false; }
+  return true;
+}
+
+// ─── Lasting facts (memory_facts) ─────────────────────────────────────────────
+
+export async function getMemoryFacts(userId: string): Promise<import('./memory').Fact[]> {
+  const { data } = await supabaseAdmin
+    .from('memory_facts').select('id,key,value,source,updated_at')
+    .eq('user_id', userId).order('updated_at', { ascending: false }).limit(40);
+  return (data ?? []) as import('./memory').Fact[];
+}
+
+/** One value per key: saying it again updates it ("I take iron" then "I stopped iron" replace each other). */
+export async function upsertMemoryFact(userId: string, key: string, value: string, source: 'user' | 'ava' = 'user'): Promise<void> {
+  const { error } = await supabaseAdmin.from('memory_facts')
+    .upsert({ user_id: userId, key, value, source, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' });
+  if (error) console.error('memory_facts save failed:', error.message);
+}
+
+export async function deleteMemoryFact(userId: string, id: string): Promise<boolean> {
+  const { data } = await supabaseAdmin.from('memory_facts').delete().eq('id', id).eq('user_id', userId).select('id');
+  return (data?.length ?? 0) > 0;
+}
+
+export async function deleteMemoryEvent(userId: string, id: string): Promise<boolean> {
+  const { data } = await supabaseAdmin.from('memory_log').delete().eq('id', id).eq('user_id', userId).select('id');
+  return (data?.length ?? 0) > 0;
+}
+
+/** What she told Ava, newest first, for /memory (her events only, not Ava's notes). */
+export async function getRecentEvents(userId: string, limit = 8): Promise<MemoryLog[]> {
+  const { data } = await supabaseAdmin
+    .from('memory_log').select('*').eq('user_id', userId).eq('source', 'user')
+    .order('logged_at', { ascending: false }).limit(limit);
+  return (data ?? []) as MemoryLog[];
 }
 
 export async function getMemoryContext(
