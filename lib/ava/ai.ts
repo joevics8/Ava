@@ -220,18 +220,21 @@ Warm, friendly tone. Not pushy. Max 3 sentences.`;
 // ─── Extract log summary for memory ──────────────────────────────────────────
 
 export async function extractLogSummary(message: string): Promise<{ category: string; summary: string; periodStart: boolean; daysAgo: number }> {
+  const { localDateStr, daysAgoFromDate, MAX_LOG_DAYS_AGO } = await import('./period');
+  const today = localDateStr();
   const prompt = `Extract a short memory tag from this message for a period tracking app.
 
+Today's date is ${today}.
 Message: "${message}"
 
-Also detect if this message reports that the user's period has just started (e.g. "my period started today", "it came early", "period showed up yesterday", "I'm on my period now") — as opposed to just mentioning a symptom, a past period, or asking a question. If so, figure out how many days ago it started (0 = today, 1 = yesterday, etc — default 0 if unclear).
+Also detect if this message states WHEN HER MOST RECENT PERIOD STARTED, whether that was today or earlier (e.g. "my period started today", "it came early", "period showed up yesterday", "I'm on my period now", "my last period was November 9", "it started on the 9th", "day one was Monday"). This is NOT a period start: a symptom, a question ("when is my next period?"), a future or expected date, or a period from before the most recent one. If it is, give the calendar date it started as periodStartDate (YYYY-MM-DD, never after today, within the last ${MAX_LOG_DAYS_AGO} days; if no year is given use the most recent matching date). If she gives no date use today. Also give daysAgo (0 = today, 1 = yesterday).
 
 The summary must be a short TAG, not a sentence — 2-4 words, noun-phrase style, no articles ("a"/"the"), no verbs like "reported" or "logged", no punctuation at the end. This gets stored and re-read on every future message, so it must be as short as possible without losing the specific thing that happened.
 Good: "Unprotected sex", "Malaria symptoms", "Heavy cramps", "Sugar craving", "Missed pill"
 Bad: "The user had unprotected sex today", "Reported symptoms of malaria", "User is craving sugar"
 
 Reply in this exact JSON format (no markdown, no backticks):
-{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"2-4 word tag","periodStart":true|false,"daysAgo":0}`;
+{"category":"symptom|mood|sexual|cycle|test|bbt|mucus|flow","summary":"2-4 word tag","periodStart":true|false,"periodStartDate":"YYYY-MM-DD or null","daysAgo":0}`;
 
   const result = await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 100, thinkingLevel: 'minimal' });
   try {
@@ -240,7 +243,10 @@ Reply in this exact JSON format (no markdown, no backticks):
       category: parsed.category || 'symptom',
       summary: (parsed.summary || message.slice(0, 40)).slice(0, 40),
       periodStart: Boolean(parsed.periodStart),
-      daysAgo: Number.isFinite(parsed.daysAgo) ? Math.max(0, Math.min(7, parsed.daysAgo)) : 0,
+      // The stated calendar date wins (it is checked: real, not future, not too old).
+      // Without one, fall back to "N days ago".
+      daysAgo: daysAgoFromDate(parsed.periodStartDate, today)
+        ?? (Number.isFinite(parsed.daysAgo) ? Math.max(0, Math.min(MAX_LOG_DAYS_AGO, Math.round(parsed.daysAgo))) : 0),
     };
   } catch {
     return { category: 'symptom', summary: message.slice(0, 40), periodStart: false, daysAgo: 0 };

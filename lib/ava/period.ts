@@ -18,6 +18,20 @@ export function isLastPeriodConfirmed(
   return !!latest && latest === confirmed;
 }
 
+/** How far back a period start may be logged from chat. */
+export const MAX_LOG_DAYS_AGO = 60;
+
+/**
+ * Whole days between a stated start date and today, or null when the date is
+ * not a real YYYY-MM-DD, is in the future, or is too old to be "her last period".
+ */
+export function daysAgoFromDate(date: unknown, today: string = localDateStr()): number | null {
+  if (typeof date !== 'string' || !ISO.test(date)) return null;
+  if (addDaysStr(date, 0) !== date) return null; // rejects 2026-02-31 style rollovers
+  const n = daysBetweenStr(date, today);
+  return n >= 0 && n <= MAX_LOG_DAYS_AGO ? n : null;
+}
+
 /** Period starts closer together than this are one period, not two. */
 export const MIN_CYCLE_GAP_DAYS = 15;
 
