@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const { start: ns, end: ne, confidence } = predictNextPeriod(lastDate, avg);
   const { start: os, end: oe } = predictOvulationWindow(ns, avg);
 
-  await supabaseAdmin.from('cycle_data').upsert({
+  const { error: saveErr } = await supabaseAdmin.from('cycle_data').upsert({
     user_id: user.id,
     period_start_dates: [lastDate.toISOString().split('T')[0]],
     avg_cycle_length: avg, period_duration: dur,
@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
     next_ovulation_end: oe.toISOString().split('T')[0],
     confidence_pct: confidence,
     updated_at: new Date().toISOString(),
-  });
+  }, { onConflict: 'user_id' });
+  if (saveErr) return NextResponse.json({ error: 'Could not save your cycle.' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

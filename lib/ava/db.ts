@@ -256,9 +256,14 @@ export async function upsertCycleData(
   userId: string,
   data: Partial<CycleData>
 ): Promise<void> {
-  await supabaseAdmin
+  // cycle_data's primary key is `id`; the row is identified by UNIQUE(user_id).
+  // Without onConflict this became an INSERT that violated that constraint, and
+  // because the error was never checked, every update to an existing row (a new
+  // period date, a corrected cycle length) silently did nothing.
+  const { error } = await supabaseAdmin
     .from('cycle_data')
-    .upsert({ user_id: userId, ...data, updated_at: new Date().toISOString() });
+    .upsert({ user_id: userId, ...data, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) throw new Error(`cycle_data save failed: ${error.message}`);
 }
 
 // Records an actual period start and recalculates predictions from it. This
