@@ -1,3 +1,4 @@
+import { withFreshForecast } from './cycle';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateWeeklyBriefing } from '@/lib/ava/insights';
 import type { AvaUser } from '@/types';
@@ -66,8 +67,9 @@ export async function runWeeklyBriefings(): Promise<{ sent: number; total: numbe
   let sent = 0;
   for (const user of users as AvaUser[]) {
     try {
-      const { data: cycle } = await supabaseAdmin
+      const { data: cycleRow } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
+      const cycle = withFreshForecast(cycleRow); // forecast always recalculated from the period dates
       const { data: logs } = await supabaseAdmin
         .from('memory_log').select('*').eq('user_id', user.id)
         .order('logged_at', { ascending: false }).limit(60);

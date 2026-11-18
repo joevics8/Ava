@@ -1,3 +1,4 @@
+import { withFreshForecast } from '@/lib/ava/cycle';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { verifySessionCookie } from '@/lib/session';
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     user,
-    cycle: cycleRes.data,
+    cycle: withFreshForecast(cycleRes.data),
     logs: logsRes.data,
   });
 }

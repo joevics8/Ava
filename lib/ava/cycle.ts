@@ -1,4 +1,5 @@
 import type { CyclePhase } from '@/types';
+import { sortedPeriodDates } from './period';
 
 // ─── Cycle Calculations ───────────────────────────────────────────────────────
 
@@ -223,4 +224,53 @@ export function buildProbabilityBar(
   }
 
   return rows.join('\n\n');
+}
+
+
+// ─── One source for the forecast ──────────────────────────────────────────────
+// next_period_* / next_ovulation_* are stored copies of a calculation. A copy goes
+// wrong the moment the real period date changes any other way (a new date typed
+// in chat, a correction, an old row that was never refreshed): Ava then quoted a
+// "next period" of Oct 8 right after being told her period started Nov 9.
+// So every reader gets the forecast recalculated from period_start_dates (the one
+// source of truth) and the stored copy is ignored.
+
+interface ForecastShape {
+  period_start_dates?: string[] | null;
+  avg_cycle_length?: number | string | null;
+  period_duration?: number | null;
+  next_period_start?: string | null;
+  next_period_end?: string | null;
+  next_ovulation_start?: string | null;
+  next_ovulation_end?: string | null;
+}
+
+const isoDay = (d: Date) => d.toISOString().split('T')[0];
+
+export function freshForecast(cycle: ForecastShape | null | undefined, now: Date = new Date()) {
+  const dates = sortedPeriodDates(cycle?.period_start_dates);
+  if (!cycle || dates.length === 0) return null;
+  const avg = Number(cycle.avg_cycle_length) || 28;
+  const latest = new Date(dates[dates.length - 1]);
+
+  // A merely late period keeps its (past) expected window so lateness stays visible.
+  // Only a long-abandoned log rolls forward to the next cycle that is still ahead.
+  let anchor = latest;
+  if (getCycleStatus(latest, avg, cycle.period_duration || 5, now).stale) {
+    while (anchor.getTime() + avg * 86400000 <= now.getTime()) anchor = new Date(anchor.getTime() + avg * 86400000);
+  }
+  const variation = Math.max(2, Math.min(5, Math.round(learnCycleLength(dates, avg).variability)));
+  const { start, end } = predictNextPeriod(anchor, avg, variation);
+  const ov = predictOvulationWindow(start, avg);
+  return {
+    next_period_start: isoDay(start), next_period_end: isoDay(end),
+    next_ovulation_start: isoDay(ov.start), next_ovulation_end: isoDay(ov.end),
+  };
+}
+
+/** The same row with its forecast fields recalculated from the period dates. */
+export function withFreshForecast<T extends ForecastShape>(cycle: T | null | undefined, now: Date = new Date()): T | null {
+  if (!cycle) return null;
+  const f = freshForecast(cycle, now);
+  return f ? { ...cycle, ...f } : cycle;
 }

@@ -1,3 +1,4 @@
+import { withFreshForecast } from '@/lib/ava/cycle';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { buildMorningDigest, moodButtons } from '@/lib/ava/morning';
@@ -61,8 +62,9 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   for (const user of users as AvaUser[]) {
     try {
-      const { data: cycle } = await supabaseAdmin
+      const { data: cycleRow } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
+      const cycle = withFreshForecast(cycleRow); // forecast always recalculated from the period dates
 
       // "Is your period out?" For the first 3 mornings it REPLACES the digest, which
       // would otherwise start counting days past the expected date before she has

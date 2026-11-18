@@ -247,7 +247,9 @@ export async function getCycleData(userId: string): Promise<CycleData | null> {
     .single();
 
   if (error || !data) return null;
-  return data as CycleData;
+  // Forecast fields are always recalculated from period_start_dates (see freshForecast).
+  const { withFreshForecast } = await import('./cycle');
+  return withFreshForecast(data as CycleData);
 }
 
 export async function upsertCycleData(
