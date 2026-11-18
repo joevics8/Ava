@@ -632,10 +632,20 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     // turns (so a short reply is understood and classified in context) and her
     // actual cycle position + dated recent logs (so Ava never has to guess
     // whether a period is late or how long ago something happened).
-    const [history, cycleRow] = await Promise.all([
-      getRecentChatMessages(user.id, 4),
-      getCycleData(user.id),
-    ]);
+    const history = await getRecentChatMessages(user.id, 4);
+
+    // A period date typed in chat is saved to cycle_data here, for EVERY kind of
+    // message, before anything reads it. (cycle_data is the single source the
+    // digest, /today, dashboard and this chat all use.)
+    try {
+      const { recordPeriodDateFromChat } = await import('@/lib/ava/period-chat');
+      const { extractPeriodStartDaysAgo } = await import('@/lib/ava/ai');
+      const { recordPeriodStart } = await import('@/lib/ava/db');
+      const lastAva = [...history].reverse().find(t => t.role === 'model')?.content ?? '';
+      await recordPeriodDateFromChat(user.id, text, lastAva, { extract: extractPeriodStartDaysAgo, record: recordPeriodStart });
+    } catch (e) { console.error('period date from chat failed', e); }
+
+    const cycleRow = await getCycleData(user.id);
     const bodyContext = describeBodyContext(cycleRow, memoryLogs);
 
     if (user.plan === 'free') {

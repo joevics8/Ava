@@ -499,3 +499,30 @@ export function isDuplicateInsight(newSummary: string, recentChatSummaries: stri
   }
   return false;
 }
+
+// ─── Period start stated in chat (any message, any category) ──────────────────
+
+/**
+ * Days ago that her most recent period started, if THIS message states it
+ * ("my last period was Nov 9", "it came today", or just "9 Nov" in answer to
+ * Ava asking for the date). null when it does not state one.
+ */
+export async function extractPeriodStartDaysAgo(message: string, lastAvaText = ''): Promise<number | null> {
+  const { localDateStr, daysAgoFromDate, MAX_LOG_DAYS_AGO } = await import('./period');
+  const today = localDateStr();
+  const prompt = `Today's date is ${today}.
+${lastAvaText ? `Ava's previous message to the user: "${lastAvaText.replace(/\s+/g, ' ').slice(-300)}"\n` : ''}User message: "${message}"
+
+Does the user state the date her MOST RECENT period started (today or earlier)? Examples that do: "my last period was November 9", "it started on the 9th", "period came today", "day one was Monday", or just "9 Nov" when Ava asked for the date.
+Examples that do NOT: a symptom, a question, an expected or future date, a period before the most recent one, "no period yet".
+If yes, give that start date as YYYY-MM-DD (never after today, within the last ${MAX_LOG_DAYS_AGO} days; with no year, use the most recent matching date; "today"/"just started" is ${today}).
+
+Reply in this exact JSON format (no markdown, no backticks):
+{"startsPeriod":true|false,"date":"YYYY-MM-DD or null"}`;
+  try {
+    const parsed = JSON.parse((await callGemini(FLASH, prompt, undefined, { maxOutputTokens: 60, thinkingLevel: 'minimal' })).trim());
+    return parsed.startsPeriod ? daysAgoFromDate(parsed.date, today) : null;
+  } catch {
+    return null;
+  }
+}
