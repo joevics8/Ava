@@ -101,8 +101,9 @@ export function shortDate(iso: string): string {
 //  - one line per day, one-letter category codes, no year (unless over a year old),
 //    no clock time, cycle day as dN;
 //  - filler words dropped and common words abbreviated (see shortenSummary).
-// Nothing is capped, merged or counted away, so repeats stay as separate entries and
-// "cramps 2 weeks ago, cramps today" remains visible as a pattern.
+// Nothing is limited when SAVING, and repeats on different days all show, so
+// "cramps 2 weeks ago, cramps today" stays visible as a pattern. Only a flood of the
+// same symptom within ONE day is shortened when shown (first 3, then "+N").
 
 const CODE: Record<string, string> = { symptom: 's', mood: 'm', flow: 'f', cycle: 'c', sexual: 'x', test: 't', bbt: 'b', mucus: 'u' };
 export const COMPACT_LEGEND = 's=symptom m=mood f=flow c=cycle x=sex t=test b=bbt u=mucus; dN=cycle day; abd=abdominal';
@@ -122,6 +123,33 @@ const ABBREV: Record<string, string> = {
   irritability: 'irritab', irritated: 'irritab', unprotected: 'unprot', intercourse: 'sex',
 };
 
+const HEAD_STOP = new Set(['that', 'this', 'with', 'from', 'time', 'daily', 'today']);
+
+/** The noun a tag is about: "Persistent abdominal cramps" -> "cramps". */
+export function topicOf(summary: string): string {
+  const words = summary.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !HEAD_STOP.has(w));
+  return words.length ? words[words.length - 1] : summary.toLowerCase().slice(0, 20);
+}
+
+/** Most times the same symptom is SHOWN for one day. Saving has no limit. */
+export const PER_DAY_TOPIC_LIMIT = 3;
+
+/** One day's rows with each topic shown at most `limit` times; the rest become "+N" on the last one shown. */
+export function limitPerTopic<T extends CompactLog>(rows: readonly T[], limit = PER_DAY_TOPIC_LIMIT): { row: T; extra: number }[] {
+  const shown = new Map<string, number>();
+  const kept: { row: T; extra: number; key: string }[] = [];
+  for (const row of rows) {
+    const key = `${row.category}:${topicOf(row.summary)}`;
+    const n = shown.get(key) ?? 0;
+    shown.set(key, n + 1);
+    if (n < limit) kept.push({ row, extra: 0, key });
+    else {
+      for (let i = kept.length - 1; i >= 0; i--) if (kept[i].key === key) { kept[i].extra++; break; }
+    }
+  }
+  return kept.map(({ row, extra }) => ({ row, extra }));
+}
+
 /** "Experiencing menstrual cramps and feeling irritable" -> "mens cramps & irritable". Keeps every fact, drops only filler. */
 export function shortenSummary(summary: string): string {
   const words = summary.replace(/^morning mood:\s*/i, '').split(/\s+/).filter(Boolean);
@@ -139,7 +167,7 @@ export function compactLogs(logs: readonly CompactLog[], opts: { now?: Date } = 
   const lines = Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([d, rows]) => {
     const cd = rows.find(r => r.cycle_day)?.cycle_day;
     const yr = now.getTime() - new Date(d).getTime() > 330 * 86400000 ? `/${d.slice(2, 4)}` : '';
-    const items = rows.map(r => `${CODE[r.category]}:${shortenSummary(r.summary)}`).join('; ');
+    const items = limitPerTopic(rows).map(({ row, extra }) => `${CODE[row.category]}:${shortenSummary(row.summary)}${extra ? ` +${extra}` : ''}`).join('; ');
     return `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${cd ? ` d${cd}` : ''} ${items}`;
   });
   return [`MEM (${COMPACT_LEGEND}; m/d = date, newest first)`, ...lines].join('\n');
@@ -159,7 +187,7 @@ const RECALL_STOP = new Set([
   'they', 'about', 'again', 'ever', 'often', 'other', 'before', 'after', 'since', 'still', 'tell', 'know', 'please', 'there', 'their',
   'these', 'those', 'would', 'could', 'should', 'really', 'just', 'like', 'also', 'into', 'your', 'mine', 'myself', 'feel', 'feeling',
   'period', 'periods', 'cycle', 'cycles', 'menstrual', 'health', 'today', 'yesterday', 'tomorrow', 'month', 'months', 'week', 'weeks',
-  'days', 'happen', 'happened', 'happening', 'normal', 'okay', 'bring', 'thing', 'things', 'something', 'anything', 'because', 'every',
+  'hello', 'thanks', 'thank', 'good', 'great', 'nice', 'sure', 'yeah', 'help', 'need', 'want', 'make', 'going', 'give', 'here', 'well', 'very', 'more', 'less', 'little', 'days', 'happen', 'happened', 'happening', 'normal', 'okay', 'bring', 'thing', 'things', 'something', 'anything', 'because', 'every',
 ]);
 
 /** Up to 4 stems from a message ("cramps" -> "cramp"), longest first. Letters only, so they are safe in a query. */
@@ -172,20 +200,70 @@ export function recallKeywords(text: string, max = 4): string[] {
   return Array.from(seen).sort((a, b) => b.length - a.length).slice(0, max);
 }
 
+// Words that mean the same thing in a cycle log. A search for "cramps" must also find
+// "spasms" or "abdominal ache"; stems are matched with a substring search, so one
+// stem covers its plurals and endings ("cramp" finds cramps, cramping).
+const SYNONYMS: string[][] = [
+  ['cramp', 'spasm', 'abdominal', 'pelvic', 'dysmenorrh'],
+  ['headache', 'migraine'],
+  ['nausea', 'nauseous', 'vomit', 'queasy'],
+  ['bloat', 'swollen', 'swelling'],
+  ['acne', 'pimple', 'breakout'],
+  ['fatigue', 'tired', 'exhaust', 'drained', 'energy'],
+  ['spotting', 'brown', 'light bleeding'],
+  ['discharge', 'mucus'],
+  ['mood', 'irritab', 'anxi', 'anxious', 'moody', 'sad', 'depress', 'tearful'],
+  ['sleep', 'insomnia', 'restless'],
+  ['backache', 'back', 'lumbar'],
+  ['breast', 'tender', 'sore'],
+  ['dizz', 'lightheaded', 'faint'],
+  ['clot', 'heavy', 'flow'],
+  ['urin', 'bladder', 'pee'],
+  ['sex', 'intercourse', 'unprotected', 'coital'],
+  ['craving', 'appetite', 'hunger'],
+  ['temperature', 'fever', 'warmth', 'hot'],
+];
+
+/** The stems to search for: what she said plus its synonyms (letters only, at most 12). */
+export function recallTerms(text: string, max = 12): string[] {
+  const base = recallKeywords(text);
+  const out = new Set<string>(base);
+  for (const stem of base) {
+    for (const group of SYNONYMS) {
+      if (group.some(t => !t.includes(' ') && (t.startsWith(stem) || stem.startsWith(t)))) {
+        for (const t of group) if (!t.includes(' ')) out.add(t);
+      }
+    }
+  }
+  return Array.from(out).slice(0, max);
+}
+
 /** PostgREST `or` filter matching any keyword in the summary or her own words. Letters only: nothing to escape. */
 export function recallOrFilter(keywords: readonly string[]): string {
   return keywords.filter(k => /^[a-z]{3,}$/.test(k)).flatMap(k => [`summary.ilike.%${k}%`, `detail.ilike.%${k}%`]).join(',');
 }
 
-export function formatRecall(rows: readonly CompactLog[], opts: { now?: Date } = {}): string {
+/** Most recall entries listed. */
+export const RECALL_MAX_ROWS = 15;
+
+export function formatRecall(rows: readonly CompactLog[], opts: { now?: Date; maxRows?: number } = {}): string {
   const now = opts.now ?? new Date();
   const hers = rows.filter(isHers);
   if (!hers.length) return '';
-  const lines = ['PAST ENTRIES MATCHING WHAT SHE JUST SAID (every older one, only things she reported; they show how often and when it happens; mention only what genuinely fits, and quote real dates):'];
-  for (const l of hers) {
-    const d = dayOf(l);
+  const byDay = new Map<string, CompactLog[]>();
+  for (const l of hers) byDay.set(dayOf(l), [...(byDay.get(dayOf(l)) ?? []), l]);
+  const lines: string[] = [];
+  for (const [d, dayRows] of Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1))) {
     const yr = now.getTime() - new Date(d).getTime() > 330 * 86400000 ? `/${d.slice(2, 4)}` : '';
-    lines.push(`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${l.cycle_day ? ` d${l.cycle_day}` : ''} ${CODE[l.category]}:${shortenSummary(l.summary)}`);
+    for (const { row, extra } of limitPerTopic(dayRows)) {
+      lines.push(`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${row.cycle_day ? ` d${row.cycle_day}` : ''} ${CODE[row.category]}:${shortenSummary(row.summary)}${extra ? ` +${extra}` : ''}`);
+    }
   }
-  return lines.join('\n');
+  const shown = lines.slice(0, opts.maxRows ?? RECALL_MAX_ROWS);
+  const more = lines.length - shown.length;
+  return [
+    'PAST ENTRIES MATCHING WHAT SHE JUST SAID (newest first, only things she reported; they show how often and when it happens; mention only what genuinely fits, and quote real dates):',
+    ...shown,
+    ...(more > 0 ? [`(+${more} older matching entries not shown)`] : []),
+  ].join('\n');
 }

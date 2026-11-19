@@ -434,12 +434,12 @@ export async function deleteMemoryEvent(userId: string, id: string): Promise<boo
 /**
  * Older entries (past the 14-day window of normal chat) that match what she is
  * talking about. Premium only: free keeps 14 days of memory, which the normal
- * context already covers. Returns every matching entry she reported.
+ * context already covers. Returns the newest matches she reported (the caller shows 15).
  */
 export async function searchMemoryHistory(userId: string, text: string, plan: 'free' | 'premium'): Promise<MemoryLog[]> {
   if (plan !== 'premium') return [];
-  const { recallKeywords, recallOrFilter } = await import('./memory');
-  const filter = recallOrFilter(recallKeywords(text));
+  const { recallTerms, recallOrFilter } = await import('./memory');
+  const filter = recallOrFilter(recallTerms(text));
   if (!filter) return [];
   const newest = new Date(Date.now() - 14 * 86400000).toISOString();
   const oldest = new Date(Date.now() - 150 * 86400000).toISOString();
@@ -448,7 +448,7 @@ export async function searchMemoryHistory(userId: string, text: string, plan: 'f
     .eq('user_id', userId).eq('source', 'user')
     .lt('logged_at', newest).gte('logged_at', oldest)
     .or(filter)
-    .order('logged_at', { ascending: false }).limit(1000);
+    .order('logged_at', { ascending: false }).limit(80); // formatRecall shows the newest 15 after the per-day limit
   if (error) { console.error('memory recall failed:', error.message); return []; }
   return (data ?? []) as MemoryLog[];
 }

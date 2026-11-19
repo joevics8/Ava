@@ -65,7 +65,7 @@ describe('dates', () => {
   it('shortDate', () => { expect(shortDate('2026-11-09')).toBe('9 Nov'); });
 });
 
-import { compactLogs, approxTokens, shortenSummary, recallKeywords, recallOrFilter, formatRecall } from '../memory';
+import { compactLogs, approxTokens, shortenSummary, recallKeywords, recallOrFilter, formatRecall, recallTerms, limitPerTopic } from '../memory';
 
 describe('shortenSummary', () => {
   it('drops filler and abbreviates but keeps every fact', () => {
@@ -129,16 +129,50 @@ describe('recall', () => {
     expect(recallOrFilter(['a,b', 'ok1', 'headache'])).toBe('summary.ilike.%headache%,detail.ilike.%headache%');
     expect(recallOrFilter([])).toBe('');
   });
-  it('lists every match, hers only, shortened, with year only when over a year old', () => {
+  it('lists matches newest first, hers only, shortened, capped at 15 with a note on the rest', () => {
     const now = new Date('2026-11-19T08:00:00Z');
     const r = (summary: string, d: string, cycle_day: number | null, source: 'user' | 'ava' = 'user', category = 'symptom') =>
       ({ category, summary, logged_at: `${d}T08:00:00Z`, event_date: d, cycle_day, source });
-    const many = Array.from({ length: 40 }, (_, i) => r('Heavy cramps', `2026-09-${String((i % 28) + 1).padStart(2, '0')}`, 1));
-    const out = formatRecall([r('Experiencing menstrual cramps', '2026-09-14', 26), r('Cramp pattern, monthly', '2026-09-01', null, 'ava', 'chat'), r('Cramps', '2025-06-02', 2), ...many], { now });
-    expect(out).toContain('9/14 d26 s:mens cramps');
-    expect(out).toContain('6/2/25 d2 s:Cramps');
+    const many = Array.from({ length: 20 }, (_, i) => r('Heavy cramps', `2026-09-${String(i + 1).padStart(2, '0')}`, 1));
+    const out = formatRecall([r('Experiencing menstrual cramps', '2026-10-14', 26), r('Cramp pattern, monthly', '2026-09-01', null, 'ava', 'chat'), r('Cramps', '2025-06-02', 2), ...many], { now });
+    const lines = out.split('\n');
+    expect(lines[1]).toContain('10/14 d26 s:mens cramps');
     expect(out).not.toContain('pattern');
-    expect(out.split('\n')).toHaveLength(1 + 2 + 40); // nothing dropped
+    expect(lines).toHaveLength(1 + 15 + 1); // header + 15 + "not shown" note
+    expect(lines[lines.length - 1]).toBe('(+7 older matching entries not shown)');
     expect(formatRecall([], { now })).toBe('');
+  });
+});
+
+describe('daily display limit (saving is never limited)', () => {
+  const rows = Array.from({ length: 6 }, (_, i) => ({ category: 'symptom', summary: 'Cramps', logged_at: `2026-11-18T0${i}:00:00Z`, event_date: '2026-11-18', cycle_day: 2, source: 'user' as const }));
+  it('shows the same symptom at most 3 times a day, then +N', () => {
+    const kept = limitPerTopic(rows);
+    expect(kept).toHaveLength(3);
+    expect(kept[2].extra).toBe(3);
+  });
+  it('different symptoms on the same day are all shown', () => {
+    const mixed = [...rows.slice(0, 3), { ...rows[0], summary: 'Headache' }, { ...rows[0], summary: 'Nausea' }];
+    expect(limitPerTopic(mixed)).toHaveLength(5);
+  });
+  it('compactLogs applies it per day and still shows other days in full', () => {
+    const out = compactLogs([...rows, { ...rows[0], event_date: '2026-11-17', logged_at: '2026-11-17T08:00:00Z' }], { now: new Date('2026-11-18T10:00:00Z') });
+    expect(out).toContain('11/18 d2 s:Cramps; s:Cramps; s:Cramps +3');
+    expect(out).toContain('11/17 d2 s:Cramps');
+  });
+});
+
+describe('matcher', () => {
+  it('expands a word to its synonyms, so "cramps" also finds spasms and abdominal aches', () => {
+    const t = recallTerms('when did I last have cramps?');
+    expect(t).toEqual(expect.arrayContaining(['cramp', 'spasm', 'abdominal']));
+  });
+  it('covers other topics and stays letters-only and bounded', () => {
+    expect(recallTerms('my headache is back')).toEqual(expect.arrayContaining(['headache', 'migraine']));
+    expect(recallTerms('feeling really tired')).toEqual(expect.arrayContaining(['tired', 'fatigue']));
+    const all = recallTerms('cramps headache nausea bloating acne fatigue');
+    expect(all.length).toBeLessThanOrEqual(12);
+    expect(all.every(w => /^[a-z]+$/.test(w))).toBe(true);
+    expect(recallTerms('hello there')).toEqual([]);
   });
 });
