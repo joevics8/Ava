@@ -668,8 +668,14 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     } catch (e) { console.error('fact extraction failed', e); }
 
     const [cycleRow, facts] = await Promise.all([getCycleData(user.id), (await import('@/lib/ava/db')).getMemoryFacts(user.id)]);
-    const { describeFacts } = await import('@/lib/ava/memory');
-    const bodyContext = `${describeBodyContext(cycleRow, memoryLogs)}\n\n${describeFacts(facts)}`;
+    const { describeFacts, formatRecall } = await import('@/lib/ava/memory');
+    // Older entries about whatever she just brought up (premium: 150-day memory, read only when relevant).
+    let recall = '';
+    try {
+      const { searchMemoryHistory } = await import('@/lib/ava/db');
+      recall = formatRecall(await searchMemoryHistory(user.id, text, user.plan));
+    } catch (e) { console.error('memory recall failed', e); }
+    const bodyContext = `${describeBodyContext(cycleRow, memoryLogs)}\n\n${describeFacts(facts)}${recall ? `\n\n${recall}` : ''}`;
 
     if (user.plan === 'free') {
       const [category, upgradeSuggested] = await Promise.all([

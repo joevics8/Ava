@@ -430,6 +430,28 @@ export async function deleteMemoryEvent(userId: string, id: string): Promise<boo
   return (data?.length ?? 0) > 0;
 }
 
+/**
+ * Older entries (past the 14-day window of normal chat) that match what she is
+ * talking about. Premium only: free keeps 14 days of memory, which the normal
+ * context already covers. Returns at most 15 of her own reported entries.
+ */
+export async function searchMemoryHistory(userId: string, text: string, plan: 'free' | 'premium'): Promise<MemoryLog[]> {
+  if (plan !== 'premium') return [];
+  const { recallKeywords, recallOrFilter } = await import('./memory');
+  const filter = recallOrFilter(recallKeywords(text));
+  if (!filter) return [];
+  const newest = new Date(Date.now() - 14 * 86400000).toISOString();
+  const oldest = new Date(Date.now() - 150 * 86400000).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from('memory_log').select('*')
+    .eq('user_id', userId).eq('source', 'user')
+    .lt('logged_at', newest).gte('logged_at', oldest)
+    .or(filter)
+    .order('logged_at', { ascending: false }).limit(15);
+  if (error) { console.error('memory recall failed:', error.message); return []; }
+  return (data ?? []) as MemoryLog[];
+}
+
 /** What she told Ava, newest first, for /memory (her events only, not Ava's notes). */
 export async function getRecentEvents(userId: string, limit = 8): Promise<MemoryLog[]> {
   const { data } = await supabaseAdmin

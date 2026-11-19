@@ -183,3 +183,50 @@ export function compactLogs(
 
 /** Rough token estimate (about 4 characters per token) for budgets and tests. */
 export const approxTokens = (s: string) => Math.ceil(s.length / 4);
+
+// ─── Recall: old entries about what she is talking about right now ────────────
+// The compact block above keeps only 21 days of detail. When she brings up a topic
+// ("my cramps", "that headache again") we also fetch the matching OLDER entries,
+// so Ava can say "you logged this on 14 Sep, cycle day 26" without reading all of
+// the history on every message.
+
+const RECALL_STOP = new Set([
+  'when', 'what', 'which', 'have', 'last', 'time', 'times', 'much', 'many', 'does', 'with', 'that', 'this', 'from', 'been', 'them',
+  'they', 'about', 'again', 'ever', 'often', 'other', 'before', 'after', 'since', 'still', 'tell', 'know', 'please', 'there', 'their',
+  'these', 'those', 'would', 'could', 'should', 'really', 'just', 'like', 'also', 'into', 'your', 'mine', 'myself', 'feel', 'feeling',
+  'period', 'periods', 'cycle', 'cycles', 'menstrual', 'health', 'today', 'yesterday', 'tomorrow', 'month', 'months', 'week', 'weeks',
+  'days', 'happen', 'happened', 'happening', 'normal', 'okay', 'bring', 'thing', 'things', 'something', 'anything', 'because', 'every',
+]);
+
+/** Up to 4 stems from a message ("cramps" -> "cramp"), longest first. Letters only, so they are safe in a query. */
+export function recallKeywords(text: string, max = 4): string[] {
+  const seen = new Set<string>();
+  for (const w of text.toLowerCase().split(/[^a-z]+/)) {
+    if (w.length < 4 || RECALL_STOP.has(w)) continue;
+    seen.add(w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w);
+  }
+  return Array.from(seen).sort((a, b) => b.length - a.length).slice(0, max);
+}
+
+/** PostgREST `or` filter matching any keyword in the summary or her own words. Letters only: nothing to escape. */
+export function recallOrFilter(keywords: readonly string[]): string {
+  return keywords.filter(k => /^[a-z]{3,}$/.test(k)).flatMap(k => [`summary.ilike.%${k}%`, `detail.ilike.%${k}%`]).join(',');
+}
+
+export function formatRecall(rows: readonly CompactLog[], opts: { now?: Date; budgetChars?: number; maxRows?: number } = {}): string {
+  const now = opts.now ?? new Date();
+  const budget = opts.budgetChars ?? 900;
+  const hers = rows.filter(isHers).slice(0, opts.maxRows ?? 15);
+  if (!hers.length) return '';
+  const head = 'PAST ENTRIES MATCHING WHAT SHE JUST SAID (older, only things she reported; mention one only if it genuinely fits, and quote its real date):';
+  const lines = [head];
+  let used = head.length;
+  for (const l of hers) {
+    const d = dayOf(l);
+    const yr = now.getTime() - new Date(d).getTime() > 330 * 86400000 ? `/${d.slice(2, 4)}` : '';
+    const line = `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${l.cycle_day ? ` d${l.cycle_day}` : ''} ${CODE[l.category]}:${l.summary.replace(/^morning mood:\s*/i, '')}`;
+    if (used + line.length + 1 > budget) break;
+    lines.push(line); used += line.length + 1;
+  }
+  return lines.length > 1 ? lines.join('\n') : '';
+}

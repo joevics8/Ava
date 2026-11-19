@@ -113,3 +113,30 @@ describe('compactLogs', () => {
     expect(topicOf('Frequent urination')).toBe('urination');
   });
 });
+
+import { recallKeywords, recallOrFilter, formatRecall } from '../memory';
+
+describe('recall', () => {
+  it('keeps the topic words of a message, as safe stems', () => {
+    expect(recallKeywords('when did I last have cramps like this?')).toEqual(['cramp']);
+    expect(recallKeywords('is my headache and nausea normal again')).toEqual(['headache', 'nausea']);
+    expect(recallKeywords('hi')).toEqual([]);
+    expect(recallKeywords("x'; drop table memory_log; --")).not.toContain("'");
+  });
+  it('builds a letters-only filter', () => {
+    expect(recallOrFilter(['cramp'])).toBe('summary.ilike.%cramp%,detail.ilike.%cramp%');
+    expect(recallOrFilter(['a,b', 'ok1', 'headache'])).toBe('summary.ilike.%headache%,detail.ilike.%headache%');
+    expect(recallOrFilter([])).toBe('');
+  });
+  it('formats matches compactly, hers only, inside the budget, with year only when over a year old', () => {
+    const now = new Date('2026-11-19T08:00:00Z');
+    const r = (summary: string, d: string, cycle_day: number | null, source: 'user' | 'ava' = 'user', category = 'symptom') =>
+      ({ category, summary, logged_at: `${d}T08:00:00Z`, event_date: d, cycle_day, source });
+    const out = formatRecall([r('Heavy cramps', '2026-09-14', 26), r('Cramp pattern, monthly', '2026-09-01', null, 'ava', 'chat'), r('Cramps', '2025-06-02', 2)], { now });
+    expect(out).toContain('9/14 d26 s:Heavy cramps');
+    expect(out).toContain('6/2/25 d2 s:Cramps');
+    expect(out).not.toContain('pattern');
+    expect(formatRecall([], { now })).toBe('');
+    expect(formatRecall(Array.from({ length: 30 }, (_, i) => r(`Cramps number ${i} with a long description`, '2026-09-14', 1)), { now, budgetChars: 300 }).length).toBeLessThanOrEqual(300);
+  });
+});
