@@ -65,7 +65,17 @@ describe('dates', () => {
   it('shortDate', () => { expect(shortDate('2026-11-09')).toBe('9 Nov'); });
 });
 
-import { compactLogs, approxTokens, topicOf } from '../memory';
+import { compactLogs, approxTokens, shortenSummary, recallKeywords, recallOrFilter, formatRecall } from '../memory';
+
+describe('shortenSummary', () => {
+  it('drops filler and abbreviates but keeps every fact', () => {
+    expect(shortenSummary('Experiencing menstrual cramps and feeling irritable')).toBe('mens cramps & irritable');
+    expect(shortenSummary('Persistent abdominal cramps')).toBe('persist abd cramps');
+    expect(shortenSummary('Morning mood: good')).toBe('good');
+    expect(shortenSummary('Headache')).toBe('Headache');
+    expect(shortenSummary('the')).toBe('the'); // never returns nothing
+  });
+});
 
 describe('compactLogs', () => {
   const now = new Date('2026-11-18T10:00:00Z');
@@ -77,44 +87,35 @@ describe('compactLogs', () => {
     const out = compactLogs([
       row('symptom', 'Persistent cramps', 1, 2), row('mood', 'Morning mood: ok', 1, 2), row('chat', 'Cramp pattern, monthly', 1, null, 'ava'),
     ], { now });
-    expect(out).toContain('11/17 d2 s:Persistent cramps; m:ok');
+    expect(out).toContain('11/17 d2 s:persist cramps; m:ok');
     expect(out).not.toContain('Cramp pattern');
     expect(out).not.toMatch(/2026|:\d\d:\d\d/);
   });
 
-  it('collapses history older than 30 days into counts with cycle days', () => {
-    const logs = [
-      ...[35, 65, 95, 125].map((o, i) => row('symptom', 'Heavy cramps', o, [1, 2, 1, 3][i])),
-      row('symptom', 'Headache', 70, 25),
-    ];
-    const out = compactLogs(logs, { now });
-    expect(out).toContain('s:cramps x4 (d1-3)');
-    expect(out).toContain('s:headache x1 (d25)');
-    expect(out.split('\n').length).toBeLessThan(6);
+  it('keeps EVERY entry, however old or repeated: two weeks ago and today both show', () => {
+    const out = compactLogs([row('symptom', 'Cramps', 0, 3), row('symptom', 'Cramps', 14, 2), row('symptom', 'Cramps', 95, 1), row('symptom', 'Cramps', 125, 3)], { now });
+    expect(out.match(/s:Cramps/g)).toHaveLength(4);
   });
 
-  it('five months of heavy logging stays inside the budget and far below the old verbose format', () => {
+  it('a day with the same thing logged twice keeps both', () => {
+    const out = compactLogs([row('symptom', 'Cramps', 0), row('symptom', 'Cramps', 0)], { now });
+    expect(out.match(/s:Cramps/g)).toHaveLength(2);
+  });
+
+  it('is much shorter per entry than the old format and has no cap', () => {
     const logs: any[] = [];
     for (let d = 0; d < 150; d++) {
-      logs.push(row('symptom', d % 3 ? 'Persistent abdominal cramps' : 'Dull lower back ache', d, (d % 30) + 1));
+      logs.push(row('symptom', 'Experiencing persistent abdominal cramps', d, (d % 30) + 1));
       logs.push(row('mood', 'Morning mood: good', d, (d % 30) + 1));
-      logs.push(row('chat', 'Cramp pattern, monthly', d, null, 'ava'));
-      logs.push(row('insight', 'Suggested remedies for acne', d, null, 'ava'));
     }
-    const verbose = logs.slice(0, 120).map(l => `[${l.category}] ${l.summary} — ${new Date(l.logged_at).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`).join('\n');
+    const verbose = logs.map(l => `[${l.category}] ${l.summary} — ${new Date(l.logged_at).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`).join('\n');
     const compact = compactLogs(logs, { now });
-    expect(compact.length).toBeLessThanOrEqual(1400);
-    expect(approxTokens(compact)).toBeLessThan(approxTokens(verbose) / 4);
+    expect(compact.split('\n')).toHaveLength(151); // header + one line per day, all 150 days
+    expect(approxTokens(compact)).toBeLessThan(approxTokens(verbose) / 2);
   });
 
   it('says so when there is nothing', () => { expect(compactLogs([], { now })).toBe('MEM: nothing logged.'); });
-  it('topicOf names what a tag is about', () => {
-    expect(topicOf('Persistent abdominal cramps')).toBe('cramps');
-    expect(topicOf('Frequent urination')).toBe('urination');
-  });
 });
-
-import { recallKeywords, recallOrFilter, formatRecall } from '../memory';
 
 describe('recall', () => {
   it('keeps the topic words of a message, as safe stems', () => {
@@ -128,15 +129,16 @@ describe('recall', () => {
     expect(recallOrFilter(['a,b', 'ok1', 'headache'])).toBe('summary.ilike.%headache%,detail.ilike.%headache%');
     expect(recallOrFilter([])).toBe('');
   });
-  it('formats matches compactly, hers only, inside the budget, with year only when over a year old', () => {
+  it('lists every match, hers only, shortened, with year only when over a year old', () => {
     const now = new Date('2026-11-19T08:00:00Z');
     const r = (summary: string, d: string, cycle_day: number | null, source: 'user' | 'ava' = 'user', category = 'symptom') =>
       ({ category, summary, logged_at: `${d}T08:00:00Z`, event_date: d, cycle_day, source });
-    const out = formatRecall([r('Heavy cramps', '2026-09-14', 26), r('Cramp pattern, monthly', '2026-09-01', null, 'ava', 'chat'), r('Cramps', '2025-06-02', 2)], { now });
-    expect(out).toContain('9/14 d26 s:Heavy cramps');
+    const many = Array.from({ length: 40 }, (_, i) => r('Heavy cramps', `2026-09-${String((i % 28) + 1).padStart(2, '0')}`, 1));
+    const out = formatRecall([r('Experiencing menstrual cramps', '2026-09-14', 26), r('Cramp pattern, monthly', '2026-09-01', null, 'ava', 'chat'), r('Cramps', '2025-06-02', 2), ...many], { now });
+    expect(out).toContain('9/14 d26 s:mens cramps');
     expect(out).toContain('6/2/25 d2 s:Cramps');
     expect(out).not.toContain('pattern');
+    expect(out.split('\n')).toHaveLength(1 + 2 + 40); // nothing dropped
     expect(formatRecall([], { now })).toBe('');
-    expect(formatRecall(Array.from({ length: 30 }, (_, i) => r(`Cramps number ${i} with a long description`, '2026-09-14', 1)), { now, budgetChars: 300 }).length).toBeLessThanOrEqual(300);
   });
 });

@@ -379,16 +379,17 @@ export async function addMemoryLog(
   const { localDateStr } = await import('./period');
   const eventDate = opts.eventDate ?? localDateStr();
 
-  const since = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString();
-  const { data: recent } = await supabaseAdmin
-    .from('memory_log')
-    .select('summary,event_date,logged_at')
-    .eq('user_id', userId)
-    .eq('category', category)
-    .gte('logged_at', since)
-    .order('logged_at', { ascending: false })
-    .limit(15);
-  if (recent && isDuplicateEvent(summary, eventDate, recent, new Date(), category === 'mood')) return false;
+  // Repeats are DATA (cramps two weeks ago and cramps today make a pattern), so
+  // everything she reports is saved. The one exception: a period start, which is
+  // a single event that is re-sent or re-confirmed ("my last period was Nov 9").
+  if (category === 'cycle') {
+    const since = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString();
+    const { data: recent } = await supabaseAdmin
+      .from('memory_log').select('summary,event_date,logged_at')
+      .eq('user_id', userId).eq('category', 'cycle').gte('logged_at', since)
+      .order('logged_at', { ascending: false }).limit(15);
+    if (recent && isDuplicateEvent(summary, eventDate, recent)) return false;
+  }
 
   const { error } = await supabaseAdmin.from('memory_log').insert({
     user_id: userId,
@@ -433,7 +434,7 @@ export async function deleteMemoryEvent(userId: string, id: string): Promise<boo
 /**
  * Older entries (past the 14-day window of normal chat) that match what she is
  * talking about. Premium only: free keeps 14 days of memory, which the normal
- * context already covers. Returns at most 15 of her own reported entries.
+ * context already covers. Returns every matching entry she reported.
  */
 export async function searchMemoryHistory(userId: string, text: string, plan: 'free' | 'premium'): Promise<MemoryLog[]> {
   if (plan !== 'premium') return [];
@@ -447,7 +448,7 @@ export async function searchMemoryHistory(userId: string, text: string, plan: 'f
     .eq('user_id', userId).eq('source', 'user')
     .lt('logged_at', newest).gte('logged_at', oldest)
     .or(filter)
-    .order('logged_at', { ascending: false }).limit(15);
+    .order('logged_at', { ascending: false }).limit(1000);
   if (error) { console.error('memory recall failed:', error.message); return []; }
   return (data ?? []) as MemoryLog[];
 }
@@ -475,7 +476,7 @@ export async function getMemoryContext(
     .eq('user_id', userId)
     .gte('logged_at', since.toISOString())
     .order('logged_at', { ascending: false })
-    .limit(120); // cap context size
+    .limit(2000); // safety ceiling only: the plan's day window is the real limit
 
   if (error || !data) return [];
   return data as MemoryLog[];

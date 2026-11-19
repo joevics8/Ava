@@ -96,17 +96,16 @@ export function shortDate(iso: string): string {
 }
 
 // ─── Compact memory for prompts ───────────────────────────────────────────────
-// Reading months of memory must not cost thousands of tokens on every call. So:
-//  - Ava's own notes (chat/insight rows) are dropped: they were ~70% of the rows
-//    and are not things she reported.
-//  - recent days (default 30) are one line per day, one-letter category codes,
-//    no year, no clock time, cycle day instead of the repeated date arithmetic;
-//  - older history collapses into counts ("cramps x5 (d1-3,26)"), which is what
-//    pattern questions actually need;
-//  - the whole block stops at a character budget (about 4 chars per token).
+// Every entry she logged is kept and shown; only its LENGTH is cut:
+//  - Ava's own notes (chat/insight rows) are left out: they are not things she reported;
+//  - one line per day, one-letter category codes, no year (unless over a year old),
+//    no clock time, cycle day as dN;
+//  - filler words dropped and common words abbreviated (see shortenSummary).
+// Nothing is capped, merged or counted away, so repeats stay as separate entries and
+// "cramps 2 weeks ago, cramps today" remains visible as a pattern.
 
 const CODE: Record<string, string> = { symptom: 's', mood: 'm', flow: 'f', cycle: 'c', sexual: 'x', test: 't', bbt: 'b', mucus: 'u' };
-export const COMPACT_LEGEND = 's=symptom m=mood f=flow c=cycle x=sex t=test b=bbt u=mucus; dN=cycle day';
+export const COMPACT_LEGEND = 's=symptom m=mood f=flow c=cycle x=sex t=test b=bbt u=mucus; dN=cycle day; abd=abdominal';
 
 export interface CompactLog {
   category: string; summary: string; logged_at: string;
@@ -115,73 +114,38 @@ export interface CompactLog {
 
 const isHers = (l: CompactLog) => (l.source ? l.source === 'user' : l.category !== 'chat' && l.category !== 'insight') && l.category in CODE;
 const dayOf = (l: CompactLog) => String(l.event_date ?? l.logged_at).slice(0, 10);
-const HEAD_STOP = new Set(['that', 'this', 'with', 'from', 'time', 'daily', 'today']);
 
-/** The noun a tag is about: "Persistent abdominal cramps" -> "cramps". */
-export function topicOf(summary: string): string {
-  const words = summary.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !HEAD_STOP.has(w));
-  return words.length ? words[words.length - 1] : summary.toLowerCase().slice(0, 20);
+const FILLER = new Set(['experiencing', 'experienced', 'feeling', 'having', 'reported', 'noticed', 'noticing', 'got', 'getting', 'a', 'an', 'the', 'of', 'some', 'my', 'is', 'was', 'been']);
+const ABBREV: Record<string, string> = {
+  and: '&', with: 'w/', without: 'w/o', abdominal: 'abd', menstrual: 'mens', persistent: 'persist', frequent: 'freq', frequency: 'freq',
+  temperature: 'temp', increased: '↑', decreased: '↓', reduced: '↓', morning: 'am', evening: 'pm', moderate: 'mod', discomfort: 'discomf',
+  irritability: 'irritab', irritated: 'irritab', unprotected: 'unprot', intercourse: 'sex',
+};
+
+/** "Experiencing menstrual cramps and feeling irritable" -> "mens cramps & irritable". Keeps every fact, drops only filler. */
+export function shortenSummary(summary: string): string {
+  const words = summary.replace(/^morning mood:\s*/i, '').split(/\s+/).filter(Boolean);
+  const out = words.filter(w => !FILLER.has(w.toLowerCase())).map(w => ABBREV[w.toLowerCase()] ?? w);
+  return (out.join(' ') || summary).trim();
 }
 
-function compactRuns(days: number[]): string {
-  const sorted = Array.from(new Set(days)).sort((a, b) => a - b);
-  const parts: string[] = [];
-  for (let i = 0; i < sorted.length; ) {
-    let j = i;
-    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
-    parts.push(j > i ? `${sorted[i]}-${sorted[j]}` : String(sorted[i]));
-    i = j + 1;
-  }
-  return parts.join(',');
-}
-
-export function compactLogs(
-  logs: readonly CompactLog[],
-  opts: { now?: Date; fullDays?: number; budgetChars?: number } = {},
-): string {
+export function compactLogs(logs: readonly CompactLog[], opts: { now?: Date } = {}): string {
   const now = opts.now ?? new Date();
-  const fullDays = opts.fullDays ?? 21;
-  const budget = opts.budgetChars ?? 1400;
   const hers = logs.filter(isHers);
   if (!hers.length) return 'MEM: nothing logged.';
 
-  const cutoff = new Date(now.getTime() - fullDays * 86400000).toISOString().slice(0, 10);
-  const recent = hers.filter(l => dayOf(l) >= cutoff);
-  const older = hers.filter(l => dayOf(l) < cutoff);
-
-  // Recent: one line per day, newest first.
   const byDay = new Map<string, CompactLog[]>();
-  for (const l of recent) byDay.set(dayOf(l), [...(byDay.get(dayOf(l)) ?? []), l]);
-  const dayLines = Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([d, rows]) => {
+  for (const l of hers) byDay.set(dayOf(l), [...(byDay.get(dayOf(l)) ?? []), l]);
+  const lines = Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([d, rows]) => {
     const cd = rows.find(r => r.cycle_day)?.cycle_day;
-    const items = rows.map(r => `${CODE[r.category]}:${r.summary.replace(/^morning mood:\s*/i, '')}`).join('; ');
-    return `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${cd ? ` d${cd}` : ''} ${items}`;
+    const yr = now.getTime() - new Date(d).getTime() > 330 * 86400000 ? `/${d.slice(2, 4)}` : '';
+    const items = rows.map(r => `${CODE[r.category]}:${shortenSummary(r.summary)}`).join('; ');
+    return `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${cd ? ` d${cd}` : ''} ${items}`;
   });
-
-  // Older: counts per topic, most frequent first.
-  const topics = new Map<string, { n: number; days: number[]; cat: string }>();
-  for (const l of older) {
-    const t = topicOf(l.summary);
-    const e = topics.get(t) ?? { n: 0, days: [], cat: CODE[l.category] };
-    e.n++; if (l.cycle_day) e.days.push(l.cycle_day);
-    topics.set(t, e);
-  }
-  const oldLines = Array.from(topics.entries()).sort((a, b) => b[1].n - a[1].n).slice(0, 12)
-    .map(([t, e]) => `${e.cat}:${t} x${e.n}${e.days.length ? ` (d${compactRuns(e.days)})` : ''}`);
-
-  const head = `MEM (${COMPACT_LEGEND}; m/d = date)`;
-  const lines: string[] = [head];
-  let used = head.length;
-  const push = (line: string) => { if (used + line.length + 1 > budget) return false; lines.push(line); used += line.length + 1; return true; };
-  for (const l of dayLines) if (!push(l)) break;
-  if (oldLines.length) {
-    push(`Older than ${fullDays}d, counts:`);
-    for (const l of oldLines) if (!push(l)) break;
-  }
-  return lines.join('\n');
+  return [`MEM (${COMPACT_LEGEND}; m/d = date, newest first)`, ...lines].join('\n');
 }
 
-/** Rough token estimate (about 4 characters per token) for budgets and tests. */
+/** Rough token estimate (about 4 characters per token). */
 export const approxTokens = (s: string) => Math.ceil(s.length / 4);
 
 // ─── Recall: old entries about what she is talking about right now ────────────
@@ -213,20 +177,15 @@ export function recallOrFilter(keywords: readonly string[]): string {
   return keywords.filter(k => /^[a-z]{3,}$/.test(k)).flatMap(k => [`summary.ilike.%${k}%`, `detail.ilike.%${k}%`]).join(',');
 }
 
-export function formatRecall(rows: readonly CompactLog[], opts: { now?: Date; budgetChars?: number; maxRows?: number } = {}): string {
+export function formatRecall(rows: readonly CompactLog[], opts: { now?: Date } = {}): string {
   const now = opts.now ?? new Date();
-  const budget = opts.budgetChars ?? 900;
-  const hers = rows.filter(isHers).slice(0, opts.maxRows ?? 15);
+  const hers = rows.filter(isHers);
   if (!hers.length) return '';
-  const head = 'PAST ENTRIES MATCHING WHAT SHE JUST SAID (older, only things she reported; mention one only if it genuinely fits, and quote its real date):';
-  const lines = [head];
-  let used = head.length;
+  const lines = ['PAST ENTRIES MATCHING WHAT SHE JUST SAID (every older one, only things she reported; they show how often and when it happens; mention only what genuinely fits, and quote real dates):'];
   for (const l of hers) {
     const d = dayOf(l);
     const yr = now.getTime() - new Date(d).getTime() > 330 * 86400000 ? `/${d.slice(2, 4)}` : '';
-    const line = `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${l.cycle_day ? ` d${l.cycle_day}` : ''} ${CODE[l.category]}:${l.summary.replace(/^morning mood:\s*/i, '')}`;
-    if (used + line.length + 1 > budget) break;
-    lines.push(line); used += line.length + 1;
+    lines.push(`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${yr}${l.cycle_day ? ` d${l.cycle_day}` : ''} ${CODE[l.category]}:${shortenSummary(l.summary)}`);
   }
-  return lines.length > 1 ? lines.join('\n') : '';
+  return lines.join('\n');
 }

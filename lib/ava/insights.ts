@@ -64,7 +64,7 @@ async function callGemini(model: string, prompt: string): Promise<string> {
 }
 
 function formatLogs(logs: MemoryLog[]): string {
-  return compactLogs(logs, { budgetChars: 2400 });
+  return compactLogs(logs);
 }
 
 // ─── What have you learned about me? ─────────────────────────────────────────
@@ -166,7 +166,7 @@ User: ${user.name}
 Cycle length: ${cycleData?.avg_cycle_length || 28} days
 
 Health log:
-${formatLogs(logs.slice(0, 60))}
+${formatLogs(logs)}
 
 Respond in this exact JSON format (no markdown):
 {
@@ -205,7 +205,7 @@ Cycle: ${cycleData?.avg_cycle_length || 28} days average, ${cycleData?.period_du
 Last period: ${latestPeriodStartStr(cycleData) || 'unknown'}
 
 Recent health log:
-${formatLogs(logs.slice(0, 40))}
+${formatLogs(logs)}
 
 Write a clear, concise summary a doctor would find useful:
 1. Cycle overview (2-3 lines)
