@@ -1011,9 +1011,9 @@ async function handleCommand(
 
 async function maybeSuggestRemedy(chatId: number, user: any, text: string): Promise<boolean> {
   const { getActiveRemedies, showRemedyList } = await import('@/lib/ava/remedy-engine');
-  const { detectCondition } = await import('@/lib/ava/remedies');
+  const { detectConditionSmart } = await import('@/lib/ava/condition-match');
 
-  const detectedCondition = detectCondition(text);
+  const detectedCondition = await detectConditionSmart(text);
   if (!detectedCondition) return false;
 
   const alreadyTracking = await getActiveRemedies(user.id);
