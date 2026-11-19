@@ -27,7 +27,7 @@ export default function LoginPage({
       </header>
 
       <main className="mx-auto max-w-md px-4 py-10 sm:py-16">
-        <h1 className="font-display text-4xl font-bold leading-tight tracking-tight">Your Ava dashboard</h1>
+        <h1 className="font-display text-4xl font-bold leading-tight tracking-tight">Your Verm dashboard</h1>
         <p className="mt-3 text-lg leading-relaxed text-muted-ink">
           See what Ava knows about your cycle. The dashboard connects to your Telegram chat with her.
         </p>

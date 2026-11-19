@@ -1,6 +1,6 @@
-# Ava — content site standards
+# Verm — content site standards (the bot is called Ava)
 
-Telegram (@Ava_care_bot) is the product. The website is the front door: tools, blog and a dashboard. **Every CTA points to Telegram.** No ads inside chat, dashboard or login.
+Brand: the website is **Verm** (Verm.app); **Ava** is only the name of the Telegram bot (@Ava_care_bot). Telegram is the product. The website is the front door: tools, blog and a dashboard. **Every CTA points to Telegram.** No ads inside chat, dashboard or login.
 
 ## Architecture (copied from naira.autos, made data-driven)
 - English at root; other languages under `/{lang}/` with a translated hub segment (`/es/herramientas/...`). All URL building goes through `lib/site.ts` — never hand-write a path.

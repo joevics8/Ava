@@ -9,7 +9,7 @@ import {
 } from '@/lib/seo';
 import { Markdown } from '@/components/site/Markdown';
 
-const withBrand = (t: string) => `${t} | Ava`;
+const withBrand = (t: string) => `${t} | Verm`;
 
 describe('tool page copy (CLAUDE.md page checklist)', () => {
   const rows = TOOLS.flatMap(tool => Object.entries(tool.text).map(([lang, text]) => ({ id: tool.id, lang, text: text! })));
@@ -67,7 +67,7 @@ describe('pageMetadata', () => {
     expect(pageMetadata({ ...base, title: 'Short title' }).title).toBe('Short title');
     const long = 'A'.repeat(58);
     expect(pageMetadata({ ...base, title: long }).title).toEqual({ absolute: long });
-    expect(pageMetadata({ ...base, title: 'Ava: AI period tracker' }).title).toEqual({ absolute: 'Ava: AI period tracker' });
+    expect(pageMetadata({ ...base, title: 'Verm: AI period tracker' }).title).toEqual({ absolute: 'Verm: AI period tracker' });
   });
 
   it('sets canonical, locale, share image and a Twitter card', () => {

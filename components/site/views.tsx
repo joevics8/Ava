@@ -296,7 +296,7 @@ export function localHomeMetadata(lang: Lang): Metadata {
   const es = lang === 'es';
   return pageMetadata({
     lang, path: homePath(lang), group: homeGroup(), noindex: !isIndexableHome(lang),
-    title: es ? 'Ava: tu ciclo y tu cuerpo, explicados' : 'Ava',
+    title: es ? 'Verm: tu ciclo y tu cuerpo, explicados' : 'Verm',
     description: es ? 'Calculadoras gratuitas y una compañera en Telegram que aprende tu ciclo y responde tus dudas.' : ui(lang).toolsDesc,
   });
 }
@@ -306,7 +306,7 @@ export function LocalHome({ lang }: { lang: Lang }) {
   const items = toolsFor(lang);
   if (!items.length) notFound();
   const es = lang === 'es';
-  const title = es ? 'Ava: tu ciclo y tu cuerpo, explicados' : 'Ava';
+  const title = es ? 'Verm: tu ciclo y tu cuerpo, explicados' : 'Verm';
   const intro = es
     ? 'Una compañera en Telegram que aprende tu ciclo, recuerda tus síntomas y responde tus dudas con claridad.'
     : t.toolsIntro;

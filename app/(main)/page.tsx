@@ -11,12 +11,12 @@ import { JsonLd, PageShell } from '@/components/site/PageShell';
 import { TelegramCta } from '@/components/site/TelegramCta';
 import { TelegramLink } from '@/components/site/TelegramLink';
 
-const TITLE = 'Ava: AI Period Tracker & Cycle Companion on Telegram';
+const TITLE = 'Verm: AI Period Tracker & Cycle Companion on Telegram';
 const DESCRIPTION = 'Track your period, ovulation and symptoms by chatting on Telegram. Ava learns your cycle, remembers your patterns and answers questions. Free to start.';
 
 export const metadata: Metadata = {
   ...pageMetadata({ lang: 'en', path: '/', title: TITLE, description: DESCRIPTION, group: homeGroup() }),
-  // The root layout adds " | Ava" to titles; this one already starts with the brand.
+  // The root layout adds " | Verm" to titles; this one already starts with the brand.
   title: { absolute: TITLE },
 };
 
@@ -139,7 +139,7 @@ export default async function HomePage() {
   const ld = graphLd([
     webPageLd('/', TITLE, DESCRIPTION, 'en', { breadcrumb: false }),
     {
-      '@type': 'SoftwareApplication', name: 'Ava', applicationCategory: 'HealthApplication', operatingSystem: 'Telegram',
+      '@type': 'SoftwareApplication', name: 'Ava by Verm', applicationCategory: 'HealthApplication', operatingSystem: 'Telegram',
       description: DESCRIPTION, url: SITE, inLanguage: 'en',
       offers: [
         { '@type': 'Offer', name: 'Free', price: '0', priceCurrency: 'NGN' },

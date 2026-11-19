@@ -20,7 +20,7 @@ export default function PrivacyPage() {
       <article className="prose-ava">
         <h1 className="font-display text-4xl font-bold tracking-tight">Privacy Policy</h1>
         <p>Last updated: August 2026</p>
-        <p>Ava is committed to protecting your health data. Here is what we collect and why.</p>
+        <p>Verm, including its Telegram assistant Ava, is committed to protecting your health data. Here is what we collect and why.</p>
         <h2>What we collect</h2>
         <ul>
           <li>Your Telegram ID (to identify your account)</li>

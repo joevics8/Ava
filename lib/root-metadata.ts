@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { SITE } from '@/lib/site';
 import { BRAND, OG_IMAGE } from '@/lib/seo';
 
-const TITLE = 'Ava: Your AI Health & Cycle Companion';
-const DESCRIPTION = 'Ava is an AI health companion on Telegram. Track your cycle, ask health questions, and use free health tools and plain-language guides.';
+const TITLE = 'Verm: Health Tools, Guides & Ava, Your AI Cycle Companion';
+const DESCRIPTION = 'Verm has free health tools and plain-language guides, plus Ava, an AI health companion on Telegram. Track your cycle and ask health questions.';
 
 // Search Console / Bing Webmaster verification tags. Set the env vars in Vercel
 // and the <meta> tags appear; nothing is emitted when they are unset.
@@ -35,7 +35,7 @@ export const rootMetadata: Metadata = {
   openGraph: {
     type: 'website', siteName: BRAND, title: TITLE,
     description: 'Ava learns your cycle, remembers your patterns, and talks to you like a friend.',
-    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: 'Ava: AI health and cycle companion on Telegram' }],
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: 'Verm: health tools, guides and Ava, the AI cycle companion on Telegram' }],
   },
   twitter: { card: 'summary_large_image', title: TITLE, images: [OG_IMAGE] },
   ...(Object.keys(verification).length ? { verification } : {}),

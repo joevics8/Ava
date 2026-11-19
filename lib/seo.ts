@@ -4,7 +4,7 @@ import { toolsFor } from '@/lib/tools/registry';
 
 export type LangPaths = Partial<Record<Lang, string>>;
 
-export const BRAND = 'Ava';
+export const BRAND = 'Verm';
 /** Share image used when a page doesn't have its own. 1200×630. */
 export const OG_IMAGE = '/og-image.png';
 export const LOGO_PATH = '/logo.png';
@@ -18,7 +18,7 @@ export const OG_LOCALE: Record<Lang, string> = {
 export const ORG_ID = `${SITE}/#organization`;
 export const SITE_ID = `${SITE}/#website`;
 
-/** Google truncates titles around 60 characters. The root layout appends " | Ava". */
+/** Google truncates titles around 60 characters. The root layout appends " | Verm". */
 export const TITLE_LIMIT = 60;
 export const DESCRIPTION_LIMIT = 155;
 
@@ -54,7 +54,7 @@ export function pageMetadata(opts: {
     for (const l of ENABLED_LANGS) if (group[l]) languages[l] = absolute(group[l]!);
     if (group.en) languages['x-default'] = absolute(group.en);
   }
-  // "Title | Ava" when it fits in 60 characters; otherwise the bare title, so it never gets cut off mid-word in results.
+  // "Title | Verm" when it fits in 60 characters; otherwise the bare title, so it never gets cut off mid-word in results.
   const branded = `${title} | ${BRAND}`;
   const useBare = title.includes(BRAND) || branded.length > TITLE_LIMIT;
   const imageUrl = absolute(image);
@@ -84,7 +84,8 @@ export function organizationLd() {
     '@type': 'Organization', '@id': ORG_ID, name: BRAND, url: SITE,
     logo: { '@type': 'ImageObject', url: absolute(LOGO_PATH), width: 512, height: 512 },
     image: absolute(OG_IMAGE),
-    description: 'Ava is an AI health companion on Telegram that tracks your cycle and answers health questions, with free health tools and plain-language guides.',
+    alternateName: 'Verm.app',
+    description: 'Verm is a women\'s health site with free health tools and plain-language guides, and Ava, an AI health companion on Telegram that tracks your cycle and answers health questions.',
     sameAs: [BOT_URL],
   };
 }

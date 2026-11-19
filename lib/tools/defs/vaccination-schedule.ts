@@ -7,7 +7,7 @@ export const tool: Tool = {
   text: {
     en: {
       slug: 'child-vaccination-schedule-calculator',
-      title: 'Child Vaccination Schedule Calculator by Date of Birth',
+      title: 'Child Vaccination Schedule Calculator by Birth Date',
       h1: 'Child Vaccination Schedule Calculator',
       description: 'Enter your child’s date of birth to see a dated vaccine schedule with what is due now and what is coming up. WHO-style and US-style schedules.',
       intro: 'Add your child’s date of birth and pick a schedule. You will see each routine vaccine, the dates it is usually given, and what is due now.',

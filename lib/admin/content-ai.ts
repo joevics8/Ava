@@ -151,7 +151,7 @@ export function findPlaceholders(md: string): string[] {
 const LANGUAGE_NAMES: Record<string, string> = { en: 'English', es: 'Spanish' };
 export const languageName = (code: string) => LANGUAGE_NAMES[code] ?? code;
 
-const SITE_RULES = `SITE: Ava is a free women's-health and wellness site (calculators and articles) for the general public. Write in plain, warm, direct language. The audience is global with a strong Nigerian base; use the reader's own wording where natural.
+const SITE_RULES = `SITE: Verm (Verm.app) is a free women's-health and wellness site (calculators and articles) for the general public. Write in plain, warm, direct language. The audience is global with a strong Nigerian base; use the reader's own wording where natural.
 
 HARD RULES (these override everything else):
 1. Never invent facts. No statistics, percentages, study or journal names, guideline versions, quotes, product claims, dates or URLs that are not already in the SOURCE. You may add widely established general health explanation, framed as general guidance.
@@ -224,7 +224,7 @@ export function buildRewritePrompt(i: JobInput): string {
 - "category": one short kebab-case category.
 - "related_tool_ids": ids from TOOLS that are clearly relevant (max 4), never invented.`;
 
-  return `You are a careful SEO editor improving ${tool ? 'the copy of a calculator page' : 'a blog article'} for Ava. Fix keyword targeting, search intent, structure and depth WITHOUT destroying the facts, figures and safety advice already in the SOURCE.
+  return `You are a careful SEO editor improving ${tool ? 'the copy of a calculator page' : 'a blog article'} for Verm. Fix keyword targeting, search intent, structure and depth WITHOUT destroying the facts, figures and safety advice already in the SOURCE.
 
 ${SITE_RULES}
 
@@ -259,7 +259,7 @@ ${i.body ?? ''}`;
 }
 
 export function buildWritePrompt(i: JobInput): string {
-  return `You are a health-content writer for Ava. Write a new blog article from the BRIEF below. It will be reviewed and edited by a human before it is published.
+  return `You are a health-content writer for Verm. Write a new blog article from the BRIEF below. It will be reviewed and edited by a human before it is published.
 
 ${SITE_RULES}
 
