@@ -64,3 +64,52 @@ describe('dates', () => {
   });
   it('shortDate', () => { expect(shortDate('2026-11-09')).toBe('9 Nov'); });
 });
+
+import { compactLogs, approxTokens, topicOf } from '../memory';
+
+describe('compactLogs', () => {
+  const now = new Date('2026-11-18T10:00:00Z');
+  const day = (offset: number) => new Date(now.getTime() - offset * 86400000).toISOString();
+  const row = (category: string, summary: string, offset: number, cycle_day: number | null = null, source: 'user' | 'ava' = 'user') =>
+    ({ category, summary, logged_at: day(offset), event_date: day(offset).slice(0, 10), cycle_day, source });
+
+  it('drops Ava notes, groups a day on one line, uses codes and no year or clock time', () => {
+    const out = compactLogs([
+      row('symptom', 'Persistent cramps', 1, 2), row('mood', 'Morning mood: ok', 1, 2), row('chat', 'Cramp pattern, monthly', 1, null, 'ava'),
+    ], { now });
+    expect(out).toContain('11/17 d2 s:Persistent cramps; m:ok');
+    expect(out).not.toContain('Cramp pattern');
+    expect(out).not.toMatch(/2026|:\d\d:\d\d/);
+  });
+
+  it('collapses history older than 30 days into counts with cycle days', () => {
+    const logs = [
+      ...[35, 65, 95, 125].map((o, i) => row('symptom', 'Heavy cramps', o, [1, 2, 1, 3][i])),
+      row('symptom', 'Headache', 70, 25),
+    ];
+    const out = compactLogs(logs, { now });
+    expect(out).toContain('s:cramps x4 (d1-3)');
+    expect(out).toContain('s:headache x1 (d25)');
+    expect(out.split('\n').length).toBeLessThan(6);
+  });
+
+  it('five months of heavy logging stays inside the budget and far below the old verbose format', () => {
+    const logs: any[] = [];
+    for (let d = 0; d < 150; d++) {
+      logs.push(row('symptom', d % 3 ? 'Persistent abdominal cramps' : 'Dull lower back ache', d, (d % 30) + 1));
+      logs.push(row('mood', 'Morning mood: good', d, (d % 30) + 1));
+      logs.push(row('chat', 'Cramp pattern, monthly', d, null, 'ava'));
+      logs.push(row('insight', 'Suggested remedies for acne', d, null, 'ava'));
+    }
+    const verbose = logs.slice(0, 120).map(l => `[${l.category}] ${l.summary} — ${new Date(l.logged_at).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`).join('\n');
+    const compact = compactLogs(logs, { now });
+    expect(compact.length).toBeLessThanOrEqual(1400);
+    expect(approxTokens(compact)).toBeLessThan(approxTokens(verbose) / 4);
+  });
+
+  it('says so when there is nothing', () => { expect(compactLogs([], { now })).toBe('MEM: nothing logged.'); });
+  it('topicOf names what a tag is about', () => {
+    expect(topicOf('Persistent abdominal cramps')).toBe('cramps');
+    expect(topicOf('Frequent urination')).toBe('urination');
+  });
+});

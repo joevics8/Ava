@@ -94,3 +94,92 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 export function shortDate(iso: string): string {
   return `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]}`;
 }
+
+// ─── Compact memory for prompts ───────────────────────────────────────────────
+// Reading months of memory must not cost thousands of tokens on every call. So:
+//  - Ava's own notes (chat/insight rows) are dropped: they were ~70% of the rows
+//    and are not things she reported.
+//  - recent days (default 30) are one line per day, one-letter category codes,
+//    no year, no clock time, cycle day instead of the repeated date arithmetic;
+//  - older history collapses into counts ("cramps x5 (d1-3,26)"), which is what
+//    pattern questions actually need;
+//  - the whole block stops at a character budget (about 4 chars per token).
+
+const CODE: Record<string, string> = { symptom: 's', mood: 'm', flow: 'f', cycle: 'c', sexual: 'x', test: 't', bbt: 'b', mucus: 'u' };
+export const COMPACT_LEGEND = 's=symptom m=mood f=flow c=cycle x=sex t=test b=bbt u=mucus; dN=cycle day';
+
+export interface CompactLog {
+  category: string; summary: string; logged_at: string;
+  event_date?: string | null; cycle_day?: number | null; source?: 'user' | 'ava';
+}
+
+const isHers = (l: CompactLog) => (l.source ? l.source === 'user' : l.category !== 'chat' && l.category !== 'insight') && l.category in CODE;
+const dayOf = (l: CompactLog) => String(l.event_date ?? l.logged_at).slice(0, 10);
+const HEAD_STOP = new Set(['that', 'this', 'with', 'from', 'time', 'daily', 'today']);
+
+/** The noun a tag is about: "Persistent abdominal cramps" -> "cramps". */
+export function topicOf(summary: string): string {
+  const words = summary.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !HEAD_STOP.has(w));
+  return words.length ? words[words.length - 1] : summary.toLowerCase().slice(0, 20);
+}
+
+function compactRuns(days: number[]): string {
+  const sorted = Array.from(new Set(days)).sort((a, b) => a - b);
+  const parts: string[] = [];
+  for (let i = 0; i < sorted.length; ) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+    parts.push(j > i ? `${sorted[i]}-${sorted[j]}` : String(sorted[i]));
+    i = j + 1;
+  }
+  return parts.join(',');
+}
+
+export function compactLogs(
+  logs: readonly CompactLog[],
+  opts: { now?: Date; fullDays?: number; budgetChars?: number } = {},
+): string {
+  const now = opts.now ?? new Date();
+  const fullDays = opts.fullDays ?? 21;
+  const budget = opts.budgetChars ?? 1400;
+  const hers = logs.filter(isHers);
+  if (!hers.length) return 'MEM: nothing logged.';
+
+  const cutoff = new Date(now.getTime() - fullDays * 86400000).toISOString().slice(0, 10);
+  const recent = hers.filter(l => dayOf(l) >= cutoff);
+  const older = hers.filter(l => dayOf(l) < cutoff);
+
+  // Recent: one line per day, newest first.
+  const byDay = new Map<string, CompactLog[]>();
+  for (const l of recent) byDay.set(dayOf(l), [...(byDay.get(dayOf(l)) ?? []), l]);
+  const dayLines = Array.from(byDay.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([d, rows]) => {
+    const cd = rows.find(r => r.cycle_day)?.cycle_day;
+    const items = rows.map(r => `${CODE[r.category]}:${r.summary.replace(/^morning mood:\s*/i, '')}`).join('; ');
+    return `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}${cd ? ` d${cd}` : ''} ${items}`;
+  });
+
+  // Older: counts per topic, most frequent first.
+  const topics = new Map<string, { n: number; days: number[]; cat: string }>();
+  for (const l of older) {
+    const t = topicOf(l.summary);
+    const e = topics.get(t) ?? { n: 0, days: [], cat: CODE[l.category] };
+    e.n++; if (l.cycle_day) e.days.push(l.cycle_day);
+    topics.set(t, e);
+  }
+  const oldLines = Array.from(topics.entries()).sort((a, b) => b[1].n - a[1].n).slice(0, 12)
+    .map(([t, e]) => `${e.cat}:${t} x${e.n}${e.days.length ? ` (d${compactRuns(e.days)})` : ''}`);
+
+  const head = `MEM (${COMPACT_LEGEND}; m/d = date)`;
+  const lines: string[] = [head];
+  let used = head.length;
+  const push = (line: string) => { if (used + line.length + 1 > budget) return false; lines.push(line); used += line.length + 1; return true; };
+  for (const l of dayLines) if (!push(l)) break;
+  if (oldLines.length) {
+    push(`Older than ${fullDays}d, counts:`);
+    for (const l of oldLines) if (!push(l)) break;
+  }
+  return lines.join('\n');
+}
+
+/** Rough token estimate (about 4 characters per token) for budgets and tests. */
+export const approxTokens = (s: string) => Math.ceil(s.length / 4);

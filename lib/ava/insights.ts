@@ -1,3 +1,4 @@
+import { compactLogs } from './memory';
 import type { AvaUser } from '@/types';
 import { latestPeriodStartStr } from './period';
 import type { MemoryLog } from '@/types';
@@ -63,14 +64,7 @@ async function callGemini(model: string, prompt: string): Promise<string> {
 }
 
 function formatLogs(logs: MemoryLog[]): string {
-  return logs
-    .map(l => {
-      const date = new Date(l.logged_at).toLocaleDateString('en-NG', {
-        day: 'numeric', month: 'short', year: 'numeric',
-      });
-      return `[${l.category}] ${l.summary} — ${date}`;
-    })
-    .join('\n');
+  return compactLogs(logs, { budgetChars: 2400 });
 }
 
 // ─── What have you learned about me? ─────────────────────────────────────────

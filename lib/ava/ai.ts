@@ -311,7 +311,7 @@ Goal: ${user.reproductive_goal}
 
 ${cycleFacts}
 
-Her memory log (most recent first; entries marked [chat] are Ava's own short topic notes, not things she reported):
+Her memory log (only things she reported):
 ${context}
 
 Her question: "${message}"

@@ -1,3 +1,4 @@
+import { compactLogs } from './memory';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { AvaUser, CycleData, MemoryLog, LogCategory, ChatTurn } from '@/types';
 
@@ -575,19 +576,8 @@ export async function findSymptomPattern(
 }
 
 export function formatMemoryForAI(logs: MemoryLog[]): string {
-  if (logs.length === 0) return 'No history yet.';
-  return logs
-    .map((l) => {
-      const date = new Date(l.logged_at).toLocaleDateString('en-NG', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      return `[${l.category}] ${l.summary} — ${date}`;
-    })
-    .join('\n');
+  // Compact on purpose: see compactLogs in ./memory (tokens are the budget).
+  return compactLogs(logs);
 }
 
 // ─── Rate limiting ──────────────────────────────────────────────────────────
