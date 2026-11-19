@@ -2,7 +2,7 @@
 // Pattern copied from naira.autos: English lives at the root, every other
 // language lives under /{lang}/ with a translated hub segment.
 
-export const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://avacare-alpha.vercel.app').replace(/\/$/, '');
+export const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.verm.app').replace(/\/$/, '');
 
 // Bare bot URL on purpose: the bot treats "/start <payload>" as a referral code.
 export const BOT_URL = `https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'Ava_care_bot'}`;
