@@ -356,7 +356,9 @@ const SYMPTOM_NOUNS = 'cramps?|cramping|headaches?|migraines?|pain|pains|aches?|
 /** She says it is not happening, or it is over. */
 export function isNegatedOrResolved(lower: string): boolean {
   if (new RegExp(`\\b(no|without|zero|never had|don'?t have|didn'?t have|haven'?t had|free of|not having)\\s+(any\\s+|more\\s+)?(\\w+\\s+)?(${SYMPTOM_NOUNS})\\b`).test(lower)) return true;
-  if (/\b(gone|went away|disappeared|cleared up|no longer|not anymore|much better|feeling better|got better|getting better|has stopped|have stopped|stopped hurting|over now)\b/.test(lower)) return true;
+  // "gone" only counts as relief after a symptom word: "my cramps are gone" is relief, "my voice is gone" is the problem.
+  if (new RegExp(`\\b(${SYMPTOM_NOUNS})\\s+(is |are |was |were |has |have |all |finally )*gone\\b`).test(lower)) return true;
+  if (/\b(went away|disappeared|cleared up|no longer|not anymore|much better|feeling better|got better|getting better|has stopped|have stopped|stopped hurting|over now)\b/.test(lower)) return true;
   if (/\b(good|great|happy|lovely|amazing|wonderful|positive|upbeat|excellent)\s+mood\b|\bmood\b[^.!?]*\b(good|great|happy|amazing|wonderful)\b/.test(lower)) return true;
   // A question about her history is for the memory answer, not a remedy list.
   if (/\b(when|how often|how many times|last time)\b/.test(lower) && /\b(did i|have i|was i|do i)\b/.test(lower)) return true;

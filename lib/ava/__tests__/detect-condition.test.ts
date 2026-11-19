@@ -26,3 +26,11 @@ const cases: [string, string | null][] = [
 describe('detectCondition', () => {
   it.each(cases)('%s -> %s', (msg, expected) => { expect(detectCondition(msg)).toBe(expected); });
 });
+
+describe('detectCondition: "gone"', () => {
+  it('relief after a symptom word is not a symptom; a lost voice still is', () => {
+    expect(detectCondition('my cramps are gone')).toBeNull();
+    expect(detectCondition('the headache has finally gone')).toBeNull();
+    expect(detectCondition('my voice is gone')).toBe('hoarse_voice');
+  });
+});
