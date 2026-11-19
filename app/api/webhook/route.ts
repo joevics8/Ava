@@ -674,6 +674,12 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     try {
       const { searchMemoryHistory } = await import('@/lib/ava/db');
       recall = formatRecall(await searchMemoryHistory(user.id, text, user.plan));
+      // Add search vectors to her older entries in the background (no-op once all are done).
+      if (user.plan === 'premium') {
+        const { waitUntil } = await import('@vercel/functions');
+        const { embedMissingMemories } = await import('@/lib/ava/db');
+        waitUntil(embedMissingMemories(20, user.id).catch(() => {}));
+      }
     } catch (e) { console.error('memory recall failed', e); }
     const bodyContext = `${describeBodyContext(cycleRow, memoryLogs)}\n\n${describeFacts(facts)}${recall ? `\n\n${recall}` : ''}`;
 

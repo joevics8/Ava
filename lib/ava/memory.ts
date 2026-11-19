@@ -267,3 +267,19 @@ export function formatRecall(rows: readonly CompactLog[], opts: { now?: Date; ma
     ...(more > 0 ? [`(+${more} older matching entries not shown)`] : []),
   ].join('\n');
 }
+
+/** The word match runs first; the meaning match fills in only when it found fewer than this many. */
+export const SEMANTIC_FILL_BELOW = 8;
+
+/** Union of both matchers by id, newest first (formatRecall then limits each day and shows 15). */
+export function mergeRecallRows<T extends { id?: string; logged_at: string }>(byWords: readonly T[], byMeaning: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const r of [...byWords, ...byMeaning]) {
+    const key = r.id ?? `${r.logged_at}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out.sort((a, b) => (a.logged_at < b.logged_at ? 1 : -1)).slice(0, 80);
+}

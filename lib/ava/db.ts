@@ -391,6 +391,16 @@ export async function addMemoryLog(
     if (recent && isDuplicateEvent(summary, eventDate, recent)) return false;
   }
 
+  const source = opts.source ?? (category === 'chat' || category === 'insight' ? 'ava' : 'user');
+  // Meaning-based search vector, for what SHE reported only. Best-effort: if embedding is slow or
+  // fails the entry is still saved, and the backfill adds the vector later.
+  let embedding: string | null = null;
+  if (source === 'user') {
+    const { embedText, embeddingText, toPgVector } = await import('./embeddings');
+    const v = await embedText(embeddingText(summary, opts.detail), 'RETRIEVAL_DOCUMENT', { timeoutMs: 2500 });
+    if (v) embedding = toPgVector(v);
+  }
+
   const { error } = await supabaseAdmin.from('memory_log').insert({
     user_id: userId,
     category,
@@ -399,7 +409,8 @@ export async function addMemoryLog(
     event_date: eventDate,
     cycle_day: opts.cycleDay ?? null,
     detail: opts.detail ? opts.detail.slice(0, 300) : null,
-    source: opts.source ?? (category === 'chat' || category === 'insight' ? 'ava' : 'user'),
+    source,
+    embedding,
   });
   if (error) { console.error('memory_log save failed:', error.message); return false; }
   return true;
@@ -432,25 +443,78 @@ export async function deleteMemoryEvent(userId: string, id: string): Promise<boo
 }
 
 /**
- * Older entries (past the 14-day window of normal chat) that match what she is
+ * Older entries (past the 14-day window of normal chat) related to what she is
  * talking about. Premium only: free keeps 14 days of memory, which the normal
- * context already covers. Returns the newest matches she reported (the caller shows 15).
+ * context already covers.
+ *
+ * Two matchers, merged:
+ *  1. words: her topic words plus synonyms, matched against the tag and her own words;
+ *  2. meaning: vector search, used when the word match finds little, so it can find
+ *     "period pain" for "cramps", slang, misspellings and other languages.
  */
 export async function searchMemoryHistory(userId: string, text: string, plan: 'free' | 'premium'): Promise<MemoryLog[]> {
   if (plan !== 'premium') return [];
-  const { recallTerms, recallOrFilter } = await import('./memory');
-  const filter = recallOrFilter(recallTerms(text));
-  if (!filter) return [];
+  const { recallTerms, recallOrFilter, mergeRecallRows, SEMANTIC_FILL_BELOW } = await import('./memory');
   const newest = new Date(Date.now() - 14 * 86400000).toISOString();
   const oldest = new Date(Date.now() - 150 * 86400000).toISOString();
-  const { data, error } = await supabaseAdmin
-    .from('memory_log').select('*')
-    .eq('user_id', userId).eq('source', 'user')
-    .lt('logged_at', newest).gte('logged_at', oldest)
-    .or(filter)
-    .order('logged_at', { ascending: false }).limit(80); // formatRecall shows the newest 15 after the per-day limit
-  if (error) { console.error('memory recall failed:', error.message); return []; }
-  return (data ?? []) as MemoryLog[];
+
+  let byWords: MemoryLog[] = [];
+  const filter = recallOrFilter(recallTerms(text));
+  if (filter) {
+    const { data, error } = await supabaseAdmin
+      .from('memory_log').select('*')
+      .eq('user_id', userId).eq('source', 'user')
+      .lt('logged_at', newest).gte('logged_at', oldest)
+      .or(filter)
+      .order('logged_at', { ascending: false }).limit(80); // formatRecall shows the newest 15 after the per-day limit
+    if (error) console.error('memory recall failed:', error.message);
+    else byWords = (data ?? []) as MemoryLog[];
+  }
+
+  let byMeaning: MemoryLog[] = [];
+  if (byWords.length < SEMANTIC_FILL_BELOW && text.trim().length >= 8) {
+    byMeaning = await semanticSearchMemory(userId, text, oldest, newest);
+  }
+  return mergeRecallRows(byWords, byMeaning);
+}
+
+export async function semanticSearchMemory(userId: string, text: string, after: string, before: string, limit = 40): Promise<MemoryLog[]> {
+  try {
+    const { embedText, toPgVector, matchMin } = await import('./embeddings');
+    const q = await embedText(text, 'RETRIEVAL_QUERY', { timeoutMs: 3000 });
+    if (!q) return [];
+    const { data, error } = await supabaseAdmin.rpc('match_memory', {
+      p_user: userId, p_embedding: toPgVector(q), p_after: after, p_before: before, p_min: matchMin(), p_limit: limit,
+    });
+    if (error) { console.error('match_memory failed:', error.message); return []; }
+    return (data ?? []) as MemoryLog[];
+  } catch (e) {
+    console.error('semantic memory search failed', e);
+    return [];
+  }
+}
+
+/**
+ * Adds the search vector to entries saved before embeddings existed (or when embedding failed).
+ * Returns how many were embedded, how many failed and how many remain.
+ */
+export async function embedMissingMemories(limit = 40, userId?: string): Promise<{ embedded: number; failed: number; remaining: number }> {
+  const { embedText, embeddingText, toPgVector } = await import('./embeddings');
+  let q = supabaseAdmin.from('memory_log').select('id,summary,detail').eq('source', 'user').is('embedding', null)
+    .order('logged_at', { ascending: false }).limit(limit);
+  if (userId) q = q.eq('user_id', userId);
+  const { data } = await q;
+  let embedded = 0, failed = 0;
+  for (const row of data ?? []) {
+    const v = await embedText(embeddingText(row.summary, row.detail), 'RETRIEVAL_DOCUMENT', { timeoutMs: 5000 });
+    if (!v) { failed++; continue; }
+    const { error } = await supabaseAdmin.from('memory_log').update({ embedding: toPgVector(v) }).eq('id', row.id);
+    if (error) failed++; else embedded++;
+  }
+  let rem = supabaseAdmin.from('memory_log').select('id', { count: 'exact', head: true }).eq('source', 'user').is('embedding', null);
+  if (userId) rem = rem.eq('user_id', userId);
+  const { count } = await rem;
+  return { embedded, failed, remaining: count ?? 0 };
 }
 
 /** What she told Ava, newest first, for /memory (her events only, not Ava's notes). */
