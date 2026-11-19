@@ -5,7 +5,7 @@
 export type { Remedy } from './remedy-engine';
 
 // Condition keyword detector — still used by webhook
-export function detectCondition(message: string): string | null {
+function detectConditionRaw(message: string): string | null {
   const lower = message.toLowerCase();
 
   // Body-location + skin-symptom combos need to match regardless of word
@@ -337,5 +337,65 @@ export function detectCondition(message: string): string | null {
   if (/\bear ?(pain|ache)s?\b/.test(lower)) return 'earache';
   if (/\bclots?\b/.test(lower)) return 'period_clots';
   if (/\brash(es)?\b/.test(lower)) return 'sensitive_skin';
+  return null;
+}
+
+
+// ─── Guards and extra phrasings around the keyword matcher ───────────────────
+// The keyword matcher above returns the first keyword found anywhere in the text,
+// which gave three kinds of wrong answer (found by running real phrasings through it):
+//  1. suggesting a remedy for something she says is NOT happening or is over:
+//     "no cramps today", "my cramps are gone";
+//  2. matching ordinary words: "good mood" -> PMS mood, "tired of this" -> fatigue;
+//  3. missing very common phrasings ("head hurts", "my stomach hurts", "feeling sad",
+//     "brown discharge", "my skin is breaking out"), or sending "brown discharge" to
+//     general vaginal health instead of spotting.
+
+const SYMPTOM_NOUNS = 'cramps?|cramping|headaches?|migraines?|pain|pains|aches?|bloating|nausea|spotting|acne|pimples?|breakouts?|bleeding|discharge|fatigue|cravings?|clots?|itching|soreness';
+
+/** She says it is not happening, or it is over. */
+export function isNegatedOrResolved(lower: string): boolean {
+  if (new RegExp(`\\b(no|without|zero|never had|don'?t have|didn'?t have|haven'?t had|free of|not having)\\s+(any\\s+|more\\s+)?(\\w+\\s+)?(${SYMPTOM_NOUNS})\\b`).test(lower)) return true;
+  if (/\b(gone|went away|disappeared|cleared up|no longer|not anymore|much better|feeling better|got better|getting better|has stopped|have stopped|stopped hurting|over now)\b/.test(lower)) return true;
+  if (/\b(good|great|happy|lovely|amazing|wonderful|positive|upbeat|excellent)\s+mood\b|\bmood\b[^.!?]*\b(good|great|happy|amazing|wonderful)\b/.test(lower)) return true;
+  // A question about her history is for the memory answer, not a remedy list.
+  if (/\b(when|how often|how many times|last time)\b/.test(lower) && /\b(did i|have i|was i|do i)\b/.test(lower)) return true;
+  return false;
+}
+
+/** Idioms and spellings that would fool the keyword matcher, rewritten before matching. */
+function normalizeForMatching(lower: string): string {
+  return lower
+    .replace(/\b(tired|sick|fed up|bored)\s+of\b/g, ' ')
+    .replace(/\b(breaking out|broken out|breaks out)\b/g, 'breakout')
+    .replace(/\bzits?\b/g, 'pimple');
+}
+
+// Checked BEFORE the keyword matcher: these would otherwise be swallowed by a broader keyword.
+const PRE_RULES: [RegExp, string][] = [
+  [/\bbrown (discharge|spotting|blood)\b|\blight bleeding\b|\bbleeding between (my )?periods\b|\bbleeding (in the )?(middle|mid)\b|\bmid[- ]?cycle (bleeding|spotting)\b/, 'spotting'],
+];
+
+// Checked only when the keyword matcher found nothing: common phrasings without a fixed keyword.
+const FALLBACK_RULES: [RegExp, string][] = [
+  [/\b(head|headache)\b[^.!?]*\b(hurts?|pounding|throbbing|aching|aches|pain|splitting)\b|\bpounding head\b/, 'headaches'],
+  [/\b(stomach|tummy|belly|abdomen|abdominal|pelvis|pelvic)\b[^.!?]*\b(hurts?|pain|painful|aching|aches|twisting)\b/, 'cramps'],
+  [/\bpainful (period|periods)\b|\bperiods? (is|are) (so |very )?painful\b/, 'cramps'],
+  [/\bback\b[^.!?]*\b(hurts?|pain|aching|aches|sore)\b|\bbackache\b/, 'back_pain'],
+  [/\b(feeling|feel|i'?m|im|i am)\s+(so |very |really )?(sad|low|down|tearful)\b|\b(so |very )?emotional\b/, 'pms_mood'],
+  [/\b(bleeding|period|flow)\b[^.!?]*\b(heavy|heavily|soaking|a lot)\b|\bheavy(ly)?\s+bleed/, 'heavy_flow'],
+  [/\b(hurts?|pain|painful|burning|burns|stings?)\b[^.!?]*\b(pee|peeing|urinat\w*|urine)\b|\b(pee|peeing|urinat\w*)\b[^.!?]*\b(hurts?|burn\w*|pain|stings?)\b/, 'uti_prone'],
+  [/\bitch\w*\b[^.!?]*\b(down there|vagina|vaginal|private)\b/, 'vaginal_itching'],
+  [/\bhair\b[^.!?]*\b(falling out|fall out|coming out|thinning|shedding)\b/, 'hair_thinning'],
+];
+
+export function detectCondition(message: string): string | null {
+  const lower = message.toLowerCase();
+  if (isNegatedOrResolved(lower)) return null;
+  const text = normalizeForMatching(lower);
+  for (const [re, cond] of PRE_RULES) if (re.test(text)) return cond;
+  const raw = detectConditionRaw(text);
+  if (raw) return raw;
+  for (const [re, cond] of FALLBACK_RULES) if (re.test(text)) return cond;
   return null;
 }
