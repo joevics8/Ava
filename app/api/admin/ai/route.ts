@@ -28,7 +28,7 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
 
   let input;

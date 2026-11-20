@@ -18,7 +18,7 @@ const Retry = z.object({ retry: z.string().uuid() });
 const Run = z.object({ process: z.literal(true) });
 
 export async function GET(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
 
   const id = req.nextUrl.searchParams.get('id');
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
 
   let body: unknown;
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
   const id = req.nextUrl.searchParams.get('id');
   if (!id || !z.string().uuid().safeParse(id).success) return NextResponse.json({ error: 'id required' }, { status: 400 });

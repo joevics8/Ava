@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LogoutButton } from './LogoutButton';
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +11,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Link href="/admin/tools" prefetch={false} className="text-sm font-semibold text-muted-ink hover:text-primary">Tools</Link>
           <span className="ml-auto flex gap-4 text-sm">
             <Link href="/" prefetch={false} className="text-muted-ink hover:text-primary">View site</Link>
-            <a href="/api/auth/logout" className="text-muted-ink hover:text-primary">Log out</a>
+            <LogoutButton />
           </span>
         </nav>
       </header>

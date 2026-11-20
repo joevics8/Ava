@@ -41,7 +41,7 @@ const revalidate = (language: string, slug: string) => {
 };
 
 export async function GET(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
   const slug = req.nextUrl.searchParams.get('slug');
   const language = req.nextUrl.searchParams.get('language') ?? 'en';
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
 
   let d: z.infer<typeof Upsert>;
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const denied = guardAdmin(req);
+  const denied = await guardAdmin(req);
   if (denied) return denied;
   const slug = req.nextUrl.searchParams.get('slug');
   const language = req.nextUrl.searchParams.get('language') ?? 'en';
