@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const roles: Record<string, string | undefined> = { admin1: 'admin', user2: undefined };
+const roles: Record<string, string | undefined> = { admin1: 'admin', user2: undefined, listed: undefined, unconfirmed: undefined };
 vi.mock('@/lib/supabase', () => ({
-  supabaseAdmin: { auth: { admin: { getUserById: async (id: string) => (id in roles ? { data: { user: { id, app_metadata: roles[id] ? { role: roles[id] } : {} } }, error: null } : { data: { user: null }, error: { message: 'nf' } }) } } },
+  supabaseAdmin: {
+    auth: { admin: { getUserById: async (id: string) => (id in roles ? { data: { user: { id, email: `${id}@x.test`, email_confirmed_at: id === 'unconfirmed' ? null : '2026-01-01', app_metadata: roles[id] ? { role: roles[id] } : {} } }, error: null } : { data: { user: null }, error: { message: 'nf' } }) } },
+    from: () => ({ select: () => ({ eq: (_c: string, email: string) => ({ maybeSingle: async () => ({ data: ['listed@x.test', 'unconfirmed@x.test'].includes(email) ? { email } : null }) }) }) }),
+  },
 }));
 beforeAll(() => { process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'; });
 
@@ -30,6 +33,11 @@ describe('guardAdmin', () => {
     expect((await guardAdmin(req('GET', 'abc.def')))?.status).toBe(401);
     expect((await guardAdmin(req('GET', createAdminCookie('user2'))))?.status).toBe(401);
     expect((await guardAdmin(req('GET', createAdminCookie('gone'))))?.status).toBe(401);
+  });
+  it('allows a confirmed listed email, but not an unconfirmed one', async () => {
+    const { guardAdmin, createAdminCookie } = await mod();
+    expect(await guardAdmin(req('GET', createAdminCookie('listed')))).toBeNull();
+    expect((await guardAdmin(req('GET', createAdminCookie('unconfirmed'))))?.status).toBe(401);
   });
   it('allows a user with the admin role', async () => {
     const { guardAdmin, createAdminCookie } = await mod();

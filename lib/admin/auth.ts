@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// Admin access = a Supabase Auth user whose app_metadata.role is "admin".
+// Admin access = a Supabase Auth user with app_metadata.role "admin" or a confirmed email in admin_emails.
 // app_metadata can only be changed with the service-role key, so nobody can give
 // themselves the role by signing up. There is no signup page: users are created in
 // the Supabase dashboard (Authentication > Users) and then given the role.
@@ -43,12 +43,25 @@ export function readAdminCookie(value: string | undefined, now = Date.now()): st
   } catch { return null; }
 }
 
-/** Does this Supabase user currently have the admin role? (asks Supabase every time) */
+/**
+ * Admin = a Supabase Auth user who either has app_metadata.role = "admin" or has a CONFIRMED email
+ * listed in the admin_emails table. Asked fresh every time, so removing either locks them out at once.
+ * (Confirmed matters: with an unconfirmed address, anyone could sign up as that email.)
+ */
+export function adminDecision(user: { email?: string | null; email_confirmed_at?: string | null; app_metadata?: Record<string, unknown> | null }, listed: boolean): boolean {
+  if (user.app_metadata?.role === 'admin') return true;
+  return !!user.email && !!user.email_confirmed_at && listed;
+}
+
 export async function userIsAdmin(userId: string): Promise<boolean> {
   try {
     const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
     if (error || !data?.user) return false;
-    return data.user.app_metadata?.role === 'admin';
+    const u = data.user;
+    if (u.app_metadata?.role === 'admin') return true;
+    if (!u.email || !u.email_confirmed_at) return false;
+    const { data: row } = await supabaseAdmin.from('admin_emails').select('email').eq('email', u.email.toLowerCase()).maybeSingle();
+    return adminDecision(u, !!row);
   } catch { return false; }
 }
 
