@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickCondition, conditionEmbeddingText } from '../condition-match';
+import { pickCondition, conditionEmbeddingText, looksLikeQuestionOrRequest } from '../condition-match';
 
 const m = (condition: string, similarity: number) => ({ condition, label: condition, similarity });
 const opts = { min: 0.72, margin: 0.02 };
@@ -15,4 +15,12 @@ describe('pickCondition', () => {
 describe('conditionEmbeddingText', () => {
   it('joins label and trimmed description', () => expect(conditionEmbeddingText('Bloating', ' gas ')).toBe('Bloating. gas'));
   it('label only', () => expect(conditionEmbeddingText('Bloating', null)).toBe('Bloating'));
+});
+describe('looksLikeQuestionOrRequest', () => {
+  it('skips questions and requests', () => {
+    for (const t of ['what does ovulation mean', 'how long is a normal cycle', 'remind me to drink water', 'is this normal?']) expect(looksLikeQuestionOrRequest(t)).toBe(true);
+  });
+  it('keeps symptom statements', () => {
+    for (const t of ['my legs feel restless at night', 'I feel dizzy when I stand up']) expect(looksLikeQuestionOrRequest(t)).toBe(false);
+  });
 });

@@ -4,7 +4,7 @@ import { embedText, toPgVector } from './embeddings';
 // Meaning-based fallback for symptom -> remedy condition. Only used when the word matcher
 // finds nothing. A wrong match is worse than a miss, so the bar is deliberately high.
 
-export const conditionMin = () => Number(process.env.CONDITION_MATCH_MIN) || 0.72;
+export const conditionMin = () => Number(process.env.CONDITION_MATCH_MIN) || 0.70;
 export const conditionMargin = () => Number(process.env.CONDITION_MATCH_MARGIN) || 0.02;
 
 // Serious / diagnostic conditions are never suggested from a fuzzy match.
@@ -66,13 +66,19 @@ export async function embedMissingConditions(limit = 60): Promise<{ embedded: nu
   return { embedded, failed, remaining: Math.max(0, todo.length - embedded) };
 }
 
+/** Questions and requests ("what does ovulation mean", "remind me to drink water") are not symptoms. */
+export function looksLikeQuestionOrRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t.endsWith('?') || /^(what|how|when|why|where|who|which|can|could|does|do|is|are|should|will|would|please|remind|tell|explain|show|recommend|give)\b/.test(t);
+}
+
 /** Word matcher first; meaning matcher only when it finds nothing. */
 export async function detectConditionSmart(text: string): Promise<string | null> {
   const { detectCondition, isNegatedOrResolved } = await import('./remedies');
   const byWord = detectCondition(text);
   if (byWord) return byWord;
   const t = text.trim();
-  if (t.length < 6 || t.length > 200) return null;
+  if (t.length < 6 || t.length > 200 || looksLikeQuestionOrRequest(t)) return null;
   if (isNegatedOrResolved(t.toLowerCase())) return null;
   try { return pickCondition(await matchConditionsByMeaning(t)); } catch { return null; }
 }
