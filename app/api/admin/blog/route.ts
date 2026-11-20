@@ -9,7 +9,7 @@ import { slugify } from '@/lib/admin/content-ai';
 
 export const dynamic = 'force-dynamic';
 
-const LIST_COLS = 'slug,language,title,category,published,review_hold,published_at,updated_at';
+const LIST_COLS = 'slug,language,title,category,published,review_hold,published_at,updated_at,auto_approved,auto_check_notes';
 const lang = z.enum(ENABLED_LANGS as unknown as [string, ...string[]]);
 
 /**

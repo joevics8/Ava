@@ -9,7 +9,7 @@ import { Btn, Counter, Field, FaqEditor, Notice, api, inputCls } from './ui';
 
 type State = 'hold' | 'queued' | 'published';
 
-interface Row { slug: string; language: string; title: string; category: string | null; published: boolean; review_hold: boolean; published_at: string | null; updated_at: string | null }
+interface Row { slug: string; language: string; title: string; category: string | null; published: boolean; review_hold: boolean; published_at: string | null; updated_at: string | null; auto_approved?: boolean; auto_check_notes?: string[] | null }
 
 interface Form {
   isNew: boolean; language: string; slug: string; title: string; excerpt: string; meta_description: string;
@@ -131,7 +131,11 @@ export function BlogAdmin() {
                 <span className="mt-1 flex items-center gap-2 text-xs text-muted-ink">
                   <span className={`rounded-full px-2 py-0.5 font-semibold ${STATE_CLS[s]}`}>{STATE_LABEL[s]}</span>
                   <span>{r.language.toUpperCase()}</span>{r.category && <span>· {r.category}</span>}
+                  {r.auto_approved && <span>· auto-checked</span>}
                 </span>
+                {s === 'hold' && r.auto_check_notes && r.auto_check_notes.length > 0 && (
+                  <span className="mt-1 block text-xs text-amber-900">Held by checks: {r.auto_check_notes.join(' ')}</span>
+                )}
               </button>
             );
           })}

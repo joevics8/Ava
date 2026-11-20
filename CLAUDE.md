@@ -27,4 +27,7 @@ Brand: the website is **Verm** (Verm.app); **Ava** is only the name of the Teleg
 4. Release in waves; watch Search Console before the next wave.
 
 ## Blog drafts
-Drafts are inserted as `published=false` and **reviewed by a human** before the cron can release them. The cron never generates text.
+Drafts are inserted as held (`published=false`, `review_hold=true`). `/api/cron/approve-blogs` (cron-job.org, no secret) runs automatic checks (`lib/admin/blog-checks.ts`: length, headings, meta, FAQs, placeholders, AI chatter, risky health wording, repeats, duplicate titles), releases drafts that pass, and publishes released drafts at `BLOG_DAILY_CAP` per day. Drafts that fail stay held with the reasons in `auto_check_notes` (shown in /admin/blog) and are re-checked only after an edit. The cron never generates text.
+
+## Admin
+`/admin` needs a Supabase Auth user with `app_metadata.role = 'admin'` (no signup; create users in the Supabase dashboard). See `lib/admin/auth.ts`.
