@@ -359,6 +359,9 @@ export function isNegatedOrResolved(lower: string): boolean {
   // "gone" only counts as relief after a symptom word: "my cramps are gone" is relief, "my voice is gone" is the problem.
   if (new RegExp(`\\b(${SYMPTOM_NOUNS})\\s+(is |are |was |were |has |have |all |finally )*gone\\b`).test(lower)) return true;
   if (/\b(went away|disappeared|cleared up|no longer|not anymore|much better|feeling better|got better|getting better|has stopped|have stopped|stopped hurting|over now)\b/.test(lower)) return true;
+  // Getting better: "the acne is gradually subsiding", "cramps are easing off". Not when she says it is NOT improving.
+  const IMPROVING = '(subsid\\w*|improv\\w*|clearing( up)?|fading|fades|easing( off)?|eases|healing|heals|settling( down)?|calming( down)?|reducing|lessening|disappearing|going down|going away|wearing off|less (painful|severe|intense))';
+  if (new RegExp(`\\b${IMPROVING}\\b`).test(lower) && !/\b(not|isn'?t|aren'?t|never|barely|hardly|won'?t|doesn'?t|don'?t|nothing)\b[^.!?]*\b(subsid|improv|clear|fad|eas|heal|settl|calm|reduc|lessen|go(ing)? away)/.test(lower)) return true;
   if (/\b(good|great|happy|lovely|amazing|wonderful|positive|upbeat|excellent)\s+mood\b|\bmood\b[^.!?]*\b(good|great|happy|amazing|wonderful)\b/.test(lower)) return true;
   // A question about her history is for the memory answer, not a remedy list.
   if (/\b(when|how often|how many times|last time)\b/.test(lower) && /\b(did i|have i|was i|do i)\b/.test(lower)) return true;

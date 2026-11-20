@@ -3,7 +3,7 @@ import { detectCondition } from '../remedies';
 
 const cases: [string, string | null][] = [
   // wrong before: said it is NOT happening / over
-  ['no cramps today', null], ['my cramps are gone', null], ['no more headaches this week', null], ['the bloating has stopped', null], ['I feel much better now', null],
+  ['no cramps today', null], ['my cramps are gone', null], ['no more headaches this week', null], ['the bloating has stopped', null], ['I feel much better now', null], ['The acne is gradually subsiding', null], ['my cramps are easing off', null], ['the headache is clearing up', null], ['the bloating is improving', null],
   // wrong before: ordinary words
   ["I'm in a good mood today", null], ['my mood is great', null], ['tired of this', null], ["I'm sick of work", null],
   // history questions go to the memory answer
@@ -32,5 +32,12 @@ describe('detectCondition: "gone"', () => {
     expect(detectCondition('my cramps are gone')).toBeNull();
     expect(detectCondition('the headache has finally gone')).toBeNull();
     expect(detectCondition('my voice is gone')).toBe('hoarse_voice');
+  });
+});
+
+describe('detectCondition: getting better vs not getting better', () => {
+  it('still suggests when she says it is not improving', () => {
+    expect(detectCondition('my acne is not improving')).not.toBeNull();
+    expect(detectCondition("the cramps aren't easing at all")).not.toBeNull();
   });
 });
