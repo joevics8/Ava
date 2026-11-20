@@ -285,6 +285,18 @@ async function processUpdate(update: any) {
         return;
       }
 
+      // ── Sleep audio button callbacks ─────────────────────────────────────
+      if (cbData.startsWith('aud_')) {
+        try {
+          const { handleAudioCallback } = await import('@/lib/ava/audio');
+          await handleAudioCallback(cbChatId, cbData, sendMessage);
+        } catch (err) {
+          console.error('Audio callback error:', err);
+          await sendMessage(cbChatId, 'Something went wrong — please try /sleep again 🌸');
+        }
+        return;
+      }
+
       // ── Meditation menu button callbacks ─────────────────────────────────
       if (cbData.startsWith('med_')) {
         try {
@@ -792,6 +804,21 @@ async function handleCommand(
       return;
     }
 
+    case '/sleep': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      const { showSleepMenu } = await import('@/lib/ava/audio');
+      await showSleepMenu(chatId, send, sendKb);
+      return;
+    }
+
+    case '/motivation': {
+      if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
+      const { sendMotivation } = await import('@/lib/ava/audio');
+      const { getDailyMorningAffirmation } = await import('@/lib/ava/affirmations');
+      await sendMotivation(chatId, send, getDailyMorningAffirmation());
+      return;
+    }
+
     case '/insights': {
       if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
       await sendTyping(chatId);
@@ -906,6 +933,8 @@ async function handleCommand(
         "/foods — nutrition & meal ideas\n" +
         "/affirmations — daily affirmations\n" +
         "/meditate — short guided meditations\n" +
+        "/sleep — sleep sounds & bedtime audio\n" +
+        "/motivation — today's motivation\n" +
         "/remedies — natural remedies\n" +
         "/insights — what Ava has learned about you\n" +
         "/memory — what Ava remembers (and forget things)\n" +

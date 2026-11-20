@@ -340,6 +340,10 @@ export async function handleMeditationCallback(
   // setup stays text (she reads it before starting), the script is the
   // part that becomes a voice note later.
   await send(chatId, `${pick.title} \u00b7 ${pick.duration}\n\n${pick.setup}`, false);
+  // A recorded session for this purpose wins; without one (or if sending fails) she gets the written script.
+  const { listTracks, pickRandom, sendTrack } = await import('./audio');
+  const track = pickRandom(await listTracks('meditation', key));
+  if (track && (await sendTrack(chatId, track))) return true;
   await send(chatId, pick.script, false);
   return true;
 }

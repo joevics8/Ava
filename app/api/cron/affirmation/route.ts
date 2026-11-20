@@ -45,10 +45,13 @@ export async function GET(req: NextRequest) {
     if (!users?.length) return NextResponse.json({ sent: 0 });
 
     const text = getDailyMorningAffirmation();
+    const { listTracks, trackForDay, sendTrack } = await import('@/lib/ava/audio');
+    const motivation = trackForDay(await listTracks('motivation'));
     let sent = 0;
     for (const user of users as AvaUser[]) {
       try {
         await sendAffirmation(user.telegram_id, text);
+        if (motivation) await sendTrack(user.telegram_id, motivation, 'Today’s motivation 🌸');
         sent++;
       } catch (err) {
         console.error(`Affirmation send failed for ${user.telegram_id}:`, err);
