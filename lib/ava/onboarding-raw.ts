@@ -40,7 +40,8 @@ export async function handleOnboardingStep(
   // and to localise food suggestions (/foods and the morning digest).
   if (step === 1) {
     const country = message.trim().slice(0, 60);
-    await updateUser(telegramId, { country, onboarding_step: 2 } as any);
+    const { tzForCountry } = await import('./timezone');
+    await updateUser(telegramId, { country, timezone: tzForCountry(country), onboarding_step: 2 } as any);
     await send(chatId, `Got it 💕\n\nHow old are you?`);
     return;
   }

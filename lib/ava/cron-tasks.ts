@@ -1,5 +1,6 @@
 import { withFreshForecast } from './cycle';
 import { sendTelegram } from '@/lib/telegram';
+import { useUserTimezone } from './timezone';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateWeeklyBriefing } from '@/lib/ava/insights';
 import type { AvaUser } from '@/types';
@@ -62,6 +63,7 @@ export async function runWeeklyBriefings(): Promise<{ sent: number; total: numbe
   let sent = 0;
   for (const user of users as AvaUser[]) {
     try {
+      useUserTimezone((user as any).timezone);
       const { data: cycleRow } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
       const cycle = withFreshForecast(cycleRow); // forecast always recalculated from the period dates

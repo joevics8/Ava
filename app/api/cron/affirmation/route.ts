@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getDailyMorningAffirmation } from '@/lib/ava/affirmations';
 import type { AvaUser } from '@/types';
 import { sendTelegram } from '@/lib/telegram';
+import { DEFAULT_TZ, localDateIn, morningDue, useUserTimezone } from '@/lib/ava/timezone';
 
 async function sendAffirmation(chatId: number, text: string) {
   await sendTelegram(chatId, text);
@@ -41,8 +42,12 @@ export async function GET(req: NextRequest) {
     let sent = 0;
     for (const user of users as AvaUser[]) {
       try {
+        const tz = (user as any).timezone || DEFAULT_TZ;
+        useUserTimezone(tz);
+        if (!morningDue(tz, (user as any).affirmation_last_sent_on)) continue;
         await sendAffirmation(user.telegram_id, text);
         if (motivation) await sendTrack(user.telegram_id, motivation, 'Today’s motivation 🌸');
+        await supabaseAdmin.from('users').update({ affirmation_last_sent_on: localDateIn(new Date(), tz) }).eq('id', user.id);
         sent++;
       } catch (err) {
         console.error(`Affirmation send failed for ${user.telegram_id}:`, err);

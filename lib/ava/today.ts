@@ -1,3 +1,4 @@
+import { localHour } from './timezone';
 import { getCycleData, getMemoryContext } from './db';
 import { latestPeriodStart, isLastPeriodConfirmed } from './period';
 import { getCycleStatus, phaseEmoji, predictNextPeriod, predictOvulationWindow } from './cycle';
@@ -12,7 +13,7 @@ function formatDate(d: Date): string {
 }
 
 function getGreeting(): string {
-  const hour = new Date().getUTCHours() + 1;
+  const hour = localHour();
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';

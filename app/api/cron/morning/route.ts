@@ -6,6 +6,7 @@ import { getCycleStatus } from '@/lib/ava/cycle';
 import { latestPeriodStart, localDateStr, periodCheckButtons, periodCheckMessage, periodCheckNote, planPeriodCheck } from '@/lib/ava/period';
 import type { AvaUser } from '@/types';
 import { sendTelegram } from '@/lib/telegram';
+import { DEFAULT_TZ, localHour, morningDue, useUserTimezone } from '@/lib/ava/timezone';
 
 async function sendMorning(chatId: number, text: string, showButtons: boolean, keyboard?: unknown) {
   const kb = keyboard ?? (showButtons ? moodButtons : undefined);
@@ -40,8 +41,18 @@ export async function GET(req: NextRequest) {
   if (!users?.length) return NextResponse.json({ sent: 0 });
 
   let sent = 0;
+  let due = 0;
   for (const user of users as AvaUser[]) {
     try {
+      // Her own clock: the message goes out once per local day, from her local morning hour on.
+      const tz = (user as any).timezone || DEFAULT_TZ;
+      useUserTimezone(tz);
+      if (!morningDue(tz, (user as any).morning_last_sent_on)) continue;
+      due++;
+      const markSent = async () => {
+        const { error } = await supabaseAdmin.from('users').update({ morning_last_sent_on: localDateStr() }).eq('id', user.id);
+        if (error) console.error('morning_last_sent_on not saved (run the user_timezone migration):', error.message);
+      };
       const { data: cycleRow } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
       const cycle = withFreshForecast(cycleRow); // forecast always recalculated from the period dates
@@ -57,7 +68,7 @@ export async function GET(req: NextRequest) {
         const last = latestPeriodStart(cycle);
         const status = last ? getCycleStatus(last, Number(cycle.avg_cycle_length) || 28, cycle.period_duration || 5) : null;
         const note = status ? periodCheckNote(status.daysPastExpected) : '';
-        const hour = new Date().getUTCHours() + 1;
+        const hour = localHour();
         const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
         await sendMorning(
           user.telegram_id,
@@ -77,6 +88,7 @@ export async function GET(req: NextRequest) {
       };
       if (plan?.replaceDigest) {
         await askPeriodCheck();
+        await markSent();
         sent++;
         continue;
       }
@@ -93,13 +105,14 @@ export async function GET(req: NextRequest) {
       const { text, showMoodButtons } = await buildMorningDigest(user, cycle, logs || []);
       await sendMorning(user.telegram_id, text, showMoodButtons);
       await askPeriodCheck();
+      await markSent();
       sent++;
     } catch (err) {
       console.error(`Morning digest failed for ${user.telegram_id}:`, err);
     }
   }
 
-  return NextResponse.json({ sent, total: users.length });
+  return NextResponse.json({ sent, due, total: users.length });
   } catch (err) {
     console.error('Morning cron error:', err);
     await notifyAdmin('cron/morning', err);

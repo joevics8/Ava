@@ -14,6 +14,7 @@ export interface AvaUser {
   weight: number | null;
   reproductive_goal: ReproductiveGoal | null;
   country: string | null;
+  timezone?: string;
   food_profile_step: number;
   food_profile: FoodProfile | null;
   affirmations_enabled: boolean;

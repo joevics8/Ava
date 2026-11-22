@@ -1,3 +1,4 @@
+import { localHour } from './timezone';
 import type { AvaUser } from '@/types';
 
 type SendFn = (chatId: number, text: string) => Promise<void>;
@@ -84,7 +85,7 @@ export async function buildPregnancySummary(user: AvaUser): Promise<string> {
 }
 
 function getGreeting(): string {
-  const hour = new Date().getUTCHours() + 1;
+  const hour = localHour();
   if (hour < 12) return 'morning';
   if (hour < 17) return 'afternoon';
   return 'evening';

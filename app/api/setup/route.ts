@@ -36,6 +36,7 @@ export async function GET() {
         { command: 'foods', description: 'Nutrition & meal ideas' },
         { command: 'affirmations', description: 'Daily affirmations' },
         { command: 'meditate', description: 'Short guided meditations' },
+        { command: 'timezone', description: 'Set your time zone' },
         { command: 'sleep', description: 'Sleep sounds and bedtime audio' },
         { command: 'motivation', description: 'Today\'s motivation' },
         { command: 'log', description: 'Track symptoms, mood or flow' },

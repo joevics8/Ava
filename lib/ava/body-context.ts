@@ -1,3 +1,4 @@
+import { wallClock } from './timezone';
 import type { CycleData, MemoryLog } from '@/types';
 import { latestPeriodStart } from './period';
 import { getCycleStatus, wholeDaysBetween } from './cycle';
@@ -12,9 +13,9 @@ import { getDayData } from './cycle-lookup';
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 
-// West Africa (UTC+1), matching getGreeting() and getCycleStatus().
+// Her local wall clock, matching getGreeting() and getCycleStatus().
 function localNow(now: Date): Date {
-  return new Date(now.getTime() + 60 * 60 * 1000);
+  return wallClock(now);
 }
 
 function fmt(d: Date): string {

@@ -1,3 +1,4 @@
+import { localDateIn } from './timezone';
 // One source of truth for "when did her last period start" and for the
 // "is your period out?" check. Pure functions (no DB, no network) so every
 // surface (morning digest, /today, chat context, dashboard, alerts) reads the
@@ -42,9 +43,9 @@ function utcDay(iso: string): number {
   return Date.UTC(y, m - 1, d);
 }
 
-/** Today's calendar date in West Africa (UTC+1) as YYYY-MM-DD, matching getCycleStatus(). */
-export function localDateStr(now: Date = new Date()): string {
-  return new Date(now.getTime() + 60 * 60 * 1000).toISOString().slice(0, 10);
+/** Today's calendar date in the current user's time zone (Lagos when none is set) as YYYY-MM-DD. */
+export function localDateStr(now: Date = new Date(), tz?: string): string {
+  return localDateIn(now, tz);
 }
 
 export function addDaysStr(iso: string, n: number): string {

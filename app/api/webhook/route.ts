@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { latestPeriodStartStr } from '@/lib/ava/period';
 import { waitUntil } from '@vercel/functions';
+import { useUserTimezone } from '@/lib/ava/timezone';
 import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage, getCycleData } from '@/lib/ava/db';
 import { describeBodyContext, notYetReply, periodStartedReply } from '@/lib/ava/body-context';
 import {
@@ -210,6 +211,7 @@ async function processUpdate(update: any) {
 
       const cbUser = await getUser(cbTelegramId);
       if (!cbUser) return;
+      useUserTimezone((cbUser as any).timezone);
 
       // ── "Is your period out?" Yes / No buttons (sent in place of the morning digest) ──
       if (cbData.startsWith('pc_')) {
@@ -386,6 +388,7 @@ async function processUpdate(update: any) {
         await sendMessage(chatId, `Something went wrong on my end — could you try again? 🌸`);
         return NextResponse.json({ ok: true });
       }
+      useUserTimezone((user as any).timezone);
 
       // A brand-new or mid-onboarding user sending a photo first would
       // otherwise skip straight to test-strip analysis before Ava even
@@ -447,6 +450,7 @@ async function processUpdate(update: any) {
 
     // ── Get or create user ───────────────────────────────────────────────────
     let user = await getUser(telegramId);
+    if (user) useUserTimezone((user as any).timezone);
     if (!user) {
       // Telegram deep links (t.me/Ava_care_bot?start=CODE) arrive as the
       // literal message text "/start CODE" on first contact — capture the
@@ -813,6 +817,22 @@ async function handleCommand(
       return;
     }
 
+    case '/timezone': {
+      if (!user) { await send(chatId, "Send /start first 🌸"); return; }
+      const { parseTimezoneInput, describeLocalTime } = await import('@/lib/ava/timezone');
+      const arg = text.replace(/^\/timezone(@\w+)?\s*/i, '').trim();
+      const current = user.timezone || 'Africa/Lagos';
+      if (!arg) {
+        await send(chatId, `Your time zone is ${current} (it is ${describeLocalTime(current)} for you now).\n\nTo change it, send for example:\n/timezone Europe/London\n/timezone New York\n/timezone UTC+2\n/timezone Kenya`);
+        return;
+      }
+      const tz = parseTimezoneInput(arg);
+      if (!tz) { await send(chatId, "I didn't recognise that. Try a city or country (Lagos, London, Kenya), a zone like Europe/Paris, or an offset like UTC+2 🌍"); return; }
+      await updateUser(telegramId, { timezone: tz, timezone_set_by_user: true } as any);
+      await send(chatId, `Done ✅ Your time zone is now ${tz}. It is ${describeLocalTime(tz)} for you, and your daily messages will arrive in your morning.`);
+      return;
+    }
+
     case '/sleep': {
       if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
       const { showSleepMenu } = await import('@/lib/ava/audio');
@@ -943,6 +963,7 @@ async function handleCommand(
         "/affirmations — daily affirmations\n" +
         "/meditate — short guided meditations\n" +
         "/sleep — sleep sounds & bedtime audio\n" +
+        "/timezone — set your time zone\n" +
         "/motivation — today's motivation\n" +
         "/remedies — natural remedies\n" +
         "/insights — what Ava has learned about you\n" +

@@ -1,3 +1,4 @@
+import { wallClock } from './timezone';
 import type { CyclePhase } from '@/types';
 import { sortedPeriodDates } from './period';
 
@@ -109,9 +110,8 @@ export function getCycleStatus(
   periodDuration: number = 5,
   now: Date = new Date()
 ): CycleStatus {
-  // The app's day math runs on UTC calendar dates shifted +1h (West Africa),
-  // matching getGreeting() elsewhere, so the day flips at local midnight.
-  const local = new Date(now.getTime() + 60 * 60 * 1000);
+  // Day math runs on her local calendar date (her time zone), so the day flips at her midnight.
+  const local = wallClock(now);
   const rawDay = wholeDaysBetween(lastPeriodStart, local) + 1;
   const daysPastExpected = rawDay - (avgCycleLength + 1);
   const isLate = daysPastExpected > 2;
