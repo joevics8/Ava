@@ -3,11 +3,12 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getDailyMorningAffirmation } from '@/lib/ava/affirmations';
 import type { AvaUser } from '@/types';
 import { sendTelegram } from '@/lib/telegram';
-import { DEFAULT_TZ, localDateIn, morningDue } from '@/lib/ava/timezone';
+import { DEFAULT_TZ } from '@/lib/ava/timezone';
+import { cadence, claimSend, daysSilentFrom, inMorningWindow, releaseSend, todayFor } from '@/lib/ava/cron-gate';
 import { useUserTimezone } from '@/lib/ava/tz-context';
 
-async function sendAffirmation(chatId: number, text: string) {
-  await sendTelegram(chatId, text);
+async function sendAffirmation(chatId: number, text: string): Promise<boolean> {
+  return (await sendTelegram(chatId, text)).ok;
 }
 
 const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
@@ -45,10 +46,13 @@ export async function GET(req: NextRequest) {
       try {
         const tz = (user as any).timezone || DEFAULT_TZ;
         useUserTimezone(tz);
-        if (!morningDue(tz, (user as any).affirmation_last_sent_on)) continue;
-        await sendAffirmation(user.telegram_id, text);
+        if (!inMorningWindow(tz)) continue;
+        if (!cadence(daysSilentFrom((user as any).last_seen_at)).send) continue;
+        const day = todayFor(tz);
+        if (!(await claimSend(user.id, 'affirmation', day))) continue;
+        const ok = await sendAffirmation(user.telegram_id, text);
+        if (!ok) { await releaseSend(user.id, 'affirmation', day); continue; }
         if (motivation) await sendTrack(user.telegram_id, motivation, 'Today’s motivation 🌸');
-        await supabaseAdmin.from('users').update({ affirmation_last_sent_on: localDateIn(new Date(), tz) }).eq('id', user.id);
         sent++;
       } catch (err) {
         console.error(`Affirmation send failed for ${user.telegram_id}:`, err);

@@ -236,3 +236,23 @@ export const moodButtons = [
     { text: '😣 Not great', callback_data: 'mood_notgreat' },
   ],
 ];
+
+
+// One-tap symptom logging under the morning message. Tapping saves a normal memory entry for today
+// (with her cycle day), the same as typing it, so it feeds recall and patterns.
+export const QUICK_LOGS: Record<string, { emoji: string; label: string; summary: string }> = {
+  cramps: { emoji: '🤕', label: 'Cramps', summary: 'Cramps' },
+  tired: { emoji: '😴', label: 'Tired', summary: 'Tired, low energy' },
+  bloated: { emoji: '🎈', label: 'Bloated', summary: 'Bloating' },
+  headache: { emoji: '🤯', label: 'Headache', summary: 'Headache' },
+  nausea: { emoji: '🤢', label: 'Nausea', summary: 'Nausea' },
+  breakouts: { emoji: '🌋', label: 'Breakouts', summary: 'Skin breakouts' },
+};
+
+export const quickLogButtons = [
+  ['cramps', 'tired', 'bloated'],
+  ['headache', 'nausea', 'breakouts'],
+].map(row => row.map(k => ({ text: `${QUICK_LOGS[k].emoji} ${QUICK_LOGS[k].label}`, callback_data: 'ql_' + k })));
+
+/** Mood row plus the symptom rows: what goes under the morning digest. */
+export const morningKeyboard = [...moodButtons, ...quickLogButtons];

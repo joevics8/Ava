@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTelegram } from '@/lib/telegram';
+import { useUserTimezone } from '@/lib/ava/tz-context';
+import { DEFAULT_TZ } from '@/lib/ava/timezone';
+import { claimSend, inMorningWindow, releaseSend, todayFor } from '@/lib/ava/cron-gate';
 import { supabaseAdmin } from '@/lib/supabase';
 
 async function sendMessage(chatId: number, text: string): Promise<boolean> {
   return (await sendTelegram(chatId, text, { markdown: true })).ok;
+}
+
+/** Send once per user per local day for this kind of alert; a failed send frees the claim for the next hourly run. */
+async function sendOnce(userId: string, job: string, day: string, chatId: number, text: string, keyboard?: unknown): Promise<boolean> {
+  if (!(await claimSend(userId, job, day))) return false;
+  const ok = (await sendTelegram(chatId, text, { markdown: true, keyboard })).ok;
+  if (!ok) await releaseSend(userId, job, day);
+  return ok;
 }
 
 function daysBetween(a: Date, b: Date): number {
@@ -56,6 +67,13 @@ export async function GET(req: NextRequest) {
     // false period start while in pregnancy mode.
     if ((user as any).mode === 'pregnant') continue;
 
+    // Her own clock: alerts go out in her local morning, once per local day (the cron runs hourly).
+    const tz = (user as any).timezone || DEFAULT_TZ;
+    useUserTimezone(tz);
+    if (!inMorningWindow(tz)) continue;
+    const day = todayFor(tz);
+    const today = new Date(day + 'T00:00:00Z');
+
     const cycle = user.cycle_data?.[0];
     if (!cycle) continue;
 
@@ -72,10 +90,9 @@ export async function GET(req: NextRequest) {
       const daysUntil = daysBetween(today, nextPeriod);
 
       if (daysUntil === 3) {
-        await sendMessage(chatId,
+        if (await sendOnce(user.id, 'alert_period_soon', day, chatId,
           `Hey ${name} 🌸 Your period is likely in about *3 days*.\n\nMight be a good time to stock up on pads or tampons, and go easy on yourself if you're feeling off.`
-        );
-        results.period_soon++;
+        )) results.period_soon++;
       }
 
       // The on-the-day "is your period out?" question now goes out in place of
@@ -92,20 +109,12 @@ export async function GET(req: NextRequest) {
       const daysToOv = daysBetween(today, ovStart);
 
       if (daysToOv === 1) {
-        if (wantsToConceive) {
-          await sendMessage(chatId,
-            `✨ ${name}, your fertile window starts *tomorrow* — this is your best time to try if you're planning.\n\nHow are you feeling going into this window?`
-          );
-        } else if (preventingPregnancy) {
-          await sendMessage(chatId,
-            `⚠️ ${name}, heads up — your fertile window starts *tomorrow*.\n\nIf you're avoiding pregnancy, be extra careful over the next few days.`
-          );
-        } else {
-          await sendMessage(chatId,
-            `✨ ${name}, your fertile window starts *tomorrow* — you'll be most fertile for the next few days.\n\nJust keeping you in the loop 🌸`
-          );
-        }
-        results.fertile++;
+        const fertileText = wantsToConceive
+          ? `✨ ${name}, your fertile window starts *tomorrow* — this is your best time to try if you're planning.\n\nHow are you feeling going into this window?`
+          : preventingPregnancy
+            ? `⚠️ ${name}, heads up — your fertile window starts *tomorrow*.\n\nIf you're avoiding pregnancy, be extra careful over the next few days.`
+            : `✨ ${name}, your fertile window starts *tomorrow* — you'll be most fertile for the next few days.\n\nJust keeping you in the loop 🌸`;
+        if (await sendOnce(user.id, 'alert_fertile', day, chatId, fertileText)) results.fertile++;
       }
     }
 
@@ -115,10 +124,7 @@ export async function GET(req: NextRequest) {
         bc => user.birth_control.toLowerCase().includes(bc)
       )
     ) {
-      await sendMessage(chatId,
-        `💊 Just a reminder to take your pill today, ${name} 🌸`
-      );
-      results.contraception++;
+      if (await sendOnce(user.id, 'alert_pill', day, chatId, `💊 Just a reminder to take your pill today, ${name} 🌸`)) results.contraception++;
     }
     } catch (err) {
       console.error('Alert cron per-user error:', user.telegram_id, err);
@@ -134,14 +140,22 @@ export async function GET(req: NextRequest) {
 
   for (const u of premiumUsers || []) {
     try {
+    const tz = (u as any).timezone || DEFAULT_TZ;
+    useUserTimezone(tz);
+    if (!inMorningWindow(tz)) continue;
+    const day = todayFor(tz);
     const expires = new Date(u.premium_expires_at);
-    const daysLeft = Math.ceil((expires.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const daysLeft = Math.ceil((expires.getTime() - new Date(day + 'T00:00:00Z').getTime()) / (1000 * 60 * 60 * 24));
     if (daysLeft === 3) {
-      await sendMessage(u.telegram_id,
-        `Hey ${u.name} 🌸 Your Ava Premium expires in *3 days*.
-
-Send /premium to renew and keep your full memory and daily digest.`
-      );
+      // A real button, so renewing is one tap. Claim first so the payment link is only created once.
+      if (await claimSend(u.id, 'renewal', day)) {
+        const { createPaymentLink } = await import('@/lib/ava/paystack');
+        const link = await createPaymentLink(u.telegram_id, u.name || 'friend').catch(() => null);
+        const sent = await sendTelegram(u.telegram_id,
+          `Hey ${u.name} 🌸 Your Ava Premium expires in *3 days*.\n\nRenew to keep your full memory and daily digest.${link ? '' : ' Send /premium to renew.'}`,
+          { markdown: true, keyboard: link ? [[{ text: 'Renew Premium ✨', url: link.url }]] : undefined });
+        if (!sent.ok) await releaseSend(u.id, 'renewal', day);
+      }
     }
     } catch (err) {
       console.error('Renewal reminder per-user error:', u.telegram_id, err);

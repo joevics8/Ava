@@ -721,3 +721,12 @@ export async function countOlderMatches(userId: string, text: string): Promise<n
   if (error) { console.error('countOlderMatches failed:', error.message); return 0; }
   return count ?? 0;
 }
+
+
+/** Records that she just wrote to Ava (at most one write per 30 minutes). Drives the "pause if ignored" schedule. */
+export async function touchLastSeen(user: { id: string; last_seen_at?: string | null }): Promise<void> {
+  const last = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+  if (Date.now() - last < 30 * 60000) return;
+  const { error } = await supabaseAdmin.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id);
+  if (error) console.error('touchLastSeen failed:', error.message);
+}

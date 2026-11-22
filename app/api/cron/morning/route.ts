@@ -1,16 +1,17 @@
 import { withFreshForecast } from '@/lib/ava/cycle';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { buildMorningDigest, moodButtons } from '@/lib/ava/morning';
+import { buildMorningDigest, morningKeyboard } from '@/lib/ava/morning';
 import { getCycleStatus } from '@/lib/ava/cycle';
 import { latestPeriodStart, localDateStr, periodCheckButtons, periodCheckMessage, periodCheckNote, planPeriodCheck } from '@/lib/ava/period';
 import type { AvaUser } from '@/types';
 import { sendTelegram } from '@/lib/telegram';
-import { DEFAULT_TZ, localHour, morningDue } from '@/lib/ava/timezone';
+import { DEFAULT_TZ, localHour } from '@/lib/ava/timezone';
+import { cadence, claimSend, daysSilentFrom, inMorningWindow, releaseSend, SILENT_NOTE, todayFor } from '@/lib/ava/cron-gate';
 import { useUserTimezone } from '@/lib/ava/tz-context';
 
 async function sendMorning(chatId: number, text: string, showButtons: boolean, keyboard?: unknown) {
-  const kb = keyboard ?? (showButtons ? moodButtons : undefined);
+  const kb = keyboard ?? (showButtons ? morningKeyboard : undefined);
   return sendTelegram(chatId, text, { markdown: true, keyboard: kb });
 }
 
@@ -48,12 +49,15 @@ export async function GET(req: NextRequest) {
       // Her own clock: the message goes out once per local day, from her local morning hour on.
       const tz = (user as any).timezone || DEFAULT_TZ;
       useUserTimezone(tz);
-      if (!morningDue(tz, (user as any).morning_last_sent_on)) continue;
+      if (!inMorningWindow(tz)) continue;
+      // Ignored for days? Daily becomes weekly, then stops (she is told once).
+      const cad = cadence(daysSilentFrom((user as any).last_seen_at));
+      if (!cad.send) continue;
+      const day = todayFor(tz);
+      if (!(await claimSend(user.id, 'morning', day))) continue; // already sent today
       due++;
-      const markSent = async () => {
-        const { error } = await supabaseAdmin.from('users').update({ morning_last_sent_on: localDateStr() }).eq('id', user.id);
-        if (error) console.error('morning_last_sent_on not saved (run the user_timezone migration):', error.message);
-      };
+      const markSent = async () => {};
+      const noteSuffix = cad.note ? SILENT_NOTE : '';
       const { data: cycleRow } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
       const cycle = withFreshForecast(cycleRow); // forecast always recalculated from the period dates
@@ -104,7 +108,8 @@ export async function GET(req: NextRequest) {
         .order('logged_at', { ascending: false }).limit(60);
 
       const { text, showMoodButtons } = await buildMorningDigest(user, cycle, logs || []);
-      await sendMorning(user.telegram_id, text, showMoodButtons);
+      const res = await sendMorning(user.telegram_id, text + noteSuffix, showMoodButtons);
+      if (!res.ok) { await releaseSend(user.id, 'morning', day); continue; } // retry next hour, still inside her window
       await askPeriodCheck();
       await markSent();
       sent++;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { latestPeriodStartStr } from '@/lib/ava/period';
 import { waitUntil } from '@vercel/functions';
 import { useUserTimezone } from '@/lib/ava/tz-context';
-import { hasRecentInsight, countOlderMatches } from '@/lib/ava/db';
+import { hasRecentInsight, countOlderMatches, touchLastSeen } from '@/lib/ava/db';
 import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage, getCycleData } from '@/lib/ava/db';
 import { describeBodyContext, notYetReply, periodStartedReply } from '@/lib/ava/body-context';
 import {
@@ -213,6 +213,7 @@ async function processUpdate(update: any) {
       const cbUser = await getUser(cbTelegramId);
       if (!cbUser) return;
       useUserTimezone((cbUser as any).timezone);
+      await touchLastSeen(cbUser as any);
 
       // ── "Is your period out?" Yes / No buttons (sent in place of the morning digest) ──
       if (cbData.startsWith('pc_')) {
@@ -335,6 +336,21 @@ async function processUpdate(update: any) {
         return;
       }
 
+      // ── Quick symptom log buttons (under the morning message) ────────────
+      if (cbData.startsWith('ql_')) {
+        const { QUICK_LOGS } = await import('@/lib/ava/morning');
+        const item = QUICK_LOGS[cbData.slice(3)];
+        if (!item) return;
+        const { cycleDayOn } = await import('@/lib/ava/memory');
+        const { localDateStr, latestPeriodStartStr: latestStart } = await import('@/lib/ava/period');
+        const day = localDateStr();
+        await addMemoryLog(cbUser.id, 'symptom', item.summary, {
+          eventDate: day, cycleDay: cycleDayOn(latestStart(await getCycleData(cbUser.id)), day), detail: `Tapped ${item.label} in the morning message`, source: 'user',
+        });
+        await sendMessage(cbChatId, `Logged ✅ ${item.label.toLowerCase()}. Tell me more if you like, or send /remedies for ideas 🌿`);
+        return;
+      }
+
       // ── Mood button callbacks ────────────────────────────────────────────
       if (cbData.startsWith('mood_')) {
         const moodMap: Record<string, string> = {
@@ -451,7 +467,7 @@ async function processUpdate(update: any) {
 
     // ── Get or create user ───────────────────────────────────────────────────
     let user = await getUser(telegramId);
-    if (user) useUserTimezone((user as any).timezone);
+    if (user) { useUserTimezone((user as any).timezone); await touchLastSeen(user as any); }
     if (!user) {
       // Telegram deep links (t.me/Ava_care_bot?start=CODE) arrive as the
       // literal message text "/start CODE" on first contact — capture the

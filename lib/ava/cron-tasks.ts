@@ -1,6 +1,8 @@
 import { withFreshForecast } from './cycle';
 import { sendTelegram } from '@/lib/telegram';
 import { useUserTimezone } from './tz-context';
+import { DEFAULT_TZ } from './timezone';
+import { claimSend, daysSilentFrom, inMorningWindow, isWeeklyDay, releaseSend, todayFor } from './cron-gate';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateWeeklyBriefing } from '@/lib/ava/insights';
 import type { AvaUser } from '@/types';
@@ -14,7 +16,7 @@ export async function runRemedyFollowUps(): Promise<{ sent: number; total: numbe
 
   const { data: due } = await supabaseAdmin
     .from('user_remedies')
-    .select('*, users(telegram_id, name)')
+    .select('*, users(telegram_id, name, timezone, last_seen_at)')
     .lte('follow_up_at', now)
     .is('outcome', null)
     .eq('active', true);
@@ -27,6 +29,9 @@ export async function runRemedyFollowUps(): Promise<{ sent: number; total: numbe
       const telegramId = (item.users as any)?.telegram_id;
       const name = (item.users as any)?.name || 'there';
       if (!telegramId) continue;
+      // Only in her local morning (hourly cron), and not while she has gone quiet for over two weeks.
+      const tz = (item.users as any)?.timezone || DEFAULT_TZ;
+      if (!inMorningWindow(tz) || daysSilentFrom((item.users as any)?.last_seen_at) > 14) continue;
 
       const conditionLabel = item.condition.replace(/_/g, ' ');
       const followUpMsg = item.outcome === null && item.notes === null
@@ -65,7 +70,13 @@ export async function runWeeklyBriefings(): Promise<{ sent: number; total: numbe
   let sent = 0;
   for (const user of users as AvaUser[]) {
     try {
-      useUserTimezone((user as any).timezone);
+      const tz = (user as any).timezone || DEFAULT_TZ;
+      useUserTimezone(tz);
+      // Her Sunday morning, once a week; if she has been silent 2+ weeks, skip until she writes.
+      if (!isWeeklyDay(tz) || !inMorningWindow(tz)) continue;
+      if (daysSilentFrom((user as any).last_seen_at) > 14) continue;
+      const day = todayFor(tz);
+      if (!(await claimSend(user.id, 'weekly', day))) continue;
       const { data: cycleRow } = await supabaseAdmin
         .from('cycle_data').select('*').eq('user_id', user.id).single();
       const cycle = withFreshForecast(cycleRow); // forecast always recalculated from the period dates
@@ -75,6 +86,7 @@ export async function runWeeklyBriefings(): Promise<{ sent: number; total: numbe
 
       const briefing = await generateWeeklyBriefing(user, logs || [], cycle);
       if (await sendMessage(user.telegram_id, `📊 *Your Weekly Briefing*\n\n${briefing}`)) sent++;
+      else await releaseSend(user.id, 'weekly', day);
     } catch (err) {
       console.error(`Weekly briefing failed for ${user.telegram_id}:`, err);
     }
