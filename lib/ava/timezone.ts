@@ -1,18 +1,15 @@
-import { AsyncLocalStorage } from 'async_hooks';
-
 // Every "today", cycle day and greeting is computed in the USER's time zone. Instead of passing a zone
-// through dozens of functions, the webhook and each cron set it once per user (useUserTimezone) and the
-// date helpers read it (currentTz). With nothing set they use Lagos, the app's original behaviour.
+// through dozens of functions, the webhook and each cron set it once per user (useUserTimezone, in
+// tz-context.ts, server only) and the date helpers read it (currentTz). With nothing set they use Lagos.
+// This file must stay free of Node-only imports: client pages import it through period.ts.
 
 export const DEFAULT_TZ = 'Africa/Lagos';
-const store = new AsyncLocalStorage<string>();
+let provider: () => string | undefined = () => undefined;
 
-export const currentTz = (): string => store.getStore() ?? DEFAULT_TZ;
+/** Server only: tz-context.ts registers where the per-request zone lives. */
+export function setTimezoneProvider(fn: () => string | undefined): void { provider = fn; }
 
-/** Use this user's zone for the rest of the current request/loop iteration. */
-export function useUserTimezone(tz: string | null | undefined): void {
-  store.enterWith(tz && isValidTimezone(tz) ? tz : DEFAULT_TZ);
-}
+export const currentTz = (): string => provider() ?? DEFAULT_TZ;
 
 export function isValidTimezone(tz: string): boolean {
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }

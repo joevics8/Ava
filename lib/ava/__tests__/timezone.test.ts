@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { wallClock, localDateIn, localHour, tzForCountry, parseTimezoneInput, morningDue, greetingFor, isValidTimezone, currentTz, useUserTimezone, DEFAULT_TZ } from '../timezone';
+import { useUserTimezone } from '../tz-context';
+import { wallClock, localDateIn, localHour, tzForCountry, parseTimezoneInput, morningDue, greetingFor, isValidTimezone, currentTz, DEFAULT_TZ } from '../timezone';
 
 const t = new Date(Date.UTC(2026, 10, 20, 23, 30)); // 20 Nov 23:30 UTC
 

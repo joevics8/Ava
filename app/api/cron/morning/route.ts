@@ -6,7 +6,8 @@ import { getCycleStatus } from '@/lib/ava/cycle';
 import { latestPeriodStart, localDateStr, periodCheckButtons, periodCheckMessage, periodCheckNote, planPeriodCheck } from '@/lib/ava/period';
 import type { AvaUser } from '@/types';
 import { sendTelegram } from '@/lib/telegram';
-import { DEFAULT_TZ, localHour, morningDue, useUserTimezone } from '@/lib/ava/timezone';
+import { DEFAULT_TZ, localHour, morningDue } from '@/lib/ava/timezone';
+import { useUserTimezone } from '@/lib/ava/tz-context';
 
 async function sendMorning(chatId: number, text: string, showButtons: boolean, keyboard?: unknown) {
   const kb = keyboard ?? (showButtons ? moodButtons : undefined);

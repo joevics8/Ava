@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { getDailyMorningAffirmation } from '@/lib/ava/affirmations';
 import type { AvaUser } from '@/types';
 import { sendTelegram } from '@/lib/telegram';
-import { DEFAULT_TZ, localDateIn, morningDue, useUserTimezone } from '@/lib/ava/timezone';
+import { DEFAULT_TZ, localDateIn, morningDue } from '@/lib/ava/timezone';
+import { useUserTimezone } from '@/lib/ava/tz-context';
 
 async function sendAffirmation(chatId: number, text: string) {
   await sendTelegram(chatId, text);
