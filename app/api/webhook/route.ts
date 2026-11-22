@@ -494,6 +494,15 @@ You're now on the free plan. Send /premium to renew and keep your 5-month memory
     // gate → handleCommand(). Only natural-language equivalents live here, so
     // the same features stay reachable from free-flowing conversation too.
 
+    // ── Safety first: self-harm or hopelessness gets a caring reply and nothing else ──
+    {
+      const { detectCrisis, crisisReply } = await import('@/lib/ava/safety');
+      if (detectCrisis(text)) {
+        await sendMessage(chatId, crisisReply(user.name, (user as any).country));
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     // ── Insights commands ─────────────────────────────────────────────────────
     if (normalizedText === 'what have you learned about me' || normalizedText === 'what do you know about me') {
       await sendTyping(chatId);

@@ -2,26 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getDailyMorningAffirmation } from '@/lib/ava/affirmations';
 import type { AvaUser } from '@/types';
-
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+import { sendTelegram } from '@/lib/telegram';
 
 async function sendAffirmation(chatId: number, text: string) {
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
-  });
+  await sendTelegram(chatId, text);
 }
 
 const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
 async function notifyAdmin(context: string, err: unknown) {
   try {
     const detail = err instanceof Error ? err.message : String(err);
-    await fetch(`${TELEGRAM_API}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: ADMIN_TELEGRAM_ID, text: `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}` }),
-    });
+    await sendTelegram(ADMIN_TELEGRAM_ID, `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}`);
   } catch {
     // Nothing more we can do if even the alert fails.
   }

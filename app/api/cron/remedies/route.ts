@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sendTelegram } from '@/lib/telegram';
 import { runRemedyFollowUps } from '@/lib/ava/cron-tasks';
 
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
-
-async function sendMessage(chatId: number, text: string) {
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
-  });
+async function sendMessage(chatId: number, text: string): Promise<boolean> {
+  return (await sendTelegram(chatId, text, { markdown: true })).ok;
 }
 
 const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);

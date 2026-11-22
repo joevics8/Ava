@@ -1,16 +1,11 @@
 import { withFreshForecast } from './cycle';
+import { sendTelegram } from '@/lib/telegram';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateWeeklyBriefing } from '@/lib/ava/insights';
 import type { AvaUser } from '@/types';
 
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
-
-async function sendMessage(chatId: number, text: string) {
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
-  });
+async function sendMessage(chatId: number, text: string): Promise<boolean> {
+  return (await sendTelegram(chatId, text, { markdown: true })).ok;
 }
 
 export async function runRemedyFollowUps(): Promise<{ sent: number; total: number }> {
@@ -37,7 +32,7 @@ export async function runRemedyFollowUps(): Promise<{ sent: number; total: numbe
         ? 'Hey ' + name + ' 🌿 A week ago you saved ' + item.remedy_name + ' to try for your ' + conditionLabel + '.\n\nHave you started trying it yet? Just let me know how it is going.'
         : 'Hey ' + name + ' 🌿 How is ' + item.remedy_name + ' going for your ' + conditionLabel + '?\n\nReply: it helped, it partially helped, or it did not help and I will note it.';
 
-      await sendMessage(telegramId, followUpMsg);
+      if (!(await sendMessage(telegramId, followUpMsg))) { console.error('Remedy follow-up not delivered:', item.id); continue; }
 
       const nextFollowUp = new Date();
       nextFollowUp.setDate(nextFollowUp.getDate() + 7);
@@ -75,8 +70,7 @@ export async function runWeeklyBriefings(): Promise<{ sent: number; total: numbe
         .order('logged_at', { ascending: false }).limit(60);
 
       const briefing = await generateWeeklyBriefing(user, logs || [], cycle);
-      await sendMessage(user.telegram_id, `📊 *Your Weekly Briefing*\n\n${briefing}`);
-      sent++;
+      if (await sendMessage(user.telegram_id, `📊 *Your Weekly Briefing*\n\n${briefing}`)) sent++;
     } catch (err) {
       console.error(`Weekly briefing failed for ${user.telegram_id}:`, err);
     }

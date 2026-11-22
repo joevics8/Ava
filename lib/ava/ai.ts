@@ -278,7 +278,8 @@ const HEALTH_REFERENCE = `REFERENCE FACTS (accurate; use only the ones that appl
 - If there was unprotected sex and she does not want a pregnancy, emergency contraception works best the sooner it is taken: a levonorgestrel pill is labelled for up to 72 hours, and some options (ulipristal, copper IUD) work up to 5 days. A pharmacist or clinic can advise.
 - Period cramps come mainly from prostaglandins: heat, rest, gentle movement and an over-the-counter pain reliever such as ibuprofen (if she can take it) are the usual first steps.`;
 
-const EMERGENCIES = `EMERGENCIES — tell her plainly to go to a clinic or hospital now: sharp one-sided lower belly pain, shoulder-tip pain, fainting or dizziness with a missed period or positive test (possible ectopic pregnancy); soaking a pad every hour for 2 or more hours; fever with pelvic pain or foul-smelling discharge; severe pain that stops her functioning. For anything else serious or persistent say "worth getting checked".`;
+const EMERGENCIES = `EMERGENCIES — tell her plainly to go to a clinic or hospital now: sharp one-sided lower belly pain, shoulder-tip pain, fainting or dizziness with a missed period or positive test (possible ectopic pregnancy); soaking a pad every hour for 2 or more hours; fever with pelvic pain or foul-smelling discharge; severe pain that stops her functioning. For anything else serious or persistent say "worth getting checked".
+EMOTIONAL SAFETY: if she hints at not wanting to be here, self-harm, or deep hopelessness, drop everything else: be warm and brief, say you are glad she told you, encourage her to reach someone she trusts or a local crisis line, and ask if she is safe. Never respond with remedies, meditations, foods or tracking tips to that. Low mood without those signs is normal to talk about: listen first, do not rush to fix.`;
 
 // ─── Handle RETRIEVAL with memory context ─────────────────────────────────────
 

@@ -5,38 +5,18 @@ import { buildMorningDigest, moodButtons } from '@/lib/ava/morning';
 import { getCycleStatus } from '@/lib/ava/cycle';
 import { latestPeriodStart, localDateStr, periodCheckButtons, periodCheckMessage, periodCheckNote, planPeriodCheck } from '@/lib/ava/period';
 import type { AvaUser } from '@/types';
-
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+import { sendTelegram } from '@/lib/telegram';
 
 async function sendMorning(chatId: number, text: string, showButtons: boolean, keyboard?: unknown) {
-  const body: any = {
-    chat_id: chatId,
-    text,
-    parse_mode: 'Markdown',
-  };
-
-  if (keyboard) {
-    body.reply_markup = { inline_keyboard: keyboard };
-  } else if (showButtons) {
-    body.reply_markup = { inline_keyboard: moodButtons };
-  }
-
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const kb = keyboard ?? (showButtons ? moodButtons : undefined);
+  return sendTelegram(chatId, text, { markdown: true, keyboard: kb });
 }
 
 const ADMIN_TELEGRAM_ID = Number(process.env.ADMIN_TELEGRAM_ID || 5944321602);
 async function notifyAdmin(context: string, err: unknown) {
   try {
     const detail = err instanceof Error ? err.message : String(err);
-    await fetch(`${TELEGRAM_API}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: ADMIN_TELEGRAM_ID, text: `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}` }),
-    });
+    await sendTelegram(ADMIN_TELEGRAM_ID, `⚠️ Ava cron error in ${context}:\n${detail.slice(0, 500)}`);
   } catch {
     // Nothing more we can do if even the alert fails.
   }
