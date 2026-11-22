@@ -35,11 +35,13 @@ export async function runRemedyFollowUps(): Promise<{ sent: number; total: numbe
 
       if (!(await sendMessage(telegramId, followUpMsg))) { console.error('Remedy follow-up not delivered:', item.id); continue; }
 
+      // Remember we asked (so her plain reply counts as the answer), and stop after 3 unanswered check-ins.
+      const asked = (item.follow_up_count ?? 0) + 1;
       const nextFollowUp = new Date();
       nextFollowUp.setDate(nextFollowUp.getDate() + 7);
       await supabaseAdmin
         .from('user_remedies')
-        .update({ follow_up_at: nextFollowUp.toISOString() })
+        .update({ follow_up_at: asked >= 3 ? null : nextFollowUp.toISOString(), follow_up_sent_at: new Date().toISOString(), follow_up_count: asked })
         .eq('id', item.id);
 
       sent++;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { latestPeriodStartStr } from '@/lib/ava/period';
 import { waitUntil } from '@vercel/functions';
 import { useUserTimezone } from '@/lib/ava/tz-context';
+import { hasRecentInsight, countOlderMatches } from '@/lib/ava/db';
 import { getUser, createUser, updateUser, getMemoryContext, addMemoryLog, getRecentChatMessages, addChatMessage, getCycleData } from '@/lib/ava/db';
 import { describeBodyContext, notYetReply, periodStartedReply } from '@/lib/ava/body-context';
 import {
@@ -706,7 +707,9 @@ You're now on the free plan. If you change your mind, /premium is always there.`
         waitUntil(embedMissingMemories(20, user.id).catch(() => {}));
       }
     } catch (e) { console.error('memory recall failed', e); }
-    const bodyContext = `${describeBodyContext(cycleRow, memoryLogs)}\n\n${describeFacts(facts)}${recall ? `\n\n${recall}` : ''}`;
+    let remedyHistory = '';
+    try { remedyHistory = await (await import('@/lib/ava/remedy-engine')).describeRemedyHistoryFor(user.id); } catch (e) { console.error('remedy history failed', e); }
+    const bodyContext = `${describeBodyContext(cycleRow, memoryLogs)}\n\n${describeFacts(facts)}${recall ? `\n\n${recall}` : ''}${remedyHistory ? `\n\n${remedyHistory}` : ''}`;
 
     if (user.plan === 'free') {
       const [category, upgradeSuggested] = await Promise.all([
@@ -718,7 +721,25 @@ You're now on the free plan. If you change your mind, /premium is always there.`
       // someone asking a real question got a pitch and nothing else.
       await routeMessage(category, text, chatId, user, memoryLogs, history, bodyContext);
 
-      if (upgradeSuggested) {
+      // Show what Premium memory would add: older entries that match what she just said.
+      let teased = false;
+      if (!upgradeSuggested && text.length >= 12 && !text.startsWith('/')) {
+        try {
+          const older = await countOlderMatches(user.id, text);
+          const tease = 'Showed memory upgrade note';
+          if (older >= 2 && !(await hasRecentInsight(user.id, tease, 7))) {
+            const { createPaymentLink } = await import('@/lib/ava/paystack');
+            const link = await createPaymentLink(user.telegram_id, user.name || 'friend');
+            const msg = `💎 I found ${older} older notes from you about this, from before the last 2 weeks. With Premium I can use your whole history to spot patterns like this for you.`;
+            if (link) await sendWithKeyboard(chatId, msg, [[{ text: 'Upgrade to Premium ✨', url: link.url }]]);
+            else await sendMessage(chatId, msg + ' Send /premium to see how.');
+            await addMemoryLog(user.id, 'insight', tease);
+            teased = true;
+          }
+        } catch (e) { console.error('memory upgrade note failed', e); }
+      }
+
+      if (upgradeSuggested && !teased) {
         const { createPaymentLink } = await import('@/lib/ava/paystack');
         const [pitch, link] = await Promise.all([
           generatePremiumPitch(user.name || 'there', text),
@@ -1079,9 +1100,13 @@ async function maybeSuggestRemedy(chatId: number, user: any, text: string): Prom
   const alreadyHasThis = alreadyTracking.some((r: any) => r.condition === detectedCondition);
   if (alreadyHasThis) return false;
 
+  // One offer per condition per week: she can always ask with /remedies.
+  const note = 'Suggested remedies for ' + detectedCondition;
+  if (await hasRecentInsight(user.id, note, 7)) return false;
+
   await sendMessage(chatId, 'By the way — I have some natural remedies that might help with this 🌿');
   await showRemedyList(chatId, user, detectedCondition, sendWithKeyboard);
-  await addMemoryLog(user.id, 'insight', 'Suggested remedies for ' + detectedCondition);
+  await addMemoryLog(user.id, 'insight', note);
   return true;
 }
 
@@ -1105,7 +1130,10 @@ async function routeMessage(
   };
 
   // Check for remedy outcome update
-  const { detectRemedyIntent, updateRemedyOutcome } = await import('@/lib/ava/remedy-engine');
+  const { detectRemedyIntent, updateRemedyOutcome, applyFollowUpReply } = await import('@/lib/ava/remedy-engine');
+
+  // A plain "it helped" right after Ava's check-in answers that check-in.
+  if (await applyFollowUpReply(chatId, user, text, sendMessage)) return;
 
   const { action, remedyId } = await detectRemedyIntent(text);
   if (action === 'update' && remedyId) {

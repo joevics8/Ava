@@ -698,3 +698,26 @@ export async function checkAndBumpRateLimit(telegramId: number): Promise<boolean
     .eq('telegram_id', telegramId);
   return false;
 }
+
+
+/** Has this exact "insight" note been logged in the last `days` days? (cooldowns for nudges) */
+export async function hasRecentInsight(userId: string, summary: string, days: number): Promise<boolean> {
+  const { suggestedRecently } = await import('./remedy-outcome');
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { data, error } = await supabaseAdmin.from('memory_log').select('summary,logged_at')
+    .eq('user_id', userId).eq('category', 'insight').eq('summary', summary).gte('logged_at', since).limit(1);
+  if (error) { console.error('hasRecentInsight failed:', error.message); return false; }
+  return suggestedRecently((data ?? []) as any, summary, days);
+}
+
+/** How many of her entries older than 14 days match what she just said (word match only: cheap, no AI call). */
+export async function countOlderMatches(userId: string, text: string): Promise<number> {
+  const { recallTerms, recallOrFilter } = await import('./memory');
+  const filter = recallOrFilter(recallTerms(text));
+  if (!filter) return 0;
+  const before = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { count, error } = await supabaseAdmin.from('memory_log').select('id', { count: 'exact', head: true })
+    .eq('user_id', userId).eq('source', 'user').lt('logged_at', before).or(filter);
+  if (error) { console.error('countOlderMatches failed:', error.message); return 0; }
+  return count ?? 0;
+}

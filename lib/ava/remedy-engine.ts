@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { classifyOutcome, orderByHistory, workedBefore, describeRemedyHistory, type TriedRemedy } from './remedy-outcome';
 import type { AvaUser } from '@/types';
 
 export interface Remedy {
@@ -100,8 +101,13 @@ export async function showRemedyList(
   // slice(0, 80), which reads as broken, and it's redundant with the
   // button labels right below it anyway. Tapping a button shows the full
   // description via showRemedyDetail.
-  const keyboard = remedies.map(r => ([
-    { text: (r.premium && !isPremium ? '🔒 ' : '') + r.name, callback_data: 'rem_view_' + r.id },
+  // What worked for HER comes first with a tick; what did not help goes last.
+  const { data: triedRows } = await supabaseAdmin.from('user_remedies').select('remedy_id,outcome').eq('user_id', user.id).not('outcome', 'is', null);
+  const tried = (triedRows ?? []) as TriedRemedy[];
+  const ordered = orderByHistory(remedies, tried);
+  const anyWorked = ordered.some(r => workedBefore(tried, r.id));
+  const keyboard = ordered.map(r => ([
+    { text: (workedBefore(tried, r.id) ? '✅ ' : '') + (r.premium && !isPremium ? '🔒 ' : '') + r.name, callback_data: 'rem_view_' + r.id },
   ]));
 
   keyboard.push([{ text: '← Back to conditions', callback_data: 'rem_menu' }]);
@@ -112,7 +118,7 @@ export async function showRemedyList(
 
   await sendWithKeyboard(
     chatId,
-    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:' + upsell,
+    '🌿 *Remedies for ' + conditionLabel + '*\n\nTap one to see the full steps:' + (anyWorked ? '\n✅ = worked for you before' : '') + upsell,
     keyboard,
     true
   );
@@ -310,16 +316,8 @@ export async function updateRemedyOutcome(
   message: string,
   send: SendFn
 ): Promise<void> {
-  const lower = message.toLowerCase();
-  let outcome: string;
-
-  if (lower.includes('not') || lower.includes("didn't") || lower.includes('no difference')) {
-    outcome = 'didnt_help';
-  } else if (lower.includes('partial') || lower.includes('little') || lower.includes('slightly')) {
-    outcome = 'partially';
-  } else {
-    outcome = 'helped';
-  }
+  const read = classifyOutcome(message);
+  const outcome: string = read && read !== 'not_started' ? read : 'helped';
 
   await supabaseAdmin
     .from('user_remedies')
@@ -346,4 +344,39 @@ export async function getActiveRemedies(userId: string): Promise<any[]> {
     .eq('active', true)
     .order('started_at', { ascending: false });
   return data || [];
+}
+
+
+// ─── Reading her reply to the weekly check-in ───────────────────────────────
+
+/** The remedy Ava most recently checked in about (last 4 days) that has no outcome yet. */
+async function awaitingFollowUp(userId: string): Promise<any | null> {
+  const since = new Date(Date.now() - 4 * 86400000).toISOString();
+  const { data } = await supabaseAdmin.from('user_remedies').select('*')
+    .eq('user_id', userId).is('outcome', null).eq('active', true).gte('follow_up_sent_at', since)
+    .order('follow_up_sent_at', { ascending: false }).limit(1);
+  return data?.[0] ?? null;
+}
+
+/** True if her message answered a check-in (and it has been recorded and acknowledged). */
+export async function applyFollowUpReply(chatId: number, user: AvaUser, text: string, send: SendFn): Promise<boolean> {
+  const read = classifyOutcome(text);
+  if (!read) return false;
+  const item = await awaitingFollowUp(user.id);
+  if (!item) return false;
+  if (read === 'not_started') {
+    const next = new Date(); next.setDate(next.getDate() + 3);
+    await supabaseAdmin.from('user_remedies').update({ follow_up_at: next.toISOString(), follow_up_sent_at: null }).eq('id', item.id);
+    await send(chatId, `No rush 🌿 I'll check in again in a few days about ${item.remedy_name}.`);
+    return true;
+  }
+  await updateRemedyOutcome(chatId, user, item.remedy_id, text, send);
+  return true;
+}
+
+/** What she has tried and how it went, for the AI's context. */
+export async function describeRemedyHistoryFor(userId: string): Promise<string> {
+  const { data } = await supabaseAdmin.from('user_remedies').select('remedy_name,condition,outcome')
+    .eq('user_id', userId).not('outcome', 'is', null).order('started_at', { ascending: false }).limit(6);
+  return describeRemedyHistory((data ?? []) as any);
 }
