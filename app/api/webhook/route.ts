@@ -486,7 +486,8 @@ async function processUpdate(update: any) {
       // "/start CODE") so switch-case matching in handleCommand isn't broken
       // by trailing text — previously "/start CODE" fell through to the
       // "command not recognized" default case for existing users.
-      const command = text.split('@')[0].split(/\s+/)[0].toLowerCase();
+      const [head, ...rest] = text.split(/\s+/);
+      const command = [head.split('@')[0].toLowerCase(), ...rest].join(' '); // keep arguments, e.g. "/timezone Kenya"
       await handleCommand(command, chatId, telegramId, user, sendMessage, sendWithKeyboard);
       return;
     }
