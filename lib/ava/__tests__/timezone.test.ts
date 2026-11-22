@@ -44,12 +44,24 @@ describe('country and input parsing', () => {
 });
 
 describe('morningDue', () => {
-  it('waits for 8am local and sends once per local day', () => {
-    const lagos7 = new Date(Date.UTC(2026, 10, 20, 6, 0)), lagos9 = new Date(Date.UTC(2026, 10, 20, 8, 0));
-    expect(morningDue('Africa/Lagos', null, lagos7, 8)).toBe(false);
-    expect(morningDue('Africa/Lagos', null, lagos9, 8)).toBe(true);
-    expect(morningDue('Africa/Lagos', '2026-11-20', lagos9, 8)).toBe(false);
-    expect(morningDue('Africa/Lagos', '2026-11-19', lagos9, 8)).toBe(true);
+  const at = (h: number) => new Date(Date.UTC(2026, 10, 20, h, 0));
+  it('sends only inside her morning window, once per local day', () => {
+    // Lagos is UTC+1: 06:00 UTC = 07:00 local
+    expect(morningDue('Africa/Lagos', null, at(5), 7)).toBe(false);  // 06:00 local, too early
+    expect(morningDue('Africa/Lagos', null, at(6), 7)).toBe(true);   // 07:00
+    expect(morningDue('Africa/Lagos', null, at(8), 7)).toBe(true);   // 09:00, a missed run can still deliver
+    expect(morningDue('Africa/Lagos', null, at(9), 7)).toBe(false);  // 10:00, window closed
+    expect(morningDue('Africa/Lagos', '2026-11-20', at(6), 7)).toBe(false);
+    expect(morningDue('Africa/Lagos', '2026-11-19', at(6), 7)).toBe(true);
+  });
+  it('follows each person\'s own clock at the same instant', () => {
+    const now = at(6); // 06:00 UTC
+    expect(morningDue('Africa/Lagos', null, now, 7)).toBe(true);        // 07:00
+    expect(morningDue('Asia/Tokyo', null, now, 7)).toBe(false);         // 15:00
+    expect(morningDue('America/New_York', null, now, 7)).toBe(false);   // 01:00
+    expect(morningDue('Asia/Kolkata', null, at(1), 7)).toBe(false);     // 06:30
+    expect(morningDue('Asia/Kolkata', null, at(2), 7)).toBe(true);      // 07:30
+    expect(morningDue('America/New_York', null, at(12), 7)).toBe(true); // 07:00
   });
 });
 

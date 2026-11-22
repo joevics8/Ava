@@ -96,9 +96,19 @@ export function describeLocalTime(tz: string, now: Date = new Date()): string {
   return `${String(w.getUTCHours()).padStart(2, '0')}:${String(w.getUTCMinutes()).padStart(2, '0')}`;
 }
 
-export const MORNING_HOUR = (): number => (Number(process.env.MORNING_LOCAL_HOUR) >= 0 && process.env.MORNING_LOCAL_HOUR !== undefined && process.env.MORNING_LOCAL_HOUR !== '' ? Number(process.env.MORNING_LOCAL_HOUR) : 6);
+export const MORNING_HOUR = (): number => {
+  const v = process.env.MORNING_LOCAL_HOUR;
+  return v !== undefined && v !== '' && Number(v) >= 0 && Number(v) <= 21 ? Math.floor(Number(v)) : 7;
+};
+/** Hours after the morning hour during which a missed run can still deliver (an hourly cron may skip a run). */
+export const MORNING_WINDOW_HOURS = 3;
 
-/** Is the local time at/after `hour` (default MORNING_LOCAL_HOUR, 6) and the morning message not yet sent for her local date? */
-export function morningDue(tz: string, lastSentOn: string | null | undefined, now: Date = new Date(), hour = MORNING_HOUR()): boolean {
-  return localHour(now, tz) >= hour && lastSentOn !== localDateIn(now, tz);
+/**
+ * Due only while HER clock reads between the morning hour and the end of the window (default 07:00-09:59),
+ * and only once per local day. Outside that window nothing is sent, so a user in Tokyo is never messaged at
+ * 3am because the cron happened to fire.
+ */
+export function morningDue(tz: string, lastSentOn: string | null | undefined, now: Date = new Date(), hour = MORNING_HOUR(), windowHours = MORNING_WINDOW_HOURS): boolean {
+  const h = localHour(now, tz);
+  return h >= hour && h < hour + windowHours && lastSentOn !== localDateIn(now, tz);
 }
