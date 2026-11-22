@@ -1,4 +1,5 @@
 import { withFreshForecast } from './cycle';
+import { logged } from '@/lib/supabase-util';
 import { sendTelegram } from '@/lib/telegram';
 import { useUserTimezone } from './tz-context';
 import { DEFAULT_TZ } from './timezone';
@@ -44,10 +45,10 @@ export async function runRemedyFollowUps(): Promise<{ sent: number; total: numbe
       const asked = (item.follow_up_count ?? 0) + 1;
       const nextFollowUp = new Date();
       nextFollowUp.setDate(nextFollowUp.getDate() + 7);
-      await supabaseAdmin
+      await logged('user_remedies write', supabaseAdmin
         .from('user_remedies')
         .update({ follow_up_at: asked >= 3 ? null : nextFollowUp.toISOString(), follow_up_sent_at: new Date().toISOString(), follow_up_count: asked })
-        .eq('id', item.id);
+        .eq('id', item.id));
 
       sent++;
     } catch (err) {

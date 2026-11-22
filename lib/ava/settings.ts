@@ -204,12 +204,14 @@ export async function handleSettingsStep(
   // ── Delete data confirmation ──────────────────────────────────────────────
   if (step === 99) {
     if (text.toUpperCase() === 'YES DELETE') {
-      await supabaseAdmin.from('memory_log').delete().eq('user_id', user.id);
-      await supabaseAdmin.from('memory_facts').delete().eq('user_id', user.id);
-      await supabaseAdmin.from('chat_history').delete().eq('user_id', user.id);
-      await supabaseAdmin.from('cycle_data').delete().eq('user_id', user.id);
-      await supabaseAdmin.from('users').delete().eq('telegram_id', telegramId);
-      await send(chatId, `All your data has been deleted. Take care 🌸\n\nIf you ever want to start again, just send /start.`);
+      try {
+        const { deleteAccount } = await import('./db');
+        await deleteAccount(telegramId);
+        await send(chatId, `All your data has been deleted. Take care 🌸\n\nIf you ever want to start again, just send /start.`);
+      } catch (err) {
+        console.error('Account deletion failed:', err);
+        await send(chatId, `I couldn't finish deleting your data, so nothing has been confirmed as deleted. Please send YES DELETE again in a minute. If it keeps failing, message us and we'll remove it by hand.`);
+      }
     } else {
       await updateUser(telegramId, { onboarding_step: 0 });
       await send(chatId, `No problem — your data is safe 🌸`);

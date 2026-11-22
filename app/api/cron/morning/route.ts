@@ -1,4 +1,5 @@
 import { withFreshForecast } from '@/lib/ava/cycle';
+import { logged } from '@/lib/supabase-util';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { buildMorningDigest, morningKeyboard } from '@/lib/ava/morning';
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
         // If this fails the migration 20261108100000_period_check_state.sql has not been run.
         if (stateErr) console.error('Period check state not saved (run the migration):', stateErr.message);
         // Lets a typed "yes"/"no" answer the question too (webhook only honours those when this is set).
-        await supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id);
+        await logged('users write', supabaseAdmin.from('users').update({ onboarding_step: 85 }).eq('id', user.id));
       };
       if (plan?.replaceDigest) {
         await askPeriodCheck();

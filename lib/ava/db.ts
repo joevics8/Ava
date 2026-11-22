@@ -1,4 +1,5 @@
 import { compactLogs } from './memory';
+import { must, logged } from '@/lib/supabase-util';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { AvaUser, CycleData, MemoryLog, LogCategory, ChatTurn } from '@/types';
 
@@ -48,11 +49,11 @@ export async function createUser(telegramId: number, referredByCode?: string): P
   // Flagging that as a known gap rather than solving it now: at current
   // scale, manual review before payout is the practical guard.
   if (referredBy) {
-    await supabaseAdmin.from('referrals').insert({
+    await logged('referrals write', supabaseAdmin.from('referrals').insert({
       referrer_id: referredBy,
       referred_id: data.id,
       status: 'pending',
-    });
+    }));
   }
 
   return data as AvaUser;
@@ -126,10 +127,10 @@ export async function qualifyReferralIfAny(referredUserId: string, fingerprint?:
       const matchedUserIds = new Set(matches.map(m => m.user_id));
 
       if (matchedUserIds.has(referral.referrer_id)) {
-        await supabaseAdmin.from('referrals').update({
+        await logged('referrals write', supabaseAdmin.from('referrals').update({
           status: 'invalid',
           fraud_note: 'Same card as referrer\'s own payment — likely self-referral',
-        }).eq('id', referral.id);
+        }).eq('id', referral.id));
         return;
       }
 
@@ -142,27 +143,27 @@ export async function qualifyReferralIfAny(referredUserId: string, fingerprint?:
 
       const matchesSibling = Array.from(matchedUserIds).some(id => siblingIds.has(id));
       if (matchesSibling) {
-        await supabaseAdmin.from('referrals').update({
+        await logged('referrals write', supabaseAdmin.from('referrals').update({
           status: 'invalid',
           fraud_note: 'Card matches another account referred by the same person',
-        }).eq('id', referral.id);
+        }).eq('id', referral.id));
         return;
       }
 
       // Unrelated match — qualify, but flag for a human to glance at
-      await supabaseAdmin.from('referrals').update({
+      await logged('referrals write', supabaseAdmin.from('referrals').update({
         status: 'qualified',
         qualified_at: new Date().toISOString(),
         fraud_note: 'Card fingerprint also seen on another unrelated account — worth a quick manual check',
-      }).eq('id', referral.id);
+      }).eq('id', referral.id));
       return;
     }
   }
 
-  await supabaseAdmin
+  await logged('referrals write', supabaseAdmin
     .from('referrals')
     .update({ status: 'qualified', qualified_at: new Date().toISOString() })
-    .eq('id', referral.id);
+    .eq('id', referral.id));
 }
 
 export async function recordPayment(
@@ -175,7 +176,7 @@ export async function recordPayment(
     ? `${authorization.bin}-${authorization.last4}-${authorization.bank || ''}`
     : null;
 
-  await supabaseAdmin.from('user_payments').insert({
+  await logged('user_payments write', supabaseAdmin.from('user_payments').insert({
     user_id: userId,
     reference,
     amount,
@@ -185,7 +186,7 @@ export async function recordPayment(
     card_type: authorization?.card_type || null,
     authorization_code: authorization?.authorization_code || null,
     fingerprint,
-  });
+  }));
 
   return fingerprint;
 }
@@ -232,10 +233,10 @@ export async function updateUser(
   telegramId: number,
   updates: Partial<AvaUser>
 ): Promise<void> {
-  await supabaseAdmin
+  await must('updateUser', supabaseAdmin
     .from('users')
     .update(updates)
-    .eq('telegram_id', telegramId);
+    .eq('telegram_id', telegramId));
 }
 
 // ─── Cycle Data ───────────────────────────────────────────────────────────────
@@ -346,10 +347,10 @@ export async function confirmLastPeriodDate(userId: string): Promise<void> {
 /** She answered the "is your period out?" question (Yes or No): restart the unresponsive count. */
 export async function markPeriodCheckAnswered(userId: string): Promise<void> {
   const { localDateStr } = await import('./period');
-  await supabaseAdmin
+  await logged('markPeriodCheckAnswered', supabaseAdmin
     .from('cycle_data')
     .update({ period_check_answered_on: localDateStr(), period_check_unanswered: 0 })
-    .eq('user_id', userId);
+    .eq('user_id', userId));
 }
 
 // ─── Memory Log ───────────────────────────────────────────────────────────────
@@ -586,7 +587,7 @@ export async function addChatMessage(userId: string, role: 'user' | 'model', con
     .order('created_at', { ascending: false })
     .range(CHAT_HISTORY_KEEP, CHAT_HISTORY_KEEP + 50);
   if (old && old.length > 0) {
-    await supabaseAdmin.from('chat_history').delete().in('id', old.map(o => o.id));
+    await logged('chat_history write', supabaseAdmin.from('chat_history').delete().in('id', old.map(o => o.id)));
   }
 }
 
@@ -683,19 +684,19 @@ export async function checkAndBumpRateLimit(telegramId: number): Promise<boolean
     .single();
 
   if (!row || now.getTime() - new Date(row.window_start).getTime() > RATE_LIMIT_WINDOW_MS) {
-    await supabaseAdmin.from('message_rate_limit').upsert({
+    await logged('message_rate_limit write', supabaseAdmin.from('message_rate_limit').upsert({
       telegram_id: telegramId,
       window_start: now.toISOString(),
       count: 1,
-    });
+    }));
     return false;
   }
 
   if (row.count >= RATE_LIMIT_MAX) return true; // limited
 
-  await supabaseAdmin.from('message_rate_limit')
+  await logged('message_rate_limit write', supabaseAdmin.from('message_rate_limit')
     .update({ count: row.count + 1 })
-    .eq('telegram_id', telegramId);
+    .eq('telegram_id', telegramId));
   return false;
 }
 
@@ -729,4 +730,17 @@ export async function touchLastSeen(user: { id: string; last_seen_at?: string | 
   if (Date.now() - last < 30 * 60000) return;
   const { error } = await supabaseAdmin.from('users').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id);
   if (error) console.error('touchLastSeen failed:', error.message);
+}
+
+
+/**
+ * Deletes everything about a person. Her chat history, memory, facts, cycle data, remedies, referrals and send
+ * records go with the user row (foreign keys cascade); payment records stay without any link to her.
+ * Throws if anything fails, so nobody is told "deleted" while data remains.
+ */
+export async function deleteAccount(telegramId: number): Promise<void> {
+  await must('delete user', supabaseAdmin.from('users').delete().eq('telegram_id', telegramId));
+  await must('delete rate limit row', supabaseAdmin.from('message_rate_limit').delete().eq('telegram_id', telegramId));
+  const { data: left } = await supabaseAdmin.from('users').select('id').eq('telegram_id', telegramId).maybeSingle();
+  if (left) throw new Error('delete user: row still present');
 }

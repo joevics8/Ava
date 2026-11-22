@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { logged, must } from '@/lib/supabase-util';
 import { classifyOutcome, orderByHistory, workedBefore, describeRemedyHistory, type TriedRemedy } from './remedy-outcome';
 import type { AvaUser } from '@/types';
 
@@ -193,14 +194,14 @@ export async function startTracking(
   const followUpAt = new Date();
   followUpAt.setDate(followUpAt.getDate() + 7);
 
-  await supabaseAdmin.from('user_remedies').insert({
+  await must('save remedy', supabaseAdmin.from('user_remedies').insert({
     user_id: user.id,
     remedy_id: remedy.id,
     remedy_name: remedy.name,
     condition: remedy.condition,
     follow_up_at: followUpAt.toISOString(),
     active: true,
-  });
+  }));
 
   await send(chatId,
     'Saved 🌿 I\'ll check in with you in 7 days to see how *' + remedy.name + '* is going.\n\nJust tell me anytime if you notice anything.',
@@ -319,11 +320,11 @@ export async function updateRemedyOutcome(
   const read = classifyOutcome(message);
   const outcome: string = read && read !== 'not_started' ? read : 'helped';
 
-  await supabaseAdmin
+  await must('save remedy outcome', supabaseAdmin
     .from('user_remedies')
     .update({ outcome, notes: message.slice(0, 200), active: outcome !== 'helped' })
     .eq('user_id', user.id)
-    .eq('remedy_id', remedyId);
+    .eq('remedy_id', remedyId));
 
   const replies: Record<string, string> = {
     helped: 'That\'s wonderful — I\'ve noted that it worked for you 🌿',
@@ -366,7 +367,7 @@ export async function applyFollowUpReply(chatId: number, user: AvaUser, text: st
   if (!item) return false;
   if (read === 'not_started') {
     const next = new Date(); next.setDate(next.getDate() + 3);
-    await supabaseAdmin.from('user_remedies').update({ follow_up_at: next.toISOString(), follow_up_sent_at: null }).eq('id', item.id);
+    await logged('user_remedies write', supabaseAdmin.from('user_remedies').update({ follow_up_at: next.toISOString(), follow_up_sent_at: null }).eq('id', item.id));
     await send(chatId, `No rush 🌿 I'll check in again in a few days about ${item.remedy_name}.`);
     return true;
   }

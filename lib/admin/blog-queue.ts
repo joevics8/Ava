@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { logged } from '@/lib/supabase-util';
 import { readTimeMinutes, slugify, type Finished, type JobInput } from './content-ai';
 import { runJob } from './run';
 
@@ -129,7 +130,7 @@ export const supabaseStore: QueueStore = {
     if (error) throw new Error(error.message);
   },
   async markFailed(id, message) {
-    await supabaseAdmin.from('blog_queue').update({ last_error: message }).eq('id', id);
+    await logged('blog_queue write', supabaseAdmin.from('blog_queue').update({ last_error: message }).eq('id', id));
   },
 };
 
