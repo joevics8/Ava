@@ -23,4 +23,5 @@ export const TOOL_UI: Record<string, ComponentType> = {
   'conception-date-calculator': dynamic(() => import('./conception-date-calculator')),
   'cycle-day-calculator': dynamic(() => import('./cycle-day-calculator')),
   'lh-surge-ovulation-calculator': dynamic(() => import('./lh-surge-ovulation-calculator')),
+  'safe-period-calculator': dynamic(() => import('./safe-period-calculator')),
 };

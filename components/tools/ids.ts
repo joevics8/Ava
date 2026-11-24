@@ -18,4 +18,5 @@ export const TOOL_UI_IDS: string[] = [
   'conception-date-calculator',
   'cycle-day-calculator',
   'lh-surge-ovulation-calculator',
+  'safe-period-calculator',
 ];
