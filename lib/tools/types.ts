@@ -4,7 +4,7 @@ export type ToolId = string;
 
 export interface ToolText {
   slug: string;          // ASCII, translated per language
-  title: string;         // <title>, ≤ 60 chars including " | Ava"
+  title: string;         // <title>, ≤ 60 chars including " | Verm"
   h1: string;
   description: string;   // meta description, ≤ 155 chars
   intro: string;
@@ -14,7 +14,7 @@ export interface ToolText {
   /**
    * The crawlable "about this tool" section, in Markdown (## headings; the page
    * title is the only h1). It is rendered on the server into the page HTML, so
-   * search engines read it without running any JavaScript. Aim for 350-700 words
+   * search engines read it without running any JavaScript. Aim for 350-1500 words
    * of original, accurate, plain-language content that answers what people search.
    */
   article?: string;

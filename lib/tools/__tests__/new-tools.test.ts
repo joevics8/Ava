@@ -10,10 +10,10 @@ describe('health tools', () => {
     for (const [lang, text] of Object.entries(tool.text)) {
       const words = (text!.article ?? '').split(/\s+/).filter(Boolean).length;
       expect(words, `${tool.id}/${lang} article words`).toBeGreaterThanOrEqual(300);
-      expect(words, `${tool.id}/${lang} article words`).toBeLessThanOrEqual(900);
+      expect(words, `${tool.id}/${lang} article words`).toBeLessThanOrEqual(1500);
       expect(text!.article).toMatch(/^## /m);
       expect(text!.article).not.toMatch(/^# /m);   // the page title is the only h1
-      expect(text!.title.length + ' | Ava'.length).toBeLessThanOrEqual(60);
+      expect(text!.title.length + ' | Verm'.length).toBeLessThanOrEqual(60);
     }
     for (const r of tool.related) expect(toolById(r), `${tool.id} related ${r}`).toBeTruthy();
     expect(TOOL_UI_IDS).toContain(tool.id);
