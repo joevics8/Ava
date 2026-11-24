@@ -15,4 +15,5 @@ export const TOOL_UI_IDS: string[] = [
   'irregular-cycle-predictor',
   'widal-test-explainer',
   'lab-reference-ranges',
+  'conception-date-calculator',
 ];

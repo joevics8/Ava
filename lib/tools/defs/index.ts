@@ -15,6 +15,7 @@ import { tool as irregularCycle } from './irregular-cycle-predictor';
 import { tool as widal } from './widal-test-explainer';
 import { tool as labRanges } from './lab-reference-ranges';
 
+import { tool as conceptionDateCalculator } from './conception-date-calculator';
 // Each new tool lives in its own file in this folder (export `tool`) and is
 // added to this list. The page UI for a tool is in components/tools/<id>.tsx and
 // is registered in components/tools/index.tsx.
@@ -34,4 +35,5 @@ export const NEW_TOOLS: Tool[] = [
   irregularCycle,
   widal,
   labRanges,
+  conceptionDateCalculator,
 ];

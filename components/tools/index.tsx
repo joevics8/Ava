@@ -20,4 +20,5 @@ export const TOOL_UI: Record<string, ComponentType> = {
   'irregular-cycle-predictor': dynamic(() => import('./irregular-cycle-predictor')),
   'widal-test-explainer': dynamic(() => import('./widal-test-explainer')),
   'lab-reference-ranges': dynamic(() => import('./lab-reference-ranges')),
+  'conception-date-calculator': dynamic(() => import('./conception-date-calculator')),
 };
