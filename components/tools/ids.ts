@@ -17,4 +17,5 @@ export const TOOL_UI_IDS: string[] = [
   'lab-reference-ranges',
   'conception-date-calculator',
   'cycle-day-calculator',
+  'lh-surge-ovulation-calculator',
 ];
