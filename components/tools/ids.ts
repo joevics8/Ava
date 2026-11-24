@@ -16,4 +16,5 @@ export const TOOL_UI_IDS: string[] = [
   'widal-test-explainer',
   'lab-reference-ranges',
   'conception-date-calculator',
+  'cycle-day-calculator',
 ];
