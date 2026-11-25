@@ -25,4 +25,5 @@ export const TOOL_UI: Record<string, ComponentType> = {
   'lh-surge-ovulation-calculator': dynamic(() => import('./lh-surge-ovulation-calculator')),
   'safe-period-calculator': dynamic(() => import('./safe-period-calculator')),
   'bbt-ovulation-checker': dynamic(() => import('./bbt-ovulation-checker')),
+  'perimenopause-symptom-checker': dynamic(() => import('./perimenopause-symptom-checker')),
 };
