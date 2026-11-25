@@ -21,4 +21,5 @@ export const TOOL_UI_IDS: string[] = [
   'safe-period-calculator',
   'bbt-ovulation-checker',
   'perimenopause-symptom-checker',
+  'pregnancy-weight-gain-calculator',
 ];
