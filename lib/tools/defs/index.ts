@@ -19,6 +19,7 @@ import { tool as conceptionDateCalculator } from './conception-date-calculator';
 import { tool as cycleDayCalculator } from './cycle-day-calculator';
 import { tool as lhSurgeOvulationCalculator } from './lh-surge-ovulation-calculator';
 import { tool as safePeriodCalculator } from './safe-period-calculator';
+import { tool as bbtOvulationChecker } from './bbt-ovulation-checker';
 // Each new tool lives in its own file in this folder (export `tool`) and is
 // added to this list. The page UI for a tool is in components/tools/<id>.tsx and
 // is registered in components/tools/index.tsx.
@@ -38,6 +39,7 @@ export const NEW_TOOLS: Tool[] = [
   irregularCycle,
   widal,
   labRanges,
+  bbtOvulationChecker,
   safePeriodCalculator,
   lhSurgeOvulationCalculator,
   cycleDayCalculator,
