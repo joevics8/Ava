@@ -22,4 +22,5 @@ export const TOOL_UI_IDS: string[] = [
   'bbt-ovulation-checker',
   'perimenopause-symptom-checker',
   'pregnancy-weight-gain-calculator',
+  'pregnancy-calorie-water-calculator',
 ];
