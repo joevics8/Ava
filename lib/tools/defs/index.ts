@@ -24,6 +24,7 @@ import { tool as perimenopauseSymptomChecker } from './perimenopause-symptom-che
 import { tool as pregnancyWeightGainCalculator } from './pregnancy-weight-gain-calculator';
 import { tool as pregnancyCalorieWaterCalculator } from './pregnancy-calorie-water-calculator';
 import { tool as lochiaPostpartumBleedingTimeline } from './lochia-postpartum-bleeding-timeline';
+import { tool as breastMilkStorageGuide } from './breast-milk-storage-guide';
 // Each new tool lives in its own file in this folder (export `tool`) and is
 // added to this list. The page UI for a tool is in components/tools/<id>.tsx and
 // is registered in components/tools/index.tsx.
@@ -43,6 +44,7 @@ export const NEW_TOOLS: Tool[] = [
   irregularCycle,
   widal,
   labRanges,
+  breastMilkStorageGuide,
   lochiaPostpartumBleedingTimeline,
   pregnancyCalorieWaterCalculator,
   pregnancyWeightGainCalculator,
