@@ -28,4 +28,5 @@ export const TOOL_UI: Record<string, ComponentType> = {
   'perimenopause-symptom-checker': dynamic(() => import('./perimenopause-symptom-checker')),
   'pregnancy-weight-gain-calculator': dynamic(() => import('./pregnancy-weight-gain-calculator')),
   'pregnancy-calorie-water-calculator': dynamic(() => import('./pregnancy-calorie-water-calculator')),
+  'lochia-postpartum-bleeding-timeline': dynamic(() => import('./lochia-postpartum-bleeding-timeline')),
 };

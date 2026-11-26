@@ -23,4 +23,5 @@ export const TOOL_UI_IDS: string[] = [
   'perimenopause-symptom-checker',
   'pregnancy-weight-gain-calculator',
   'pregnancy-calorie-water-calculator',
+  'lochia-postpartum-bleeding-timeline',
 ];
