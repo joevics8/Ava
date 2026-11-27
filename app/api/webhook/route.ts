@@ -835,7 +835,7 @@ async function handleCommand(
     case '/food': {
       if (!user?.onboarding_complete) { await send(chatId, "Finish setup first — send /start 🌸"); return; }
       const { showFoodMenu } = await import('@/lib/ava/food');
-      await showFoodMenu(chatId, sendKb);
+      await showFoodMenu(chatId, sendKb, user);
       return;
     }
 
@@ -1156,6 +1156,16 @@ async function routeMessage(
   if (action === 'update' && remedyId) {
     await updateRemedyOutcome(chatId, user, remedyId, text, sendMessage);
     return;
+  }
+
+  // "I'm vegetarian" / "I don't eat pork" / "I'm allergic to eggs" → saved to her food profile, so this
+  // very reply and every later food suggestion respects it. Strict, first-person statements only.
+  try {
+    const { captureFoodPreferences } = await import('@/lib/ava/food-prefs');
+    const note = await captureFoodPreferences(user, text);
+    if (note) await sendMessage(chatId, note, false);
+  } catch (err) {
+    console.error('Food preference capture failed:', err);
   }
 
   if (category === 'LOG') {

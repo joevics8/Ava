@@ -60,6 +60,8 @@ export interface CycleData {
 // (/foods → 🔟). All fields optional/free-text — this is used to tailor
 // AI-generated food suggestions, never validated against a fixed list.
 export interface FoodProfile {
+  diet?: string;
+  favourites?: string;
   breakfast?: string;
   avoid?: string;
   allergies?: string;

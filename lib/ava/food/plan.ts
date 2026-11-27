@@ -32,9 +32,42 @@ const FAMILIES: Record<string, string[]> = {
   pork: ['pork', 'bacon', 'ham', 'sausage', 'lard'],
 };
 const ALIASES: Record<string, string> = {
-  meats: 'meat', vegetarian: 'meat', beef: 'beef', seafood: 'fish', shellfish: 'fish', milk: 'dairy', lactose: 'dairy', eggs: 'egg', nuts: 'nut', peanuts: 'nut', peanut: 'nut',
+  meats: 'meat', seafood: 'fish', shellfish: 'fish', milk: 'dairy', lactose: 'dairy', eggs: 'egg', nuts: 'nut', peanuts: 'nut', peanut: 'nut',
   wheat: 'gluten', soya: 'soy', soybeans: 'soy',
 };
+
+// Ways of eating → the families they leave out. Matches the first word of what she typed
+// ("vegetarian", "halal, no pork", "I'm vegan").
+const SHELLFISH = ['shrimp', 'prawn', 'crab', 'lobster', 'oyster', 'mussel', 'squid', 'crayfish', 'clam', 'scallop'];
+const DIETS: Record<string, string[]> = {
+  vegetarian: ['meat', 'fish'],
+  vegan: ['meat', 'fish', 'dairy', 'egg', 'honey'],
+  pescatarian: ['meat'],
+  halal: ['pork'],
+  kosher: ['pork', ...SHELLFISH],
+};
+const DIET_WORDS = Object.keys(DIETS);
+
+/** Terms a way of eating rules out, e.g. "I am vegetarian" → meat and fish words. */
+export function dietTerms(diet: string | undefined | null): string[] {
+  const text = (diet ?? '').toLowerCase();
+  const terms = new Set<string>();
+  for (const w of DIET_WORDS) {
+    if (new RegExp(`\\b${w}\\b`).test(text)) for (const x of DIETS[w]) (FAMILIES[x] ?? [x]).forEach(t => terms.add(t));
+  }
+  return Array.from(terms).sort();
+}
+/** Words that mean "a food or food family" — used to tell "I don't eat pork" from "I don't eat much". */
+let vocab: Set<string> | null = null;
+export function isFoodWord(word: string): boolean {
+  if (!vocab) {
+    vocab = new Set<string>([...Object.keys(FAMILIES), ...Object.values(FAMILIES).flat(), ...Object.keys(ALIASES), ...Object.keys(DIETS), 'honey', 'rice', 'bread', 'sugar', 'spicy', 'fried']);
+    for (const list of Object.values(FOOD_LISTS)) for (const f of list) for (const w of f.name.toLowerCase().split(/[^a-z]+/)) if (w.length >= 4) vocab.add(w);
+  }
+  const w = word.toLowerCase().replace(/[^a-z]/g, '');
+  return vocab.has(w) || vocab.has(w.replace(/(?:es|s)$/, ''));
+}
+
 const NONE = new Set(['none', 'no', 'nil', 'nothing', 'n/a', 'na', 'nope', 'nill', 'not any']);
 
 export function avoidTerms(...raw: (string | undefined | null)[]): string[] {
@@ -45,13 +78,26 @@ export function avoidTerms(...raw: (string | undefined | null)[]): string[] {
       if (!t || NONE.has(t) || t.length < 3) continue;
       const fam = FAMILIES[ALIASES[t] ?? t];
       if (fam) fam.forEach(x => terms.add(x));
+      else if (DIET_WORDS.includes(t)) dietTerms(t).forEach(x => terms.add(x));
       else terms.add(t.replace(/s$/, ''));
     }
   }
   return Array.from(terms).sort();
 }
 
-const excluded = (food: Food, terms: string[]) => { const n = food.name.toLowerCase(); return terms.some(t => n.includes(t)); };
+/**
+ * Does this food name contain one of the avoided words? Short words must match a whole word
+ * ("ham" is not "chamomile", "nut" is not "coconut", "egg" is not "eggplant"); longer ones match
+ * from the start of a word so "anchov" catches "anchovies". Plurals count either way.
+ */
+export function isExcluded(name: string, terms: string[]): boolean {
+  const n = name.toLowerCase();
+  return terms.some(t => {
+    const w = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(t.length >= 5 ? `\\b${w}` : `\\b${w}(?:s|es)?\\b`).test(n);
+  });
+}
+const excluded = (food: Food, terms: string[]) => isExcluded(food.name, terms);
 
 // ─── Greedy rotation over one list ──────────────────────────────────────────
 function hash01(s: string): number { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return ((h >>> 0) % 1000) / 1000; }

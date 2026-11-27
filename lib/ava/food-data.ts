@@ -12,7 +12,7 @@
 // (users.food_region). With neither, callers keep their generic tip.
 
 import { FOOD_LISTS } from './food/index';
-import { sourcesFor, foodsForCycleDay, avoidTerms, joinFoods, type FoodWho } from './food/plan';
+import { sourcesFor, foodsForCycleDay, avoidTerms, joinFoods, isExcluded, type FoodWho } from './food/plan';
 import type { Food } from './food/types';
 
 export type CountryFood = Food;
@@ -23,9 +23,11 @@ export function foodWho(user: { country?: string | null; food_region?: string | 
 }
 
 /** Words to exclude, from her saved diet profile (foods avoided + allergies). */
-export function avoidFromProfile(profile: { avoid?: string; allergies?: string } | null | undefined): string[] {
-  return avoidTerms(profile?.avoid, profile?.allergies);
+export function avoidFromProfile(profile: { avoid?: string; allergies?: string; diet?: string } | null | undefined): string[] {
+  return avoidTerms(profile?.avoid, profile?.allergies, profile?.diet);
 }
+
+export { isExcluded };
 
 /** Every food we know for this user: their country's list, or their region's list plus the general list. */
 export function getCountryFoods(country?: string | null, region?: string | null): CountryFood[] {

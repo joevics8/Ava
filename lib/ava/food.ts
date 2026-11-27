@@ -3,7 +3,7 @@
 // Two things live here:
 // 1. The /foods menu — food-request options plus a separate "update my food
 //    preferences" action — and the AI suggestion generator behind it.
-// 2. The "Tell Ava about my diet" flow — six short questions, one at a time,
+// 2. The "Tell Ava about my diet" flow — eight short questions, one at a time,
 //    stored in users.food_profile (jsonb) and used to personalise every
 //    future food suggestion (here and in general conversation — see
 //    handleConversation in ai.ts).
@@ -13,8 +13,9 @@ import { latestPeriodStart } from './period';
 import { getCurrentPhase } from './cycle';
 import { getDayData } from './cycle-lookup';
 import { getCountryFoods, avoidFromProfile } from './food-data';
-import { foodsForCycleDay, joinFoods } from './food/plan';
-import { REGIONS, isRegionId, regionLabel, resolveCountry } from './countries';
+import { foodsForCycleDay, joinFoods, sourcesFor, isExcluded } from './food/plan';
+import { currentCycleInfo, profileLines } from './food-context';
+import { REGIONS, isRegionId, regionLabel, resolveCountry, regionFor } from './countries';
 import { callGemini, FLASH } from './ai';
 import type { AvaUser, MemoryLog, FoodProfile } from '@/types';
 
@@ -55,6 +56,7 @@ interface FoodOption {
 
 const FOOD_OPTIONS: FoodOption[] = [
   { key: 'today', label: '🍽️ What should I eat today?' },
+  { key: 'week', label: '📅 My food plan: next 7 days' },
   { key: 'energy', label: '⚡ Food for energy & fitness' },
   { key: 'symptoms', label: '🩺 Food for my current symptoms' },
   { key: 'weight_gain', label: '⚖️ Healthy weight gain' },
@@ -66,12 +68,68 @@ const FOOD_OPTIONS: FoodOption[] = [
 // the list above and shown as its own action underneath.
 const UPDATE_PREFS_OPTION: FoodOption = { key: 'learn', label: '📝 Update my food preferences' };
 
-export async function showFoodMenu(chatId: number, sendKb: SendWithKeyboardFn): Promise<void> {
+/** What the suggestions are tailored to, shown at the top of the menu. */
+export function menuHeader(user?: AvaUser | null): string {
+  const base = '🍽️ *What would you like help with?*';
+  if (!user) return base;
+  const country = ((user as any).country as string | undefined)?.trim();
+  const pick = (user as any).food_region as string | undefined;
+  const src = sourcesFor({ country, region: pick });
+  const clean = (v: string) => v.replace(/[*_`\[]/g, '');
+  const c = resolveCountry(country);
+  const where = src?.source === 'country'
+    ? `*${clean(c?.name ?? country ?? '')}* foods`
+    : src?.source === 'region'
+      ? `*${regionLabel(regionFor(country, pick)!)}* foods (closest to ${clean(country || 'your region')})`
+      : null;
+  const prefs = profileLines((user as any).food_profile).filter(l => /^(Way of eating|Avoids|Allergies)/.test(l));
+  const lines = [
+    where ? `🌍 Using ${where}` : `🌍 I don't know your region yet — tap "Choose my region" below`,
+    prefs.length ? `📝 ${clean(prefs.map(l => l.toLowerCase()).join(' · '))}` : `📝 No food preferences saved yet — add them for better ideas`,
+  ];
+  return `${base}\n${lines.join('\n')}`;
+}
+
+export async function showFoodMenu(chatId: number, sendKb: SendWithKeyboardFn, user?: AvaUser | null): Promise<void> {
+  const noPlace = user && !sourcesFor({ country: (user as any).country, region: (user as any).food_region });
   const keyboard = [
     ...FOOD_OPTIONS.map(o => [{ text: o.label, callback_data: 'food_' + o.key }]),
+    ...(noPlace ? [[{ text: '🌍 Choose my region', callback_data: 'food_regionpick' }]] : []),
     [{ text: UPDATE_PREFS_OPTION.label, callback_data: 'food_' + UPDATE_PREFS_OPTION.key }],
   ];
-  await sendKb(chatId, '🍽️ *What would you like help with?*', keyboard, true);
+  await sendKb(chatId, menuHeader(user), keyboard, true);
+}
+
+// ─── Next 7 days (no AI: the same rotation as the morning message) ─────────
+
+export async function buildWeekPlan(user: AvaUser): Promise<{ text: string; needsRegion?: boolean }> {
+  if ((user as any).mode === 'pregnant') {
+    return { text: `This plan follows your cycle days, so it isn't available during pregnancy. Tap another option, or just ask me what to eat 🍽️` };
+  }
+  const country = (user as any).country as string | undefined;
+  const region = (user as any).food_region as string | undefined;
+  if (!sourcesFor({ country, region })) return { text: `I don't have a food list for your area yet 🍽️ Pick the closest region and I'll plan your week:`, needsRegion: true };
+  const cycle = await currentCycleInfo(user);
+  if (!cycle) return { text: `I need your period dates to plan your week. Just tell me when your last period started 🌸` };
+
+  const avoid = avoidFromProfile((user as any).food_profile);
+  const tz = (user as any).timezone || 'Africa/Lagos';
+  const rows: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const day = ((cycle.day - 1 + i) % cycle.avg) + 1; // wraps when the next period starts
+    const pick = foodsForCycleDay(day, { country, region, avg: cycle.avg, duration: cycle.duration, avoid });
+    if (!pick) continue;
+    let when = i === 0 ? 'Today' : '';
+    if (!when) {
+      try { when = new Date(Date.now() + i * 86_400_000).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz }); }
+      catch { when = `Day +${i}`; }
+    }
+    rows.push(`*${when}* · day ${day}\n${pick.names.map(n => n.replace(/[*_`\[]/g, '')).join(' · ')}`);
+  }
+  const c = resolveCountry(country);
+  const where = c?.foodSlug ? `${c.name} foods` : `${regionLabel(regionFor(country, region)!)} foods`;
+  const skipped = avoid.length ? '\n\nLeaving out foods you avoid or are allergic to ✅' : '';
+  return { text: `📅 *Your next 7 days*\n_${where}, matched to where you are in your cycle_\n\n${rows.join('\n\n')}${skipped}` };
 }
 
 // ─── AI suggestion generation ──────────────────────────────────────────────
@@ -110,7 +168,7 @@ export async function generateFoodSuggestion(
   const avoid = avoidFromProfile(foodProfile);
   const localFoods = getCountryFoods(country, region)
     .map(f => f.name)
-    .filter(n => !avoid.some(a => n.toLowerCase().includes(a)))
+    .filter(n => !isExcluded(n, avoid))
     .join(', ');
   let todaysFoods = '';
 
@@ -196,6 +254,18 @@ export async function handleFoodCallback(
     return true;
   }
 
+  if (key === 'regionpick') {
+    await sendKb(chatId, `Pick the closest region and I'll suggest common foods from there:`, regionKeyboard(), true);
+    return true;
+  }
+
+  if (key === 'week') {
+    const plan = await buildWeekPlan(user);
+    if (plan.needsRegion) await sendKb(chatId, plan.text, regionKeyboard(), true);
+    else await send(chatId, plan.text, true);
+    return true;
+  }
+
   if (key === 'learn') {
     await updateUser(user.telegram_id, { food_profile_step: 1 } as any);
     await send(chatId, FOOD_PROFILE_QUESTIONS[0].question, true);
@@ -273,7 +343,9 @@ export async function maybeSuggestFood(
 // ─── "Tell Ava about my diet" flow ──────────────────────────────────────────
 
 const FOOD_PROFILE_QUESTIONS: { field: keyof FoodProfile; question: string }[] = [
+  { field: 'diet', question: 'Do you follow a particular way of eating — vegetarian, vegan, pescatarian, halal or kosher? _(or send "none")_' },
   { field: 'breakfast', question: 'What do you normally eat for breakfast?' },
+  { field: 'favourites', question: 'Which foods do you love or eat often? A few is fine 🍲' },
   { field: 'avoid', question: 'What foods do you avoid? _(or send "none")_' },
   { field: 'allergies', question: 'Any allergies? _(or send "none")_' },
   { field: 'budget', question: 'What\'s your usual food budget — 💰 Budget, 💰💰 Moderate, or 💰💰💰 Flexible?' },
@@ -305,7 +377,7 @@ export async function handleFoodProfileStep(
   const nextStep = step + 1;
   if (nextStep > FOOD_PROFILE_QUESTIONS.length) {
     await updateUser(telegramId, { food_profile: updatedProfile, food_profile_step: 0 } as any);
-    await send(chatId, `Thanks — I'll use this to give you better food suggestions from now on 🍽️ Send /foods anytime you want ideas.`);
+    await send(chatId, `Thanks — I'll use this for your food ideas from now on, including your morning message and when you ask me about food in chat 🍽️ Send /foods anytime.`);
     return;
   }
 

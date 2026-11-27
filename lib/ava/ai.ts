@@ -1,7 +1,7 @@
 import type { MessageCategory, AvaUser, ChatTurn } from '@/types';
 import type { MemoryLog } from '@/types';
 import { formatMemoryForAI } from './db';
-import { getCountryFoods } from './food-data';
+import { buildFoodContext, currentCycleInfo, looksFoodRelated } from './food-context';
 
 // URLs built lazily at call time so env vars are always available
 export const FLASH = 'gemini-3.1-flash-lite';
@@ -371,10 +371,18 @@ export async function handleConversation(
 
   const country = (user as any).country as string | undefined;
   const foodProfile = (user as any).food_profile as Record<string, string> | undefined;
-  const localFoods = getCountryFoods(country, (user as any).food_region);
   const foodProfileLines = foodProfile && Object.keys(foodProfile).length
     ? Object.entries(foodProfile).map(([k, v]) => `${k}: ${v}`).join(', ')
     : 'not shared yet';
+
+  // Only when she is asking about food: her country's foods that fit the question, today's picks for
+  // her cycle day, and her saved preferences (see food-context.ts).
+  let foodBlock = '';
+  try {
+    if (mode === 'chat' && looksFoodRelated(message)) foodBlock = buildFoodContext(user, message, await currentCycleInfo(user));
+  } catch (err) {
+    console.error('Food context failed:', err);
+  }
 
   const modeBlock = mode === 'log'
     ? `SHE IS LOGGING SOMETHING (not asking a question): acknowledge it in one natural sentence, add one line on why it tends to happen at this point in her cycle if you can say so honestly, and a tiny practical tip only if it genuinely helps. 2 to 3 sentences total. Ask a follow-up only if it would change your advice.`
@@ -392,7 +400,7 @@ ABOUT HER:
 - Diet profile: ${foodProfileLines}
 
 ${context}
-
+${foodBlock ? `\n${foodBlock}\n` : ''}
 ${ANSWER_STYLE}
 
 ${REASONING_RULES}
@@ -406,7 +414,7 @@ ${modeBlock}
 STYLE RULES:
 - Address her as ${user.name} naturally (never "hi there"), but not in every message.
 - Past history: only bring up something from her logs when it directly bears on what she just said. Never ask "how's that fever?" out of nowhere. Only claim "you logged this before" if it appears in RECENT LOGS above, and quote the real date.
-- Food: only when she asks about food, energy or nutrition, or when a symptom clearly calls for it — never tack food tips onto an unrelated answer. When you do, favour her local foods${localFoods.length ? ` (for example: ${localFoods.slice(0, 12).map(f => f.name).join(', ')})` : ''} and respect her diet profile. No calorie counts, macros or weight targets. Mention /foods at most once in a while.
+- Food: only when she asks about food, energy or nutrition, or when a symptom clearly calls for it — never tack food tips onto an unrelated answer. When FOOD CONTEXT is given above, build the answer from it: name two or three real dishes from her own country by name (not generic Western examples), prefer today's picks when they fit, and never suggest anything she avoids, is allergic to, or that breaks her way of eating. Fit her budget and cooking habits if saved. If you know nothing about her preferences and it would change your advice, ask one short question. No calorie counts, macros or weight targets. Mention /foods at most once in a while.
 - Relationships: if she raises a partner or an argument, listen and reflect; do not rule on him or her relationship. If anything sounds like fear, control or safety concerns, take it seriously and gently ask if she wants to talk to someone.
 - Never diagnose, never give medication doses. For anything serious say "worth getting checked".
 - Vary your openings and rhythm; do not reuse stock phrases.
