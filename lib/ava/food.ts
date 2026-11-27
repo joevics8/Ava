@@ -12,7 +12,8 @@ import { updateUser, getCycleData, addMemoryLog, getMemoryContext } from './db';
 import { latestPeriodStart } from './period';
 import { getCurrentPhase } from './cycle';
 import { getDayData } from './cycle-lookup';
-import { getCountryFoods } from './food-data';
+import { getCountryFoods, avoidFromProfile } from './food-data';
+import { foodsForCycleDay, joinFoods } from './food/plan';
 import { REGIONS, isRegionId, regionLabel, resolveCountry } from './countries';
 import { callGemini, FLASH } from './ai';
 import type { AvaUser, MemoryLog, FoodProfile } from '@/types';
@@ -105,7 +106,13 @@ export async function generateFoodSuggestion(
 ): Promise<string> {
   const country = (user as any).country as string | undefined;
   const foodProfile = ((user as any).food_profile || {}) as FoodProfile;
-  const localFoods = getCountryFoods(country, (user as any).food_region).map(f => f.name).join(', ');
+  const region = (user as any).food_region as string | undefined;
+  const avoid = avoidFromProfile(foodProfile);
+  const localFoods = getCountryFoods(country, region)
+    .map(f => f.name)
+    .filter(n => !avoid.some(a => n.toLowerCase().includes(a)))
+    .join(', ');
+  let todaysFoods = '';
 
   let phaseContext = '';
   if (optionKey === 'today') {
@@ -118,6 +125,8 @@ export async function generateFoodSuggestion(
         const { phase, day } = getCurrentPhase(lastStart, avg, duration);
         const dayData = getDayData(day, avg, duration);
         phaseContext = `She is currently in the ${dayData.phaseLabel} (day ${day} of ${avg}). Nutrient focus for this phase: ${dayData.nutrientTags.join(', ')}.`;
+        const pick = foodsForCycleDay(day, { country, region, avg, duration, avoid });
+        if (pick?.names.length) todaysFoods = joinFoods(pick.names);
       }
     } catch {
       // Non-critical — suggestion still works without phase context.
@@ -141,6 +150,7 @@ About her:
 - Country: ${country || 'not stated — use generally common, accessible foods'}
 - Diet profile: ${formatProfile(foodProfile)}
 ${localFoods ? `- Common local foods you can draw from: ${localFoods}` : ''}
+${todaysFoods ? `- Today's picks for her country and cycle day (build the suggestion around these): ${todaysFoods}` : ''}
 ${phaseContext ? `- ${phaseContext}` : ''}
 ${symptomContext ? `- ${symptomContext}` : ''}
 
