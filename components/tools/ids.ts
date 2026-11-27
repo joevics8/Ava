@@ -25,4 +25,5 @@ export const TOOL_UI_IDS: string[] = [
   'pregnancy-calorie-water-calculator',
   'lochia-postpartum-bleeding-timeline',
   'breast-milk-storage-guide',
+  'baby-gender-chart',
 ];

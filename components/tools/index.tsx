@@ -30,4 +30,5 @@ export const TOOL_UI: Record<string, ComponentType> = {
   'pregnancy-calorie-water-calculator': dynamic(() => import('./pregnancy-calorie-water-calculator')),
   'lochia-postpartum-bleeding-timeline': dynamic(() => import('./lochia-postpartum-bleeding-timeline')),
   'breast-milk-storage-guide': dynamic(() => import('./breast-milk-storage-guide')),
+  'baby-gender-chart': dynamic(() => import('./baby-gender-chart')),
 };
