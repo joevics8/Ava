@@ -20,7 +20,8 @@ export async function handleSettingsStep(
   telegramId: number,
   user: AvaUser,
   message: string,
-  send: SendFn
+  send: SendFn,
+  sendKb?: (chatId: number, text: string, keyboard: any[][], markdown?: boolean) => Promise<void>
 ): Promise<void> {
   const step = user.onboarding_step;
   const text = message.trim();
@@ -196,8 +197,15 @@ export async function handleSettingsStep(
   // ── Update country ─────────────────────────────────────────────────────────
   if (step === 97) {
     const country = text.slice(0, 60);
-    await updateUser(telegramId, { country, onboarding_step: 0 } as any);
+    // A region picked for the previous country no longer applies.
+    await updateUser(telegramId, { country, onboarding_step: 0, ...((user as any).food_region ? { food_region: null } : {}) } as any);
     await send(chatId, `Updated — you're set to *${country}* 🌍`);
+    if (sendKb) {
+      try {
+        const { offerRegionIfNeeded } = await import('./food');
+        await offerRegionIfNeeded(chatId, country, sendKb);
+      } catch (err) { console.error('Region offer failed:', err); }
+    }
     return;
   }
 

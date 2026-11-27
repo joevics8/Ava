@@ -674,7 +674,7 @@ You're now on the free plan. If you change your mind, /premium is always there.`
     // ── Settings flow ─────────────────────────────────────────────────────────
     if (user.onboarding_step >= 90) {
       const { handleSettingsStep } = await import('@/lib/ava/settings');
-      await handleSettingsStep(chatId, telegramId, user, text, sendMessage);
+      await handleSettingsStep(chatId, telegramId, user, text, sendMessage, sendWithKeyboard);
       return NextResponse.json({ ok: true });
     }
 

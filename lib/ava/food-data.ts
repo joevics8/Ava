@@ -1,131 +1,71 @@
-// ─── Country Food Data ─────────────────────────────────────────────────────
+// ─── Country & region food data (public API) ───────────────────────────────
 //
-// WHY THIS EXISTS
-// ────────────────
-// The morning digest's "Eat" line and the /foods AI suggestions are more
-// useful when they name foods the user actually recognises and can get —
-// "beans, ugu and liver" lands very differently for a Nigerian user than
-// the generic "beans, lentils, spinach" fallback.
+// The lists themselves live in lib/ava/food/data/<slug>.ts (50 countries, 17 regions, 1 general
+// list) and the day-by-day rotation in lib/ava/food/plan.ts. This file is the small surface the
+// rest of the bot uses:
+//   • getCountryFoods     — the foods we know for a user (country list, or region + general)
+//   • pickLocalFoods      — tag-matched foods, for one-off suggestions
+//   • localizeEatTip      — the morning digest / /today "Eat" line
 //
-// This file is a seed, not a finished product. Nigeria now has 50 foods
-// (the primary market right now) — the intended path forward — per product
-// notes — is to research a similar ~50 common foods for each additional
-// target country and tag each with the nutrients/benefits it's known for
-// (energy, iron, protein, strength, etc.), so this list can grow country by
-// country without touching any of the code that reads it.
-//
-// Tag vocabulary is intentionally small and shared with cycle-lookup.ts's
-// CycleDayData.nutrientTags: 'iron' | 'energy' | 'protein' | 'magnesium' |
-// 'mood' | 'hydration' | 'fiber' | 'comfort' | 'carbs' | 'strength' |
-// 'digestion'. A food can carry more than one tag.
+// A user's country comes from onboarding (free text, users.country). If that isn't one of our 50,
+// the region is taken from the country itself (countries.ts) or, failing that, the one they picked
+// (users.food_region). With neither, callers keep their generic tip.
 
-export interface CountryFood {
-  name: string;
-  tags: string[];
+import { FOOD_LISTS } from './food/index';
+import { sourcesFor, foodsForCycleDay, avoidTerms, joinFoods, type FoodWho } from './food/plan';
+import type { Food } from './food/types';
+
+export type CountryFood = Food;
+
+/** The {country, region} pair for a user row. */
+export function foodWho(user: { country?: string | null; food_region?: string | null } | null | undefined): FoodWho {
+  return { country: user?.country ?? null, region: user?.food_region ?? null };
 }
 
-export const COUNTRY_FOODS: Record<string, CountryFood[]> = {
-  nigeria: [
-    { name: 'beans', tags: ['iron', 'protein', 'energy'] },
-    { name: 'ugu (fluted pumpkin leaf)', tags: ['iron'] },
-    { name: 'liver', tags: ['iron', 'protein', 'strength'] },
-    { name: 'moi moi', tags: ['protein'] },
-    { name: 'akara', tags: ['protein', 'energy'] },
-    { name: 'jollof rice', tags: ['energy', 'carbs'] },
-    { name: 'yam', tags: ['strength', 'energy', 'carbs'] },
-    { name: 'plantain', tags: ['energy', 'carbs'] },
-    { name: 'eggs', tags: ['protein'] },
-    { name: 'fish', tags: ['protein'] },
-    { name: 'chicken', tags: ['protein'] },
-    { name: 'beef', tags: ['protein', 'iron', 'strength'] },
-    { name: 'ewedu', tags: ['digestion'] },
-    { name: 'okra', tags: ['digestion'] },
-    { name: 'garden egg', tags: ['digestion'] },
-    { name: 'groundnut', tags: ['energy', 'magnesium'] },
-    { name: 'watermelon', tags: ['hydration'] },
-    { name: 'cucumber', tags: ['hydration'] },
-    { name: 'coconut water', tags: ['hydration'] },
-    { name: 'banana', tags: ['mood'] },
-    { name: 'pepper soup', tags: ['comfort'] },
-    { name: 'pap (ogi)', tags: ['comfort', 'carbs'] },
-    { name: 'dark leafy greens (efo)', tags: ['iron', 'magnesium'] },
-    { name: 'tomatoes', tags: ['digestion', 'hydration'] },
-    { name: 'onions', tags: ['digestion'] },
-    { name: 'scent leaf (nchanwu)', tags: ['digestion', 'comfort'] },
-    { name: 'bitter leaf', tags: ['digestion'] },
-    { name: 'pumpkin (elegede)', tags: ['fiber', 'carbs'] },
-    { name: 'sweet potato', tags: ['carbs', 'energy', 'fiber'] },
-    { name: 'garri (cassava)', tags: ['carbs', 'energy'] },
-    { name: 'millet', tags: ['fiber', 'energy'] },
-    { name: 'guinea corn (sorghum)', tags: ['fiber', 'iron'] },
-    { name: 'brown rice', tags: ['fiber', 'carbs'] },
-    { name: 'oats', tags: ['fiber', 'energy'] },
-    { name: 'tigernut (aya)', tags: ['energy', 'digestion'] },
-    { name: 'cashew nuts', tags: ['magnesium', 'energy'] },
-    { name: 'African walnut (asala)', tags: ['magnesium', 'mood'] },
-    { name: 'honey', tags: ['energy', 'comfort'] },
-    { name: 'ginger', tags: ['digestion', 'comfort'] },
-    { name: 'garlic', tags: ['digestion'] },
-    { name: 'turmeric', tags: ['digestion'] },
-    { name: 'lemon', tags: ['hydration', 'digestion'] },
-    { name: 'orange', tags: ['hydration', 'fiber'] },
-    { name: 'pineapple', tags: ['digestion', 'hydration'] },
-    { name: 'pawpaw (papaya)', tags: ['digestion', 'fiber'] },
-    { name: 'mango', tags: ['energy', 'fiber'] },
-    { name: 'avocado (ube)', tags: ['magnesium', 'strength'] },
-    { name: 'crayfish', tags: ['protein', 'iron'] },
-    { name: 'snail', tags: ['protein', 'iron'] },
-    { name: 'yoghurt (fura da nono)', tags: ['protein', 'digestion'] },
-  ],
-};
-
-// Aliases so "Nigeria", "nigeria", "NG", "naija" all resolve to the same
-// seed list. Extend this as more countries get their own entries.
-const COUNTRY_ALIASES: Record<string, string> = {
-  nigeria: 'nigeria',
-  ng: 'nigeria',
-  naija: 'nigeria',
-};
-
-function normalizeCountry(country: string): string | null {
-  const key = country.trim().toLowerCase();
-  return COUNTRY_ALIASES[key] || null;
+/** Words to exclude, from her saved diet profile (foods avoided + allergies). */
+export function avoidFromProfile(profile: { avoid?: string; allergies?: string } | null | undefined): string[] {
+  return avoidTerms(profile?.avoid, profile?.allergies);
 }
 
-export function getCountryFoods(country?: string | null): CountryFood[] {
-  if (!country) return [];
-  const normalized = normalizeCountry(country);
-  if (!normalized) return [];
-  return COUNTRY_FOODS[normalized] || [];
+/** Every food we know for this user: their country's list, or their region's list plus the general list. */
+export function getCountryFoods(country?: string | null, region?: string | null): CountryFood[] {
+  const s = sourcesFor({ country, region });
+  if (!s) return [];
+  return s.source === 'country' ? s.main : [...s.main, ...s.general];
 }
 
-// Picks up to `max` local food names whose tags overlap the requested
-// nutrient tags. Returns null (never an empty string) when nothing matches,
-// so callers can cleanly fall back to the generic tip.
-export function pickLocalFoods(tags: string[], country?: string | null, max = 3): string | null {
-  const foods = getCountryFoods(country);
-  if (!foods.length) return null;
-
-  const matches = foods.filter(f => f.tags.some(t => tags.includes(t))).map(f => f.name);
+/** Everyday foods that match any requested tag (max `max`), or null when nothing matches. */
+export function pickLocalFoods(tags: string[], country?: string | null, max = 3, region?: string | null): string | null {
+  const matches = getCountryFoods(country, region).filter(f => f.tags.some(t => tags.includes(t))).map(f => f.name);
   if (!matches.length) return null;
-
-  const picked = matches.slice(0, max);
-  if (picked.length === 1) return picked[0];
-  if (picked.length === 2) return picked.join(' or ');
-  return picked.slice(0, -1).join(', ') + ' or ' + picked[picked.length - 1];
+  return joinFoods(matches.slice(0, max));
 }
 
-// Swaps generic food examples for local ones when the user's country has
-// seed data covering the needed nutrient tags — otherwise returns the
-// generic tip untouched. No AI call, so it's safe to use in the
-// deterministic morning digest / /today summary.
+export interface EatTipOpts {
+  /** Her cycle day. With it, the 3 foods rotate day by day over a 31-day plan. */
+  day?: number;
+  avg?: number;
+  duration?: number;
+  region?: string | null;
+  avoid?: string[];
+}
+
+// Swaps the generic food examples for this user's own foods when we know their country/region —
+// otherwise returns the generic tip untouched. No AI call: safe in the deterministic digest.
 export function localizeEatTip(
   eatTipGeneric: string,
   nutrientTags: string[],
   eatReasonClause: string,
-  country?: string | null
+  country?: string | null,
+  opts: EatTipOpts = {}
 ): string {
-  const localFoods = pickLocalFoods(nutrientTags, country);
-  if (!localFoods) return eatTipGeneric;
-  return `Try ${localFoods} today — ${eatReasonClause}.`;
+  const who = { country, region: opts.region };
+  if (opts.day) {
+    const pick = foodsForCycleDay(opts.day, { ...who, avg: opts.avg, duration: opts.duration, avoid: opts.avoid });
+    if (pick?.names.length) return `Try ${joinFoods(pick.names)} today — ${eatReasonClause}.`;
+  }
+  const local = pickLocalFoods(nutrientTags, country, 3, opts.region);
+  return local ? `Try ${local} today — ${eatReasonClause}.` : eatTipGeneric;
 }
+
+export { FOOD_LISTS };

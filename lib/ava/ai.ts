@@ -371,7 +371,7 @@ export async function handleConversation(
 
   const country = (user as any).country as string | undefined;
   const foodProfile = (user as any).food_profile as Record<string, string> | undefined;
-  const localFoods = getCountryFoods(country);
+  const localFoods = getCountryFoods(country, (user as any).food_region);
   const foodProfileLines = foodProfile && Object.keys(foodProfile).length
     ? Object.entries(foodProfile).map(([k, v]) => `${k}: ${v}`).join(', ')
     : 'not shared yet';

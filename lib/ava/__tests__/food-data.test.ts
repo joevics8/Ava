@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { getCountryFoods, pickLocalFoods, localizeEatTip } from '../food-data';
 
 describe('getCountryFoods', () => {
-  it('returns 50 seeded foods for Nigeria', () => {
-    // Product target per research notes — locks in the count so a future
-    // edit that accidentally drops entries gets caught.
-    expect(getCountryFoods('Nigeria').length).toBe(50);
+  it('returns a full list for Nigeria (the original 50 plus extras)', () => {
+    // Locks the original 50 in so a future edit that accidentally drops entries gets caught.
+    expect(getCountryFoods('Nigeria').length).toBeGreaterThanOrEqual(60);
+    for (const n of ['beans', 'moi moi', 'jollof rice', 'plantain']) {
+      expect(getCountryFoods('Nigeria').map(f => f.name)).toContain(n);
+    }
   });
 
   it('returns the Nigeria list for common spellings/aliases', () => {
@@ -18,6 +20,7 @@ describe('getCountryFoods', () => {
   it('returns an empty list for an unknown or missing country', () => {
     expect(getCountryFoods('Wakanda')).toEqual([]);
     expect(getCountryFoods(undefined)).toEqual([]);
+    expect(getCountryFoods('Wakanda', 'not-a-region')).toEqual([]);
     expect(getCountryFoods(null)).toEqual([]);
   });
 });
@@ -31,6 +34,7 @@ describe('pickLocalFoods', () => {
 
   it('returns null when the country has no seed data', () => {
     expect(pickLocalFoods(['iron'], 'Wakanda')).toBeNull();
+    expect(pickLocalFoods(['iron'], undefined)).toBeNull();
   });
 
   it('returns null when no foods match the requested tags', () => {

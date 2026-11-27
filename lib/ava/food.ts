@@ -13,11 +13,37 @@ import { latestPeriodStart } from './period';
 import { getCurrentPhase } from './cycle';
 import { getDayData } from './cycle-lookup';
 import { getCountryFoods } from './food-data';
+import { REGIONS, isRegionId, regionLabel, resolveCountry } from './countries';
 import { callGemini, FLASH } from './ai';
 import type { AvaUser, MemoryLog, FoodProfile } from '@/types';
 
 type SendFn = (chatId: number, text: string, markdown?: boolean) => Promise<void>;
 type SendWithKeyboardFn = (chatId: number, text: string, keyboard: any[][], markdown?: boolean) => Promise<void>;
+
+// ─── Region picker ──────────────────────────────────────────────────────────
+// Country is free text from onboarding. When it isn't one we can place, she picks a region once
+// and gets common foods from it (plus general foods). Callback data: food_region_<id> | food_region_skip.
+
+export function regionKeyboard(): any[][] {
+  const rows: any[][] = [];
+  for (let i = 0; i < REGIONS.length; i += 2) {
+    rows.push(REGIONS.slice(i, i + 2).map(r => ({ text: r.label, callback_data: 'food_region_' + r.id })));
+  }
+  rows.push([{ text: 'Skip for now', callback_data: 'food_region_skip' }]);
+  return rows;
+}
+
+/** Asks for a region when `country` can't be placed. Returns true when the question was sent. */
+export async function offerRegionIfNeeded(chatId: number, country: string, sendKb: SendWithKeyboardFn): Promise<boolean> {
+  if (resolveCountry(country)) return false;
+  await sendKb(
+    chatId,
+    `I don't have a food list for *${country.replace(/[*_`\[]/g, '')}* yet 🍽️\n\nPick the closest region and I'll suggest common foods from there:`,
+    regionKeyboard(),
+    true
+  );
+  return true;
+}
 
 // ─── Menu ───────────────────────────────────────────────────────────────────
 
@@ -79,7 +105,7 @@ export async function generateFoodSuggestion(
 ): Promise<string> {
   const country = (user as any).country as string | undefined;
   const foodProfile = ((user as any).food_profile || {}) as FoodProfile;
-  const localFoods = getCountryFoods(country).map(f => f.name).join(', ');
+  const localFoods = getCountryFoods(country, (user as any).food_region).map(f => f.name).join(', ');
 
   let phaseContext = '';
   if (optionKey === 'today') {
@@ -145,6 +171,18 @@ export async function handleFoodCallback(
 
   if (key === 'menu') {
     await showFoodMenu(chatId, sendKb);
+    return true;
+  }
+
+  if (key.startsWith('region_')) {
+    const id = key.slice('region_'.length);
+    if (id === 'skip') {
+      await send(chatId, `No problem — you can set it any time with /foods or /settings → My country 🌍`);
+      return true;
+    }
+    if (!isRegionId(id)) return true;
+    await updateUser(user.telegram_id, { food_region: id } as any);
+    await send(chatId, `Done — I'll suggest common ${regionLabel(id)} foods 🍽️`);
     return true;
   }
 

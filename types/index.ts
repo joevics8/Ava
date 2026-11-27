@@ -14,6 +14,8 @@ export interface AvaUser {
   weight: number | null;
   reproductive_goal: ReproductiveGoal | null;
   country: string | null;
+  /** Region picked when `country` wasn't recognised (lib/ava/countries.ts RegionId). */
+  food_region?: string | null;
   timezone?: string;
   food_profile_step: number;
   food_profile: FoodProfile | null;

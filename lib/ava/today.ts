@@ -5,7 +5,7 @@ import { getCycleStatus, phaseEmoji, predictNextPeriod, predictOvulationWindow }
 import { upsertCycleData } from './db';
 import { getDayData } from './cycle-lookup';
 import { getPersonalInsight, hasMonthOfHistory } from './morning';
-import { localizeEatTip } from './food-data';
+import { localizeEatTip, avoidFromProfile } from './food-data';
 import type { AvaUser } from '@/types';
 
 function formatDate(d: Date): string {
@@ -117,7 +117,7 @@ export async function buildTodaySummary(user: AvaUser): Promise<string> {
     `${periodLine}\n` +
     `${ovLine}\n\n` +
     `${symptomSection}\n\n` +
-    `🍽️ *Eat:* ${localizeEatTip(dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country)}\n\n` +
+    `🍽️ *Eat:* ${localizeEatTip(dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country, { day, avg, duration, region: (user as any).food_region, avoid: avoidFromProfile((user as any).food_profile) })}\n\n` +
     `🏃 *Do:* ${dayData.doTipGeneric}`
   );
 }

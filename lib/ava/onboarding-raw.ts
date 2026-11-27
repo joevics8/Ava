@@ -43,6 +43,11 @@ export async function handleOnboardingStep(
     const { tzForCountry } = await import('./timezone');
     await updateUser(telegramId, { country, timezone: tzForCountry(country), onboarding_step: 2 } as any);
     await send(chatId, `Got it 💕\n\nHow old are you?`);
+    // Unknown country → offer a region (tap-only, never blocks the next question).
+    try {
+      const { offerRegionIfNeeded } = await import('./food');
+      await offerRegionIfNeeded(chatId, country, sendKb);
+    } catch (err) { console.error('Region offer failed:', err); }
     return;
   }
 

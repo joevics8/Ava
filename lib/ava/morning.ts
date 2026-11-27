@@ -4,7 +4,7 @@ import { latestPeriodStart, isLastPeriodConfirmed } from './period';
 import type { MemoryLog } from '@/types';
 import { getCycleStatus, phaseEmoji } from './cycle';
 import { getDayData } from './cycle-lookup';
-import { localizeEatTip } from './food-data';
+import { localizeEatTip, avoidFromProfile } from './food-data';
 
 // Was 'gemini-1.5-flash' — a shut-down model returning 404s in production
 // (confirmed via Vercel runtime logs), which broke the morning digest tip.
@@ -171,7 +171,8 @@ export async function buildMorningDigest(
     : '🌡️ *Today:* ' + dayData.symptomsGeneric;
 
   const eatLine = '🍽️ *Eat:* ' + localizeEatTip(
-    dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country
+    dayData.eatTipGeneric, dayData.nutrientTags, dayData.eatReasonClause, (user as any).country,
+    { day, avg, duration, region: (user as any).food_region, avoid: avoidFromProfile((user as any).food_profile) }
   );
   const doLine = '🏃 *Do:* ' + dayData.doTipGeneric;
   const actionLines = eatLine + '\n\n' + doLine;
